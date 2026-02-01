@@ -67,7 +67,7 @@ See the [examples/](examples/) directory for complete working examples:
 
 - **[dummy_pipeline/](examples/dummy_pipeline/)**: Standalone demo with synthetic data
 - **[miniapps_pipeline/](examples/miniapps_pipeline/)**  
-    Reference production HPC workflow demonstrating scalable execution using RADICAL-Cybertools mini-apps:  
+    Reference scalable HPC workflow using RADICAL-Cybertools Workflow mini-apps 
     https://github.com/radical-cybertools/workflow-mini-apps
 
 
