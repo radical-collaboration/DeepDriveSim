@@ -3,7 +3,7 @@ site_description: Deep learning-driven Adaptive Simulations for HPC
 site_author: DeepDrieSim Team
 site_url: https://radical-collaboration.github.io/DeepDriveSim/
 
-repo_name: impress-framework/impress
+repo_name: DeepDrieSim
 repo_url: https://github.com/radical-collaboration/DeepDriveSim
 edit_uri: edit/main/docs/
 
@@ -37,10 +37,8 @@ nav:
   - Home: index.md
   - Getting Started:
     - Installation: getting-started/installation.md
-    - Build A Protein Pipeline: getting-started/quick-start.md
-    - Adaptive Protein Pipelines: getting-started/adaptive-pipelines.md
-  - Prebuilt Pipelines:
-    - Protein Binding: pipelines/pre_built-pipelines.md
+    - Quick Start: getting-started/quick-start.md
+    - Custom workflow: getting-started/custom_workflow.md
 
 plugins:
   - search

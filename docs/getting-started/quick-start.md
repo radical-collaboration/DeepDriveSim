@@ -17,8 +17,7 @@ async def main():
     workflow = DummyWorkflow(
         asyncflow=asyncflow,
         max_sim_batch=4,
-        training_cores=1,
-        num_files=10
+        training_cores=1
     )
 
     # Run the adaptive learning loop
