@@ -5,16 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "DDMD"
 version = "0.2.0"
-description = "Toolkit for Deep learning-driven Adaptive Molecular Simulations for Protein Folding"
+description = "Toolkit for Deep learning-driven Adaptive Simulations"
 license = {text = "MIT"}
 keywords = [
-    "molecular-dynamics",
     "deep-learning",
-    "protein-folding",
     "adaptive-simulation",
     "hpc",
     "machine-learning",
-    "computational-biology"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -41,12 +38,12 @@ maintainers = [
 readme = "README.md"
 requires-python = ">=3.9"
 
-dependencies = ["radical-asyncflow", "pyyaml", "ROSE @ git+https://github.com/radical-cybertools/ROSE.git"]
+dependencies = ["rhapsody", "radical-asyncflow", "pyyaml", "ROSE @ git+https://github.com/radical-cybertools/ROSE.git"]
 
 [project.urls]
-Homepage = "https://github.com/radical-collaboration/DeepDriveMD"
-Issues = "https://github.com/radical-collaboration/DeepDriveMD/issues"
-Documentation = "https://deepdrivemd.github.io"
+Homepage = "https://github.com/radical-collaboration/DeepDriveSim"
+Issues = "https://github.com/radical-collaboration/DeepDriveSim/issues"
+Documentation = "https://radical-collaboration.github.io/DeepDriveSim/"
 
 [project.optional-dependencies]
 lint = ["ruff"]

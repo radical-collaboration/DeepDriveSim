@@ -8,8 +8,6 @@ import subprocess
 from abc import ABC
 from collections import OrderedDict
 
-from rose import Learner
-
 from ddsim.logger import Logger
 
 
@@ -27,8 +25,7 @@ class DDSimManager(ABC):
     in an AI-steered ensemble simulation workflow.
     """
 
-    def __init__(self, asyncflow):
-        self.learner = Learner(asyncflow)
+    def __init__(self):
         self.logger = Logger(use_colors=True)
         self.registered_sims = OrderedDict()  # Active simulations: {tag: asyncio.Task}
         self.sim_task_queue = asyncio.Queue()  # Queue of pending simulation inputs
@@ -102,20 +99,28 @@ class DDSimManager(ABC):
         """
         raise NotImplementedError("train_model must be implemented")
 
+
+    # --------------------------------------------------------------------------
+    async def get_model(self):
+            """
+        Define model selection after training has completed or 
+        load pre-trained model.
+        Override this with actual logic in pipeline subclass.
+        """
+        raise NotImplementedError("get_model must be implemented")
+
     # --------------------------------------------------------------------------
     async def close(self):
-        """Gracefully shutdown learner."""
-        try:
-            await self.learner.shutdown()
-        except Exception:
-            pass
+        """Gracefully shutdown learner.
+            Override this with actual logic in pipeline subclass.
+        """
+        raise NotImplementedError("close must be implemented")
 
     async def stop(self):
-        """Alias for close(), can be used for external termination."""
-        try:
-            await self.learner.shutdown()
-        except Exception:
-            pass
+        """ Alias for close(), can be used for external termination.            
+            Override this with actual logic in pipeline subclass.
+        """
+        raise NotImplementedError("stop must be implemented")
 
     # --------------------------------------------------------------------------
     async def _unregister_sims(self, unregistered_sims, clean_unregistered_sims):
@@ -289,10 +294,7 @@ class DDSimManager(ABC):
         self.logger.separator("DDSim MANAGER STARTING")
         await self.init_sim_queue()
         submit_task = asyncio.create_task(self.submit_sims())
-        # Skip waiting for training data if it is available at start
-        if not self.force_start_training:
-            await self.monitor_training_data()  # blocks until training starts
-
+        
         while True:
             self.logger.info(f"{len(self.registered_sims)} simulation(s) running...")
             if self.debug:
@@ -301,26 +303,25 @@ class DDSimManager(ABC):
             # Train model if flag is set
             train = None
             if self.retrain_model:
+                # Skip waiting for training data if it is available at start
+                if not self.force_start_training:
+                    await self.monitor_training_data()  # blocks until training starts      
+                if self.aggregation:
+                    await self.aggregation()
                 train = await self.train_model()
             else:
                 await asyncio.sleep(self.time_between_predictions)
 
-            # Perform model selection if selection function is provided
-            if self.selection:
-                selected_model = await self.selection(train)
-                # Perform prediction
-                self.logger.task_started("Model Prediction", component="prediction")
-            else:
-                selected_model = train
+            # Assign newly trained model
+            self.model = await self.get_model(train)
 
             self.logger.task_started("Model Prediction", component="prediction")
             # Collect prediction scores for all simulations
-            if self.run_prediction_as_exe:
-                await self.exe_prediction(selected_model)
-                predictions = await self.collect_predictions()
-            else:
-                predictions = await self.prediction(selected_model)
+            predictions = await self.run_inference()
 
+            if self.post_process:
+                post_processed = self.post_process()
+                
             self.sim_predictions = predictions
             self.logger.task_completed("Model Prediction", component="prediction")
 
@@ -342,6 +343,9 @@ class DDSimManager(ABC):
                     )
                 else:
                     pass
+
+            if post_processed:
+                await post_processed
 
             await asyncio.sleep(1)
 
