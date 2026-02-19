@@ -2,7 +2,12 @@ import asyncio
 import random
 from unittest.mock import MagicMock
 
-from ddsim.ddsim_manager import DDSimManager
+import pytest
+
+DDSimManager = pytest.importorskip(
+    "ddsim.ddsim_manager",
+    reason="ddsim.ddsim_manager not importable (missing radical.asyncflow)",
+).DDSimManager
 
 # from unittest.mock import Mock
 

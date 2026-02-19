@@ -5,7 +5,10 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from ddsim.pipelines.dummy_learner import DummyWorkflow
+
+pytest.importorskip("radical.asyncflow", reason="radical.asyncflow not installed")
+pytest.importorskip("rose", reason="ROSE not installed")
+from pipelines.dummy_pipeline.dummy_pipeline import DummyWorkflow
 
 
 class TestDummyWorkflowInit:

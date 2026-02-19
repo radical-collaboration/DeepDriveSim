@@ -2,7 +2,13 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from radical.asyncflow import ConcurrentExecutionBackend, WorkflowEngine
+
+radical_asyncflow = pytest.importorskip(
+    "radical.asyncflow",
+    reason="radical.asyncflow not installed",
+)
+ConcurrentExecutionBackend = radical_asyncflow.ConcurrentExecutionBackend
+WorkflowEngine = radical_asyncflow.WorkflowEngine
 
 from tests.unit.mock_manager import MockLearner
 
