@@ -10,24 +10,25 @@ if TYPE_CHECKING:
 
 import numpy as np
 import pandas as pd
+import keras.ops as ops
 import tensorflow as tf
 import tensorflow.keras.backend as K
 import tensorflow.keras.losses as objectives
 from tensorflow.keras.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from tensorflow.keras.layers import (
+    Conv2D,
     Conv2DTranspose,
-    Convolution2D,
     Dense,
     Dropout,
     Flatten,
     Input,
-    Lambda,
+    Layer,
     Reshape,
 )
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import RMSprop
 
-from deepdrivemd.utils import PathLike
+from pipelines.ddmd_pipeline.utils import PathLike
 
 # tf.config.experimental.set_lms_enabled(True)
 # print("lms_enabled was executed")
@@ -55,6 +56,31 @@ class LossHistory(Callback):  # type: ignore[misc]
         """Log loss values to a csv file."""
         df = pd.DataFrame({"train_loss": self.losses, "valid_loss": self.val_losses})
         df.to_csv(path, index_label="epoch")
+
+
+class VAESampling(Layer):
+    """Reparameterization trick as a Keras layer.
+
+    Computes z = z_mean + exp(z_log_var) * epsilon and adds the
+    KL divergence loss via self.add_loss() (Keras 3.x compatible).
+    """
+
+    def __init__(self, eps_mean=0.0, eps_std=1.0, **kwargs):
+        super().__init__(**kwargs)
+        self.eps_mean = eps_mean
+        self.eps_std = eps_std
+
+    def call(self, inputs):
+        z_mean, z_log_var = inputs
+        epsilon = tf.random.normal(
+            shape=tf.shape(z_mean), mean=self.eps_mean, stddev=self.eps_std
+        )
+        # KL divergence loss added at the layer level
+        kl_loss = -0.5 * ops.mean(
+            1 + z_log_var - ops.square(z_mean) - ops.exp(z_log_var)
+        )
+        self.add_loss(kl_loss)
+        return z_mean + ops.exp(z_log_var) * epsilon
 
 
 class CVAE(object):
@@ -163,7 +189,7 @@ class CVAE(object):
 
         # define convolutional encoding layers
         self.encode_conv = []
-        layer = Convolution2D(
+        layer = Conv2D(
             feature_maps[0],
             filter_shapes[0],
             padding="same",
@@ -172,7 +198,7 @@ class CVAE(object):
         )(self.input)
         self.encode_conv.append(layer)
         for i in range(1, conv_layers):
-            layer = Convolution2D(
+            layer = Conv2D(
                 feature_maps[i],
                 filter_shapes[i],
                 padding="same",
@@ -194,10 +220,10 @@ class CVAE(object):
             )
             self.encode_dense.append(layer)
 
-        # define embedding layer
+        # define embedding layer with reparameterization trick + KLD loss
         self.z_mean = Dense(latent_dim)(self.encode_dense[-1])
         self.z_log_var = Dense(latent_dim)(self.encode_dense[-1])
-        self.z = Lambda(self._sampling, output_shape=(latent_dim,))(
+        self.z = VAESampling(eps_mean=eps_mean, eps_std=eps_std)(
             [self.z_mean, self.z_log_var]
         )
 
@@ -265,15 +291,8 @@ class CVAE(object):
 
         # build model
         self.model = Model(self.input, self.output)
-        self.optimizer = RMSprop(learning_rate=0.001, rho=0.9, epsilon=1e-08, decay=0.0)
-        # KLD loss
-        self.model.add_loss(
-            -0.5
-            * K.mean(
-                1 + self.z_log_var - K.square(self.z_mean) - K.exp(self.z_log_var),
-                axis=None,
-            )
-        )
+        self.optimizer = RMSprop(learning_rate=0.001, rho=0.9, epsilon=1e-08)
+        # KLD loss is computed inside VAESampling layer via add_loss()
         self.model.compile(optimizer=self.optimizer, loss=self._vae_loss)
         # self.model.compile(optimizer=self.optimizer)
         # self.model.compile(optimizer=self.optimizer, loss=objectives.MeanSquaredError())
@@ -290,31 +309,9 @@ class CVAE(object):
             self.generation.append(self.all_decoding[i](self.generation[i - 1]))
         self.generator = Model(self.decoder_input, self.generation[-1])
 
-    def _sampling(
-        self, args: Tuple["npt.ArrayLike", "npt.ArrayLike"]
-    ) -> "npt.ArrayLike":
-        """Sampling function for embedding layer.
-
-        Parameters
-        ----------
-        args : Tuple[npt.ArrayLike, npt.ArrayLike]
-            The :obj:`z_mean` and :obj:`z_log_var` tensors.
-
-        Returns
-        -------
-        npt.ArrayLike
-            The latent codes after the reparameterization trick.
-        """
-        z_mean, z_log_var = args
-        epsilon = K.random_normal(
-            shape=K.shape(z_mean), mean=self.eps_mean, stddev=self.eps_std
-        )
-        sample: "npt.ArrayLike" = z_mean + K.exp(z_log_var) * epsilon
-        return sample
-
     def _vae_loss(self, input, output):
-        input_flat = K.flatten(input)
-        output_flat = K.flatten(output)
+        input_flat = ops.reshape(input, [-1])
+        output_flat = ops.reshape(output, [-1])
         xent_loss: "npt.ArrayLike" = (
             self.image_size[0]
             * self.image_size[1]
@@ -364,7 +361,7 @@ class CVAE(object):
         if use_model_checkpoint:
             callbacks.append(
                 ModelCheckpoint(
-                    f"{checkpoint_path}/best.h5",
+                    f"{checkpoint_path}/best.weights.h5",
                     monitor="val_loss",
                     save_best_only=True,
                     verbose=1,

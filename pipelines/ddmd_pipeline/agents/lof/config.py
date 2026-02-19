@@ -1,8 +1,8 @@
 from typing import Any, Dict, Optional
 
-from pydantic import root_validator, validator
+from pydantic import model_validator, field_validator
 
-from deepdrivemd.config import AgentTaskConfig
+from pipelines.ddmd_pipeline.config import AgentTaskConfig
 
 
 class OutlierDetectionConfig(AgentTaskConfig):
@@ -30,7 +30,7 @@ class OutlierDetectionConfig(AgentTaskConfig):
     # Inference batch size for encoder forward pass
     inference_batch_size: int = 128
 
-    @root_validator()
+    @model_validator(mode="before")
     def num_outliers_check(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         num_intrinsic_outliers = values["num_intrinsic_outliers"]
         num_extrinsic_outliers = values["num_extrinsic_outliers"]
@@ -40,7 +40,7 @@ class OutlierDetectionConfig(AgentTaskConfig):
             )
         return values
 
-    @root_validator()
+    @model_validator(mode="before")
     def scoring_method_check(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         intrinsic_score = values.get("intrinsic_score")
         extrinsic_score = values.get("extrinsic_score")
@@ -58,7 +58,7 @@ class OutlierDetectionConfig(AgentTaskConfig):
             )
         return values
 
-    @validator("model_type")
+    @field_validator("model_type")
     def model_type_check(cls, v: str) -> str:
         valid_model_types = {"AAE3d", "keras_cvae"}
         if v not in valid_model_types:

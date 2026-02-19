@@ -10,11 +10,11 @@ if TYPE_CHECKING:
 import numpy as np
 from sklearn.neighbors import LocalOutlierFactor  # type: ignore[import]
 
-from deepdrivemd.agents.lof.config import OutlierDetectionConfig
-from deepdrivemd.data.api import DeepDriveMD_API
-from deepdrivemd.data.utils import get_virtual_h5_file, parse_h5
-from deepdrivemd.selection.latest.select_model import get_model_path
-from deepdrivemd.utils import PathLike, Timer, bestk, setup_mpi, setup_mpi_comm
+from pipelines.ddmd_pipeline.agents.lof.config import OutlierDetectionConfig
+from pipelines.ddmd_pipeline.data.api import DeepDriveMD_API
+from pipelines.ddmd_pipeline.data.utils import get_virtual_h5_file, parse_h5
+from pipelines.ddmd_pipeline.selection.latest.select_model import get_model_path
+from pipelines.ddmd_pipeline.utils import PathLike, Timer, bestk, setup_mpi, setup_mpi_comm
 
 
 def get_representation(
@@ -27,7 +27,7 @@ def get_representation(
     comm: Optional[Any] = None,
 ) -> "npt.ArrayLike":
     if model_type == "AAE3d":
-        from deepdrivemd.models.aae.inference import generate_embeddings
+        from pipelines.ddmd_pipeline.models.aae.inference import generate_embeddings
 
         # Generate embeddings with a distributed forward pass
         embeddings = generate_embeddings(
@@ -39,7 +39,7 @@ def get_representation(
             comm,
         )
     elif model_type == "keras_cvae":
-        from deepdrivemd.models.keras_cvae.inference import generate_embeddings  # type: ignore[no-redef]
+        from pipelines.ddmd_pipeline.models.keras_cvae.inference import generate_embeddings  # type: ignore[no-redef]
 
         embeddings = generate_embeddings(  # type: ignore[call-arg]
             model_cfg_path,

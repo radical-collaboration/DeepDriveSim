@@ -8,13 +8,13 @@ if TYPE_CHECKING:
 
 import numpy as np
 
-from deepdrivemd.data.api import DeepDriveMD_API
-from deepdrivemd.data.utils import get_virtual_h5_file
-from deepdrivemd.models.keras_cvae.config import KerasCVAEModelConfig
-from deepdrivemd.models.keras_cvae.model import CVAE
-from deepdrivemd.models.keras_cvae.utils import sparse_to_dense
-from deepdrivemd.selection.latest.select_model import get_model_path
-from deepdrivemd.utils import Timer, parse_args
+from pipelines.ddmd_pipeline.data.api import DeepDriveMD_API
+from pipelines.ddmd_pipeline.data.utils import get_virtual_h5_file
+from pipelines.ddmd_pipeline.models.keras_cvae.config import KerasCVAEModelConfig
+from pipelines.ddmd_pipeline.models.keras_cvae.model import CVAE
+from pipelines.ddmd_pipeline.models.keras_cvae.utils import sparse_to_dense
+from pipelines.ddmd_pipeline.selection.latest.select_model import get_model_path
+from pipelines.ddmd_pipeline.utils import Timer, parse_args
 
 
 def get_init_weights(cfg: KerasCVAEModelConfig) -> Optional[str]:
@@ -143,7 +143,7 @@ def main(cfg: KerasCVAEModelConfig) -> None:
     with Timer("machine_learning_logging"):
         checkpoint_path = cfg.output_path / "checkpoint"
         checkpoint_path.mkdir()
-        time_stamp = time.strftime(f"epoch-{epochs}-%Y%m%d-%H%M%S.h5")
+        time_stamp = time.strftime(f"epoch-{epochs}-%Y%m%d-%H%M%S.weights.h5")
         cvae.model.save_weights(str(checkpoint_path / time_stamp))
 
         # Log loss history

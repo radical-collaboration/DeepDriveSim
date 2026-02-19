@@ -1,4 +1,4 @@
-from deepdrivemd.config import ModelSelectionTaskConfig
+from pipelines.ddmd_pipeline.config import ModelSelectionTaskConfig
 
 
 class LatestCheckpointConfig(ModelSelectionTaskConfig):

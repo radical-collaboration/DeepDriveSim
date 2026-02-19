@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import MDAnalysis  # type: ignore[import]
 
-from deepdrivemd.utils import PathLike
+from pipelines.ddmd_pipeline.utils import PathLike
 
 
 def glob_file_from_dirs(dirs: List[str], pattern: str) -> List[str]:
@@ -226,6 +226,7 @@ class DeepDriveMD_API:
         """
         data = self.agent_stage.read_task_json(stage_idx, task_idx)
         assert data is not None
+        print('error', index, len(data), stage_idx, task_idx)
         return data[index]
 
     @staticmethod

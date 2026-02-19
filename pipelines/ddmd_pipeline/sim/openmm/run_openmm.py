@@ -8,9 +8,9 @@ import openmm.app as app  # type: ignore[import]
 from mdtools.openmm.reporter import OfflineReporter  # type: ignore[import]
 from mdtools.openmm.sim import configure_simulation  # type: ignore[import]
 
-from deepdrivemd.data.api import DeepDriveMD_API
-from deepdrivemd.sim.openmm.config import OpenMMConfig
-from deepdrivemd.utils import Timer, parse_args
+from pipelines.ddmd_pipeline.data.api import DeepDriveMD_API
+from pipelines.ddmd_pipeline.sim.openmm.config import OpenMMConfig
+from pipelines.ddmd_pipeline.utils import Timer, parse_args
 
 
 class SimulationContext:
@@ -168,6 +168,8 @@ def run_simulation(cfg: OpenMMConfig) -> None:
     with Timer("molecular_dynamics_SimulationContext"):
         ctx = SimulationContext(cfg)
 
+    print('sim1')
+
     # Create openmm simulation object
     with Timer("molecular_dynamics_configure_simulation"):
         sim = configure_simulation(
@@ -180,6 +182,7 @@ def run_simulation(cfg: OpenMMConfig) -> None:
             heat_bath_friction_coef=cfg.heat_bath_friction_coef,
         )
 
+    print('sim2')
     # Write all frames to a single HDF5 file
     frames_per_h5 = int(simulation_length_ns / report_interval_ps)
     # Steps between reporting DCD frames and logs
@@ -191,10 +194,11 @@ def run_simulation(cfg: OpenMMConfig) -> None:
     with Timer("molecular_dynamics_configure_reporters"):
         configure_reporters(sim, ctx, cfg, report_steps, frames_per_h5)
 
+    print('sim3', nsteps)
     # Run simulation for nsteps
     with Timer("molecular_dynamics_step"):
         sim.step(nsteps)
-
+    print('sim4')
     # Move simulation data to persistent storage
     with Timer("molecular_dynamics_move_results"):
         if cfg.node_local_path is not None:

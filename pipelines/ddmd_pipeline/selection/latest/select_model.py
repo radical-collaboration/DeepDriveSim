@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Optional, Tuple
 
-from deepdrivemd.data.api import DeepDriveMD_API
-from deepdrivemd.selection.latest.config import LatestCheckpointConfig
-from deepdrivemd.utils import PathLike, Timer, parse_args
+from pipelines.ddmd_pipeline.data.api import DeepDriveMD_API
+from pipelines.ddmd_pipeline.selection.latest.config import LatestCheckpointConfig
+from pipelines.ddmd_pipeline.utils import PathLike, Timer, parse_args
 
 
 def get_model_path(
@@ -105,6 +105,8 @@ def latest_model_checkpoint(cfg: LatestCheckpointConfig) -> None:
     """
     api = DeepDriveMD_API(cfg.experiment_directory)
 
+    print('SELECTION:', cfg.stage_idx , cfg.retrain_freq, cfg.stage_idx % cfg.retrain_freq)
+
     # Check if there is a new model
     if cfg.stage_idx % cfg.retrain_freq == 0:
         # Select latest model checkpoint.
@@ -116,9 +118,18 @@ def latest_model_checkpoint(cfg: LatestCheckpointConfig) -> None:
             cfg.stage_idx, cfg.task_idx
         )
     else:  # Use old model
-        token = get_model_path(cfg.stage_idx - 1, cfg.task_idx, api)
-        assert token is not None, f"{cfg.stage_idx - 1}, {cfg.task_idx}"
-        model_config, model_checkpoint = token
+        try:
+            token = get_model_path(cfg.stage_idx - 1, cfg.task_idx, api)
+            assert token is not None, f"{cfg.stage_idx - 1}, {cfg.task_idx}"
+            model_config, model_checkpoint = token
+        except:
+            model_checkpoint = latest_checkpoint(
+                api, cfg.checkpoint_dir, cfg.checkpoint_suffix
+            )
+            # Get latest model YAML configuration.
+            model_config = api.machine_learning_stage.config_path(
+                cfg.stage_idx, cfg.task_idx
+            )
 
     # Format data into JSON serializable list of dictionaries
     data = [

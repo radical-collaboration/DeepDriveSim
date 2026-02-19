@@ -1,5 +1,6 @@
 """Schema of the YAML experiment file"""
 import json
+import os
 from pathlib import Path
 from typing import List, Optional, Type, TypeVar
 
@@ -11,7 +12,7 @@ except ImportError:
     from pydantic import BaseSettings as _BaseSettings
 
 
-from deepdrivemd.utils import PathLike
+from pipelines.ddmd_pipeline.utils import PathLike
 
 _T = TypeVar("_T")
 
@@ -25,6 +26,10 @@ class BaseSettings(_BaseSettings):
     def from_yaml(cls: Type[_T], filename: PathLike) -> _T:
         with open(filename) as fp:
             raw_data = yaml.safe_load(fp)
+        # Expand environment variables in string values
+        for key, value in raw_data.items():
+            if isinstance(value, str):
+                raw_data[key] = os.path.expandvars(value)
         return cls(**raw_data)  # type: ignore[call-arg]
 
 

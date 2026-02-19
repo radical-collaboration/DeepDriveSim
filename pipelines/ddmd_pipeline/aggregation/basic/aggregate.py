@@ -6,9 +6,9 @@ if TYPE_CHECKING:
 import h5py  # type: ignore[import]
 import numpy as np
 
-from deepdrivemd.aggregation.basic.config import BasicAggegation
-from deepdrivemd.data.api import DeepDriveMD_API
-from deepdrivemd.utils import parse_args
+from pipelines.ddmd_pipeline.aggregation.basic.config import BasicAggegation
+from pipelines.ddmd_pipeline.data.api import DeepDriveMD_API
+from pipelines.ddmd_pipeline.utils import parse_args
 
 
 def concatenate_last_n_h5(cfg: BasicAggegation) -> None:  # noqa

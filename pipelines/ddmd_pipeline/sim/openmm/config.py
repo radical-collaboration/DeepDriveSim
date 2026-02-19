@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import model_validator
 
-from deepdrivemd.config import MolecularDynamicsTaskConfig
+from pipelines.ddmd_pipeline.config import MolecularDynamicsTaskConfig
 
 
 class OpenMMConfig(MolecularDynamicsTaskConfig):

@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import numpy.typing as npt
 
-from deepdrivemd.models.keras_cvae.config import KerasCVAEModelConfig
-from deepdrivemd.models.keras_cvae.model import CVAE
-from deepdrivemd.models.keras_cvae.utils import sparse_to_dense
-from deepdrivemd.utils import PathLike
+from pipelines.ddmd_pipeline.models.keras_cvae.config import KerasCVAEModelConfig
+from pipelines.ddmd_pipeline.models.keras_cvae.model import CVAE
+from pipelines.ddmd_pipeline.models.keras_cvae.utils import sparse_to_dense
+from pipelines.ddmd_pipeline.utils import PathLike
 
 
 def generate_embeddings(

@@ -53,7 +53,7 @@ class MiniAppsWorkflow(DDSimManager):
         # Initial size of simulation batch before training starts
         self.sim_batch_size = self.max_sim_batch + self.training_cores
         # Set to True if training data is available at start
-        self.force_start_training = bool(kwargs.get("force_start_training", False))
+        self.free_resources_for_train = bool(kwargs.get("free_resources_for_train", True))
         # Stop pipeline after all simulation are done
         self.total_num_sim = kwargs.get("total_num_sim", 25)
         # Training iteration
@@ -86,7 +86,9 @@ class MiniAppsWorkflow(DDSimManager):
             }
 
         # Register learner tasks
-        self._register_learner_tasks()
+        self.register_tasks()
+        # To store input files
+        self.sim_inputs = {}
 
     # --------------------------------------------------------------------------
     @staticmethod
@@ -107,10 +109,9 @@ class MiniAppsWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     async def run_inference(self):
         self.prediction()
-        
         with open(self.prediction_file) as f:
             predictions = yaml.safe_load(f)
-        return predictions
+        self.sim_predictions = predictions
 
     # --------------------------------------------------------------------------
     def stop_simulation(self, *args, **kwargs):
@@ -126,11 +127,20 @@ class MiniAppsWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     async def init_sim_queue(self):
         """Collect all simulation input files into task queue."""
-        for s in range(self.total_num_sim):
-            await self.sim_task_queue.put({"sim_tag": s})
+        for sim_idx, s in enumerate(range(self.total_num_sim)):
+            await self.sim_task_queue.put({"sim_idx": sim_idx})
+            self.sim_inputs[sim_idx] = s
 
     # --------------------------------------------------------------------------
-    async def check_train_data(self):
+    async def add_sims_to_queue(self, resubmitted_sims):
+        for sim_idx in resubmitted_sims:
+            await self.sim_task_queue.put({"sim_idx": sim_idx})
+            self.logger.info(f"Re-added Sim {sim_idx} back the queue")
+            if sim_idx not in self.sim_inputs:
+                raise ValueError(f'Unable to add  sim {sim_idx} to queue ')
+
+    # --------------------------------------------------------------------------
+    async def check_train_status(self):
         """Check if enough training data is available to start training."""
 
         try:
@@ -165,15 +175,16 @@ class MiniAppsWorkflow(DDSimManager):
         return True
 
     # --------------------------------------------------------------------------
-    def _register_learner_tasks(self):
+    def register_tasks(self):
         """Register learner tasks: simulation, training, active learning, prediction."""
 
         @self.learner.simulation_task
         async def simulation(task_description=self.task_description, **kwargs):
-            sim_tag = kwargs["sim_inputs"]["sim_tag"]
+            sim_idx = kwargs["sim_inputs"]["sim_idx"]
+            instance_index = self.sim_inputs[sim_idx]
             args = (
                 f"--data_root_dir {self.sim_output_dir} "
-                f"--instance_index {sim_tag} "
+                f"--instance_index {instance_index} "
                 f"--phase {self.phase} "
                 f"--num_step 50 "
             )
@@ -184,12 +195,12 @@ class MiniAppsWorkflow(DDSimManager):
         @self.learner.training_task
         async def training(task_description=self.task_description):
             if len(self.completed_sims) > 0:
-                sim_tag = list(self.completed_sims)[0]
+                sim_idx = list(self.completed_sims)[0]
             else:
-                sim_tag = self.registered_sims.keys()[0]
+                sim_idx = self.registered_sims.keys()[0]
             args = (
                 f"--data_root_dir {self.sim_output_dir} "
-                f"--instance_index {sim_tag} "
+                f"--instance_index {sim_idx} "
                 f"--phase {self.phase} "
                 f"--num_epochs 1"
             )
@@ -201,12 +212,12 @@ class MiniAppsWorkflow(DDSimManager):
         @self.learner.prediction_task(as_executable=True)
         async def prediction(task_description=self.task_description):
             if len(self.completed_sims) > 0:
-                sim_tag = list(self.completed_sims)[0]
+                sim_idx = list(self.completed_sims)[0]
             else:
-                sim_tag = self.registered_sims.keys()[0]
+                sim_idx = self.registered_sims.keys()[0]
             args = (
                 f"--data_root_dir {self.sim_output_dir} "
-                f"--instance_index {sim_tag} "
+                f"--instance_index {sim_idx} "
                 f"--phase {self.phase} "
                 f"--num_epochs 1 "
                 f" --num_mult_outlier 1 "
@@ -222,12 +233,12 @@ class MiniAppsWorkflow(DDSimManager):
         async def selection(*args, **kwargs):
             """Dummy selection: assign random score to each sim."""
             if len(self.completed_sims) > 0:
-                sim_tag = list(self.completed_sims)[0]
+                sim_idx = list(self.completed_sims)[0]
             else:
-                sim_tag = self.registered_sims.keys()[0]
+                sim_idx = self.registered_sims.keys()[0]
             args = (
                 f"--data_root_dir {self.sim_output_dir} "
-                f"--instance_index {sim_tag} "
+                f"--instance_index {sim_idx} "
                 f"--phase {self.phase}"
             )
             return f"{self.code_path}/selection.py {args}"
@@ -243,6 +254,13 @@ class MiniAppsWorkflow(DDSimManager):
 
         await self.training()
         self.logger.task_completed("Training Completed")
+
+    # --------------------------------------------------------------------------
+    async def post_process(self):
+        if len(self.completed_sims) == self.num_files:
+            self.shutting_down.set()
+            self.run_pipeline = False
+            self.logger.task_completed("All sim have completed...", component="training")
 
     # --------------------------------------------------------------------------
     async def close(self):

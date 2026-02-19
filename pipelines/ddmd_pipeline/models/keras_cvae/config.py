@@ -1,6 +1,6 @@
 from typing import List, Tuple
 
-from deepdrivemd.config import MachineLearningTaskConfig
+from pipelines.ddmd_pipeline.config import MachineLearningTaskConfig
 
 
 class KerasCVAEModelConfig(MachineLearningTaskConfig):
@@ -43,7 +43,7 @@ class KerasCVAEModelConfig(MachineLearningTaskConfig):
     # Dropout values for each dense layer
     dense_dropouts: List[float] = [0.25]
 
-    use_model_checkpoint = False
+    use_model_checkpoint: bool = False
 
 
 if __name__ == "__main__":

@@ -1,40 +1,38 @@
+# Python
+__pycache__/
 *.py[cod]
-VERSION
-.env
-ve/
-
-# C extensions
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
 *.so
 
-# Packages
-*.egg
-*.egg-info
-dist
-build
-eggs
-parts
-var
-sdist
-develop-eggs
-.installed.cfg
-lib
-lib64
+# Virtual environments
+.venv/
+venv/
+env/
 
-# Installer logs
-pip-log.txt
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Unit test / coverage reports
+# Testing / Coverage
+.pytest_cache/
 .coverage
-.tox
-nosetests.xml
+htmlcov/
+.tox/
+
+# MkDocs build output
+site/
+
+# Logs
+log
 *.log
-*.prof
+slurm.*
 
-# Translations
-*.mo
-
-# Developer
-.mr.developer.cfg
-.project
-.pydevproject
-.idea
+# OS
+.DS_Store
+Thumbs.db

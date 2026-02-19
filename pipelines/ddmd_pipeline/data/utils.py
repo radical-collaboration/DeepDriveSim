@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 import h5py  # type: ignore[import]
 
-from deepdrivemd.utils import PathLike
+from pipelines.ddmd_pipeline.utils import PathLike
 
 
 def concatenate_virtual_h5(

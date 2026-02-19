@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "DDMD"
+name = "DDSim"
 version = "0.2.0"
 description = "Toolkit for Deep learning-driven Adaptive Simulations"
 license = {text = "MIT"}
@@ -38,7 +38,10 @@ maintainers = [
 readme = "README.md"
 requires-python = ">=3.9"
 
-dependencies = ["rhapsody", "radical-asyncflow", "pyyaml", "ROSE @ git+https://github.com/radical-cybertools/ROSE.git"]
+dependencies = ["rhapsody-py", "radical-asyncflow @ git+https://github.com/radical-cybertools/radical.asyncflow.git@feature/rhapsody-2", "pyyaml", "ROSE @ git+https://github.com/radical-cybertools/ROSE.git"]
+
+[tool.setuptools.packages.find]
+include = ["ddsim*", "pipelines*"]
 
 [project.urls]
 Homepage = "https://github.com/radical-collaboration/DeepDriveSim"
@@ -91,7 +94,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["ddmd"]
+source = ["ddsim", "pipelines"]
 omit = ["tests/*"]
 
 [tool.coverage.report]

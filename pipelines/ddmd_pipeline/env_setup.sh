@@ -1,18 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
+
+export BASE_DIR="/ocean/projects/dmr170002p/goliyad/DeepDriveSim"
+export WORK_DIR="${BASE_DIR}/pipelines/ddmd_pipeline"
+export CONDA_ENV="${WORK_DIR}/conda_env"
+
+mkdir $CONDA_ENV
+
 module load anaconda3
 
 
 ##############################################
-# 1. DeepDriveMD env
+# 1. DeepDriveSim base env
 ##############################################
-conda create -y -p $CONDA_ENV/deepdrivemd python=3.8
-conda activate $CONDA_ENV/deepdrivemd
+conda create -y -p $CONDA_ENV/deepdrivesim python=3.9
+conda activate $CONDA_ENV/deepdrivesim
 pip install --upgrade pip setuptools wheel
-cd $WORK_DIR
-pwd
+cd $BASE_DIR
 pip install -e .
+pip install -r "$WORK_DIR/requirements.txt"
 
 conda deactivate
 
@@ -23,11 +30,13 @@ conda create -y -p $CONDA_ENV/conda-openmm python=3.9
 conda activate $CONDA_ENV/conda-openmm
 conda install -y -c conda-forge "openmm>=8.0" "cudatoolkit=11.8"
 pip install --upgrade pip setuptools wheel
-cd $WORK_DIR
-pwd
+cd $BASE_DIR
 pip install -e .
-cd $WORK_DIR/MD-tools
-pwd
+pip install -r "$WORK_DIR/requirements.txt"
+cd $WORK_DIR
+git clone https://github.com/braceal/MD-tools.git
+cp -r MD-tools_fix/* MD-tools
+cd MD-tools
 pip install -e .
 
 conda deactivate
@@ -35,13 +44,13 @@ conda deactivate
 ##############################################
 # 3. Keras / TensorFlow env
 ##############################################
-conda create -y -p $CONDA_ENV/conda-keras python=3.6.12
+conda create -y -p $CONDA_ENV/conda-keras python=3.9
 conda activate $CONDA_ENV/conda-keras
 conda install -y scikit-learn
 pip install --upgrade pip setuptools wheel
-pip install tensorflow-gpu==2.6.2 pandas
-cd $WORK_DIR
-pwd
+pip install tensorflow pandas
+cd $BASE_DIR
 pip install -e .
+pip install -r "$WORK_DIR/requirements.txt"
 
 conda deactivate

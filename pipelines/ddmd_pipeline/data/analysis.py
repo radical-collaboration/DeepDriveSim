@@ -6,9 +6,9 @@ if TYPE_CHECKING:
 
 from tqdm import tqdm  # type: ignore[import]
 
-from deepdrivemd.data.api import DeepDriveMD_API
-from deepdrivemd.data.utils import parse_h5
-from deepdrivemd.utils import PathLike
+from pipelines.ddmd_pipeline.data.api import DeepDriveMD_API
+from pipelines.ddmd_pipeline.data.utils import parse_h5
+from pipelines.ddmd_pipeline.utils import PathLike
 
 
 class DeepDriveMD_Analysis:

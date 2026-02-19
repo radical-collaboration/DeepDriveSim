@@ -1,6 +1,6 @@
 from typing import Optional
 
-from deepdrivemd.config import AggregationTaskConfig
+from pipelines.ddmd_pipeline.config import AggregationTaskConfig
 
 
 class BasicAggegation(AggregationTaskConfig):

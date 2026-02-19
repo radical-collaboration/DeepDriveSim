@@ -7,7 +7,7 @@ import h5py  # type: ignore[import]
 import numpy as np
 from scipy.sparse import coo_matrix  # type: ignore[import]
 
-from deepdrivemd.utils import PathLike
+from pipelines.ddmd_pipeline.utils import PathLike
 
 
 def sparse_to_dense(

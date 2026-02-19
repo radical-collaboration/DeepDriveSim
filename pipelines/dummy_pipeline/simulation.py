@@ -58,6 +58,8 @@ def main():
     #parser.add_argument('--input_dir', type=str, required=True, help='Path to input file')
     parser.add_argument('--output_dir', type=str, required=True, help='Path to simulation output directory')
     parser.add_argument('--sim_tag', type=str, required=True, help='Simulation tag')
+    parser.add_argument('--filename', type=str, required=True, help='Simulation input file')
+    
     args = parser.parse_args()
 
     asyncio.run(run_simulation(args.output_dir, args.sim_tag))

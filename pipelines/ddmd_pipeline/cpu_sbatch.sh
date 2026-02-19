@@ -1,13 +1,13 @@
 #!/bin/sh -l
 #SBATCH -A ***
-#SBATCH --partition=GPU
+#SBATCH --partition=RM
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=64
-#SBATCH --gpus-per-node=8
+#xSBATCH --gpus-per-node=8
 #SBATCH --export    NONE
-#SBATCH --time=00:30:00
-#SBATCH --job-name ddmd_gpu
+#SBATCH --time=01:30:00
+#SBATCH --job-name br_ddmd_cpu
 #SBATCH --mail-user=***
 #SBATCH --mail-type=ALL      # When to send emails (BEGIN, END, FAIL, ALL)
 
@@ -25,7 +25,7 @@ rm -rf $EXPRMNT_DIR
 unset SLURM_EXPORT_ENV
 module load anaconda3
 source activate base
-conda activate   $CONDA_ENV/ddsim
+conda activate   $CONDA_ENV/deepdrivesim
 
 cp  $INPUT_DIR/lassen-keras-dbscan.yaml $INPUT_DIR/new_lassen-keras-dbscan.yaml
 sed -i "s|\${EXPRMNT_DIR}|$EXPRMNT_DIR|g" $INPUT_DIR/new_lassen-keras-dbscan.yaml 
