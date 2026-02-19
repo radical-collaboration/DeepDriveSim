@@ -7,7 +7,7 @@ import pytest
 
 MDAnalysis = pytest.importorskip("MDAnalysis", reason="MDAnalysis not installed")
 
-from pipelines.ddmd_pipeline.data.api import DeepDriveMD_API, Stage_API
+from pipelines.ddmd_pipeline.data.api import DeepDriveMD_API, Stage_API  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

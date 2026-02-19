@@ -1,6 +1,6 @@
 """Unit tests for pipelines.ddmd_pipeline.utils module."""
 
-import math
+import sys
 
 import numpy as np
 import pytest
@@ -9,6 +9,7 @@ from pipelines.ddmd_pipeline.utils import (
     bestk,
     hash2intarray,
     intarray2hash,
+    parse_args,
     t1Dto2D,
     t2Dto1D,
 )
@@ -65,47 +66,47 @@ class TestBestk:
 # t2Dto1D / t1Dto2D
 # ---------------------------------------------------------------------------
 class TestTriangularConversions:
-    def test_t2Dto1D_basic(self):
+    def test_t2d_to_1d_basic(self):
         """Convert upper triangle of symmetric matrix to 1D array."""
-        A = np.array([[1, 0, 1], [0, 1, 0], [1, 0, 1]], dtype=np.uint8)
-        B = t2Dto1D(A)
+        mat = np.array([[1, 0, 1], [0, 1, 0], [1, 0, 1]], dtype=np.uint8)
+        vec = t2Dto1D(mat)
         # Upper triangle (i<j): (0,1)=0, (0,2)=1, (1,2)=0
-        assert len(B) == 3
-        np.testing.assert_array_equal(B, [0, 1, 0])
+        assert len(vec) == 3
+        np.testing.assert_array_equal(vec, [0, 1, 0])
 
-    def test_t1Dto2D_basic(self):
+    def test_t1d_to_2d_basic(self):
         """Convert 1D array back to symmetric matrix."""
-        B = np.array([0, 1, 0], dtype=np.uint8)
-        A = t1Dto2D(B)
-        assert A.shape == (3, 3)
+        vec = np.array([0, 1, 0], dtype=np.uint8)
+        mat = t1Dto2D(vec)
+        assert mat.shape == (3, 3)
         # Diagonal should be 1
-        np.testing.assert_array_equal(np.diag(A), [1, 1, 1])
+        np.testing.assert_array_equal(np.diag(mat), [1, 1, 1])
         # Symmetric
-        np.testing.assert_array_equal(A, A.T)
+        np.testing.assert_array_equal(mat, mat.T)
         # Off-diagonal values
-        assert A[0, 1] == 0
-        assert A[0, 2] == 1
-        assert A[1, 2] == 0
+        assert mat[0, 1] == 0
+        assert mat[0, 2] == 1
+        assert mat[1, 2] == 0
 
     def test_roundtrip(self):
         """t1Dto2D(t2Dto1D(A)) should recover the upper triangle."""
         n = 5
-        A = np.random.randint(0, 2, size=(n, n), dtype=np.uint8)
+        mat = np.random.randint(0, 2, size=(n, n), dtype=np.uint8)
         # Make symmetric with 1s on diagonal
-        A = np.triu(A, 1)
-        A = A + A.T
-        np.fill_diagonal(A, 1)
+        mat = np.triu(mat, 1)
+        mat = mat + mat.T
+        np.fill_diagonal(mat, 1)
 
-        B = t2Dto1D(A)
-        A_recovered = t1Dto2D(B)
-        np.testing.assert_array_equal(A, A_recovered)
+        vec = t2Dto1D(mat)
+        mat_recovered = t1Dto2D(vec)
+        np.testing.assert_array_equal(mat, mat_recovered)
 
     def test_1d_length_formula(self):
         """1D array length should be n*(n-1)/2."""
         for n in [3, 4, 5, 10]:
-            A = np.zeros((n, n), dtype=np.uint8)
-            B = t2Dto1D(A)
-            assert len(B) == n * (n - 1) // 2
+            mat = np.zeros((n, n), dtype=np.uint8)
+            vec = t2Dto1D(mat)
+            assert len(vec) == n * (n - 1) // 2
 
 
 # ---------------------------------------------------------------------------
@@ -143,24 +144,16 @@ class TestHashConversions:
 class TestParseArgs:
     def test_parse_args_requires_config(self):
         """parse_args should fail without -c/--config."""
-        from pipelines.ddmd_pipeline.utils import parse_args
-
-        with pytest.raises(SystemExit):
-            import sys
-
-            old_argv = sys.argv
-            sys.argv = ["prog"]
-            try:
+        old_argv = sys.argv
+        sys.argv = ["prog"]
+        try:
+            with pytest.raises(SystemExit):
                 parse_args()
-            finally:
-                sys.argv = old_argv
+        finally:
+            sys.argv = old_argv
 
     def test_parse_args_with_config(self):
         """parse_args should accept -c flag."""
-        from pipelines.ddmd_pipeline.utils import parse_args
-
-        import sys
-
         old_argv = sys.argv
         sys.argv = ["prog", "-c", "test.yaml"]
         try:

@@ -1,17 +1,15 @@
 """Unit tests for pipelines.ddmd_pipeline.config module."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
 import yaml
 
 from pipelines.ddmd_pipeline.config import (
-    AggregationStageConfig,
-    AggregationTaskConfig,
     AgentStageConfig,
     AgentTaskConfig,
-    BaseSettings,
+    AggregationStageConfig,
+    AggregationTaskConfig,
     BaseStageConfig,
     BaseTaskConfig,
     CPUReqs,
@@ -136,7 +134,7 @@ class TestBaseStageConfig:
 # ---------------------------------------------------------------------------
 class TestMolecularDynamicsTaskConfig:
     def test_requires_initial_pdb_dir(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             MolecularDynamicsTaskConfig()
 
     def test_with_initial_pdb_dir(self, tmp_path):
