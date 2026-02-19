@@ -226,7 +226,6 @@ class DeepDriveMD_API:
         """
         data = self.agent_stage.read_task_json(stage_idx, task_idx)
         assert data is not None
-        print('error', index, len(data), stage_idx, task_idx)
         return data[index]
 
     @staticmethod

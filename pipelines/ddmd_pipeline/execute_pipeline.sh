@@ -15,7 +15,7 @@ rm -rf $EXPRMNT_DIR
 unset SLURM_EXPORT_ENV
 module load anaconda3
 source activate base
-conda activate $CONDA_ENV/ddsim
+conda activate $CONDA_ENV/deepdrivesim
 
 cp  $INPUT_DIR/lassen-keras-dbscan.yaml $INPUT_DIR/new_lassen-keras-dbscan.yaml
 sed -i "s|\${EXPRMNT_DIR}|$EXPRMNT_DIR|g" $INPUT_DIR/new_lassen-keras-dbscan.yaml 

@@ -51,16 +51,10 @@ class Logger:
             "task": Colors.BRIGHT_GREEN,
             "manager": Colors.BRIGHT_RED,
             "workflow": Colors.BRIGHT_GREEN,
-            # 'task': Colors.BRIGHT_YELLOW,
-            # 'error': Colors.RED,
-            # 'success': Colors.GREEN,
-            #'stage': Colors.BRIGHT_CYAN,
             "simulation": Colors.BLUE,
             "training": Colors.BRIGHT_YELLOW,
             "prediction": Colors.GREEN,
-            #'validation': Colors.BRIGHT_MAGENTA,
-            #'checkpoint': Colors.BRIGHT_MAGENTA,
-            #'metric': Colors.BLACK
+            "inference": Colors.BRIGHT_MAGENTA,
         }
 
     def _colorize(self, text, color):
@@ -131,7 +125,7 @@ class Logger:
 
     def manager_starting(self, task_count):
         message = (f"Starting with "
-                f"{self._colorize(str(task_count), Colors.BRIGHT_WHITE)}"
+                f"{self._colorize(str(task_count), Colors.BRIGHT_WHITE)} "
                 f"initial tasks")
         self.info(message, "manager")
 
