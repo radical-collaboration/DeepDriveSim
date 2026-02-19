@@ -124,9 +124,11 @@ class Logger:
         self.warning(message, component)
 
     def manager_starting(self, task_count):
-        message = (f"Starting with "
-                f"{self._colorize(str(task_count), Colors.BRIGHT_WHITE)} "
-                f"initial tasks")
+        message = (
+            f"Starting with "
+            f"{self._colorize(str(task_count), Colors.BRIGHT_WHITE)} "
+            f"initial tasks"
+        )
         self.info(message, "manager")
 
     def manager_exiting(self):

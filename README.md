@@ -95,10 +95,10 @@ This project uses [ruff](https://github.com/astral-sh/ruff) for linting and form
 
 ```bash
 # Check code style
-ruff check ddmd tests
+ruff check ddsim tests
 
 # Format code
-ruff format ddmd tests
+ruff format ddsim tests
 ```
 
 ### Using tox

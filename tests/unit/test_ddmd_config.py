@@ -196,9 +196,7 @@ class TestExperimentConfig:
                 experiment_directory=existing_dir,
                 node_local_path=None,
                 molecular_dynamics_stage=MolecularDynamicsStageConfig(
-                    task_config=MolecularDynamicsTaskConfig(
-                        initial_pdb_dir=tmp_path
-                    )
+                    task_config=MolecularDynamicsTaskConfig(initial_pdb_dir=tmp_path)
                 ),
                 aggregation_stage=AggregationStageConfig(
                     task_config=AggregationTaskConfig()
@@ -229,9 +227,7 @@ class TestExperimentConfig:
                 experiment_directory=Path("relative/path/nonexistent"),
                 node_local_path=None,
                 molecular_dynamics_stage=MolecularDynamicsStageConfig(
-                    task_config=MolecularDynamicsTaskConfig(
-                        initial_pdb_dir=tmp_path
-                    )
+                    task_config=MolecularDynamicsTaskConfig(initial_pdb_dir=tmp_path)
                 ),
                 aggregation_stage=AggregationStageConfig(
                     task_config=AggregationTaskConfig()

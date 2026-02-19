@@ -56,7 +56,8 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
-    "ruff"
+    "ruff",
+    "tox"
 ]
 
 doc = [

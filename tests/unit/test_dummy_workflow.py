@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-
 from ddsim.pipelines.dummy_learner import DummyWorkflow
 
 

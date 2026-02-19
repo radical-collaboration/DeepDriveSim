@@ -5,7 +5,6 @@
 
 import asyncio
 import subprocess
-from abc import ABC
 from collections import OrderedDict
 
 from ddsim.logger import Logger
@@ -19,7 +18,7 @@ def gpu_available():
         return False
 
 
-class DDSimManager(ABC):
+class DDSimManager:
     """
     Orchestrates the scheduling, monitoring, and cancellation of simulations
     in an AI-steered ensemble simulation workflow.
@@ -28,22 +27,22 @@ class DDSimManager(ABC):
     def __init__(self):
         self.logger = Logger(use_colors=True)
         self.registered_sims = OrderedDict()  # Active simulations: {tag: asyncio.Task}
-        self.sim_task_queue  = asyncio.Queue()  # Queue of pending simulation inputs
+        self.sim_task_queue = asyncio.Queue()  # Queue of pending simulation inputs
         self.completed_sims = []  # To Store completed simulations
         self.sim_predictions = {}
 
-        self.sleep_time = 20  # Delay between prediction/start train checks 
+        self.sleep_time = 20  # Delay between prediction/start train checks
         self.debug = False
 
         self.run_pipeline = True
 
-         # Event should be set inside pipeline code to stop simulation loop
+        # Event should be set inside pipeline code to stop simulation loop
         self.shutting_down = asyncio.Event()
-        self.logger.info(f"DDSim Manager initialized...")
+        self.logger.info("DDSim Manager initialized...")
 
         """These attributes should be defined in pipeline subclass:
             - sim_batch_size
-            - max_sim_batch 
+            - max_sim_batch
             - retrain_model            >>flag to stop training
             - free_resources_for_train >>flag to reassign resources
             - training_cores           >> training resources
@@ -55,8 +54,8 @@ class DDSimManager(ABC):
             - train_model
             - stop_simulation          >> returns True if sim should be canceled
             - add_sims_to_queue        >> add paused sims back to queue
-            - post_process_sim         >> post process for completed sims  
-            - post_process             >> set shutting_down event and 
+            - post_process_sim         >> post process for completed sims
+            - post_process             >> set shutting_down event and
                                        >> run_pipeline to False to complete workflow
             - close
         """
@@ -89,6 +88,7 @@ class DDSimManager(ABC):
         Override in subclass to implement prediction-based stopping logic.
         """
         raise NotImplementedError("stop_simulation must be implemented")
+
     # --------------------------------------------------------------------------
     async def init_sim_queue(self):
         """
@@ -116,7 +116,7 @@ class DDSimManager(ABC):
     # --------------------------------------------------------------------------
     async def close(self):
         """Gracefully shutdown learner.
-            Override this with actual logic in pipeline subclass.
+        Override this with actual logic in pipeline subclass.
         """
         raise NotImplementedError("close must be implemented")
 
@@ -285,27 +285,26 @@ class DDSimManager(ABC):
         self.logger.separator("DDSim MANAGER STARTING")
         await self.init_sim_queue()
         submit_task = asyncio.create_task(self.submit_sims())
-        
+
         while self.run_pipeline:
             self.logger.info(f"{len(self.registered_sims)} simulation(s) running...")
             if self.debug:
                 self.logger.info(f"{list(self.registered_sims.keys())}")
 
             # Train model if flag is set
-            train = None
             if self.retrain_model:
                 # Skip waiting for training data if it is available at start
                 if self.free_resources_for_train:
-                    await self.monitor_training_data()  # blocks until training starts   
+                    await self.monitor_training_data()  # blocks until training starts
                 else:
                     while True:
-                        start_training = await self.check_train_status()   
+                        start_training = await self.check_train_status()
                         if start_training:
                             self.logger.info("Training can start now.")
                             break
                         else:
                             await asyncio.sleep(self.sleep_time)
-                train = await self.train_model()
+                await self.train_model()
             else:
                 await asyncio.sleep(self.sleep_time)
 
@@ -314,12 +313,12 @@ class DDSimManager(ABC):
             await self.run_inference()
             self.logger.task_completed("Model Inference", component="inference")
 
-            cancelled =  self.cancel_sims()
+            cancelled = self.cancel_sims()
 
             post_processed = None
             if self.post_process:
                 post_processed = self.post_process()
-         
+
             if self.sim_task_queue.empty():
                 await self.monitor_sims()
 
