@@ -38,7 +38,6 @@ def concatenate_last_n_h5(cfg: BasicAggegation) -> None:  # noqa
     data: Dict[str, List["npt.ArrayLike"]] = {x: [] for x in fields}
 
     for in_file in files:
-
         if cfg.verbose:
             print("Reading", in_file)
 
@@ -48,7 +47,8 @@ def concatenate_last_n_h5(cfg: BasicAggegation) -> None:  # noqa
 
     # Concatenate data
     concat_data: Dict[str, "npt.ArrayLike"] = {
-        field: np.concatenate(data[field]) for field in data  # type: ignore[no-untyped-call]
+        field: np.concatenate(data[field])
+        for field in data  # type: ignore[no-untyped-call]
     }
     # for field in data:
     #    data[field] = np.concatenate(data[field])  # type: ignore[no-untyped-call]

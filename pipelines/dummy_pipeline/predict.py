@@ -13,9 +13,11 @@ from asyncio import to_thread
 # Control how many files to load in parallel (tune for HPC)
 MAX_CONCURRENT_FILE_LOADS = 50
 
+
 async def async_iterdir(path: Path):
     """Run Path.iterdir() in a separate thread to avoid blocking."""
     return await to_thread(list, path.iterdir())
+
 
 async def load_model(model_filename: Union[str, Path]):
     """Load a model from a pickle file in a thread."""
@@ -34,8 +36,8 @@ async def evaluate_npz_file(file: Path, model, sem: asyncio.Semaphore) -> float:
     async with sem:  # limit concurrent file access
         try:
             data = await asyncio.to_thread(np.load, file)
-            X_eval = data['X']
-            y_eval = data['y']
+            X_eval = data["X"]
+            y_eval = data["y"]
         except (OSError, KeyError) as e:
             print(f"⚠ Skipping corrupt file {file}: {e}")
             return None
@@ -59,17 +61,13 @@ async def evaluate_simulation(sim_dir: Path, model, sem: asyncio.Semaphore) -> f
 
     mses = await asyncio.gather(*tasks)
     mses = [m for m in mses if m is not None]
-    return float(np.mean(mses)) if mses else float('nan')
+    return float(np.mean(mses)) if mses else float("nan")
 
 
-async def predict(
-    model_filename: str,
-    sim_output_dir: str,
-    output_file: str
-) -> None:
+async def predict(model_filename: str, sim_output_dir: str, output_file: str) -> None:
     """Run prediction on all available simulations asynchronously."""
     model = await load_model(model_filename)
-   
+
     sim_output_dir = Path(sim_output_dir)
     results: Dict[str, float] = {}
 
@@ -109,18 +107,29 @@ async def predict(
 def main():
     global MAX_CONCURRENT_FILE_LOADS
 
-    parser = argparse.ArgumentParser(description="Run predictions on simulation data (async + concurrency limit).")
-    parser.add_argument('--model_filename', required=True, help='Path to model weights (pickle file)')
-    parser.add_argument('--sim_output_dir', required=True, help='Path to simulation output data')
-    parser.add_argument('--output_file', required=True, help='Path to save prediction results')
-    parser.add_argument('--max_concurrent', type=int, default=MAX_CONCURRENT_FILE_LOADS, help='Max concurrent file loads')
+    parser = argparse.ArgumentParser(
+        description="Run predictions on simulation data (async + concurrency limit)."
+    )
+    parser.add_argument(
+        "--model_filename", required=True, help="Path to model weights (pickle file)"
+    )
+    parser.add_argument(
+        "--sim_output_dir", required=True, help="Path to simulation output data"
+    )
+    parser.add_argument(
+        "--output_file", required=True, help="Path to save prediction results"
+    )
+    parser.add_argument(
+        "--max_concurrent",
+        type=int,
+        default=MAX_CONCURRENT_FILE_LOADS,
+        help="Max concurrent file loads",
+    )
     args = parser.parse_args()
 
     MAX_CONCURRENT_FILE_LOADS = args.max_concurrent
 
-    asyncio.run(
-        predict(args.model_filename, args.sim_output_dir, args.output_file)
-    )
+    asyncio.run(predict(args.model_filename, args.sim_output_dir, args.output_file))
 
 
 if __name__ == "__main__":

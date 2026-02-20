@@ -31,9 +31,11 @@ AMINO_ACID_MAP = {
 def write_aminoacid_int_seq(h5_file: h5py.File, residues: List[str]):
     data = np.array([AMINO_ACID_MAP[r] for r in residues], dtype="int8")
     h5_file.create_dataset(
-        "amino_acids", data=data, dtype="int8", 
-        #fletcher32=True, 
-        chunks=(1,)
+        "amino_acids",
+        data=data,
+        dtype="int8",
+        # fletcher32=True,
+        chunks=(1,),
     )
 
 
@@ -56,7 +58,7 @@ def write_contact_map(
         "contact_map",
         data=data,
         dtype=h5py.vlen_dtype(np.dtype("int16")),
-        #fletcher32=True,
+        # fletcher32=True,
         chunks=(1,) + data.shape[1:],
     )
 
@@ -67,7 +69,7 @@ def write_contact_map(
             "contact_map_values",
             data=data,
             dtype=h5py.vlen_dtype(np.dtype("float32")),
-            #fletcher32=True,
+            # fletcher32=True,
             chunks=(1,) + data.shape[1:],
         )
 
@@ -77,7 +79,7 @@ def write_point_cloud(h5_file: h5py.File, point_cloud: np.ndarray):
         "point_cloud",
         data=point_cloud,
         dtype="float32",
-        #fletcher32=True,
+        # fletcher32=True,
         chunks=(1,) + point_cloud.shape[1:],
     )
 

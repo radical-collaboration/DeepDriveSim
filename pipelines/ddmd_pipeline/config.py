@@ -1,11 +1,13 @@
 """Schema of the YAML experiment file"""
+
 import json
 import os
 from pathlib import Path
 from typing import List, Optional, Type, TypeVar
 
 import yaml
-from pydantic import  validator
+from pydantic import validator
+
 try:
     from pydantic_settings import BaseSettings as _BaseSettings
 except ImportError:
@@ -41,7 +43,6 @@ class CPUReqs(BaseSettings):
     threads_per_process: int = 1
     thread_type: Optional[str] = None
 
-
     @validator("process_type")
     def process_type_check(cls, v: Optional[str]) -> Optional[str]:
         valid_process_types = {None, "MPI"}
@@ -61,9 +62,9 @@ class GPUReqs(BaseSettings):
     """radical.entk task.gpu_reqs parameters."""
 
     processes: int = 0
-    process_type: Optional[str]= None
+    process_type: Optional[str] = None
     threads_per_process: int = 0
-    thread_type: Optional[str]= None
+    thread_type: Optional[str] = None
 
     @validator("process_type")
     def process_type_check(cls, v: Optional[str]) -> Optional[str]:

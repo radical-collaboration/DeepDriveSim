@@ -67,7 +67,7 @@ def connect_to_input(
         taskid_md = int(task_md.replace("task", ""))
         adios_md = sim_dir + "/adios.xml"
 
-        print(f"taskid_md = {taskid_md}, i = {i}, {i*bp_slice}, {(i+1)*bp_slice}")
+        print(f"taskid_md = {taskid_md}, i = {i}, {i * bp_slice}, {(i + 1) * bp_slice}")
 
         if taskid_md // bp_slice == cfg.task_idx:
             adios = adios2.ADIOS(adios_md, True)

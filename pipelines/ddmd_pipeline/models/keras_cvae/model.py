@@ -42,6 +42,7 @@ for gpu in gpus:
         # Must be set before GPUs are initialized
         pass
 
+
 # save history from log
 class LossHistory(Callback):  # type: ignore[misc]
     def on_train_begin(self, logs: Dict[str, float] = {}) -> None:

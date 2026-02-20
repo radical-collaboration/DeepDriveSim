@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import asyncio
 
+
 def complicated_function(x: np.ndarray) -> np.ndarray:
     """Complex mathematical function to simulate a process."""
     return (
@@ -13,6 +14,7 @@ def complicated_function(x: np.ndarray) -> np.ndarray:
         + 0.1 * np.tanh(0.2 * (x - 0.5))
         + 0.3 * (x**3)
     )
+
 
 async def simulate_one(output_file: Path):
     """Run a single simulation iteration asynchronously."""
@@ -30,12 +32,12 @@ async def simulate_one(output_file: Path):
     # Save results asynchronously
     np_bytes = await asyncio.to_thread(np.savez_compressed, output_file, X=X, y=y)
 
-    #print(f"Saved simulation to {output_file}")
+    # print(f"Saved simulation to {output_file}")
 
 
 async def run_simulation(output_dir: str, sim_tag: str) -> None:
     """Run the simulation and save results."""
-    print(f"Simulation {sim_tag } will start now")
+    print(f"Simulation {sim_tag} will start now")
 
     output_sim_dir = Path(output_dir) / sim_tag
     output_sim_dir.mkdir(parents=True, exist_ok=True)
@@ -55,14 +57,22 @@ async def run_simulation(output_dir: str, sim_tag: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Run a simulation (async)")
-    #parser.add_argument('--input_dir', type=str, required=True, help='Path to input file')
-    parser.add_argument('--output_dir', type=str, required=True, help='Path to simulation output directory')
-    parser.add_argument('--sim_tag', type=str, required=True, help='Simulation tag')
-    parser.add_argument('--filename', type=str, required=True, help='Simulation input file')
-    
+    # parser.add_argument('--input_dir', type=str, required=True, help='Path to input file')
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        required=True,
+        help="Path to simulation output directory",
+    )
+    parser.add_argument("--sim_tag", type=str, required=True, help="Simulation tag")
+    parser.add_argument(
+        "--filename", type=str, required=True, help="Simulation input file"
+    )
+
     args = parser.parse_args()
 
     asyncio.run(run_simulation(args.output_dir, args.sim_tag))
+
 
 if __name__ == "__main__":
     main()

@@ -14,7 +14,13 @@ from pipelines.ddmd_pipeline.agents.lof.config import OutlierDetectionConfig
 from pipelines.ddmd_pipeline.data.api import DeepDriveMD_API
 from pipelines.ddmd_pipeline.data.utils import get_virtual_h5_file, parse_h5
 from pipelines.ddmd_pipeline.selection.latest.select_model import get_model_path
-from pipelines.ddmd_pipeline.utils import PathLike, Timer, bestk, setup_mpi, setup_mpi_comm
+from pipelines.ddmd_pipeline.utils import (
+    PathLike,
+    Timer,
+    bestk,
+    setup_mpi,
+    setup_mpi_comm,
+)
 
 
 def get_representation(
@@ -39,7 +45,9 @@ def get_representation(
             comm,
         )
     elif model_type == "keras_cvae":
-        from pipelines.ddmd_pipeline.models.keras_cvae.inference import generate_embeddings  # type: ignore[no-redef]
+        from pipelines.ddmd_pipeline.models.keras_cvae.inference import (
+            generate_embeddings,  # type: ignore[no-redef]
+        )
 
         embeddings = generate_embeddings(  # type: ignore[call-arg]
             model_cfg_path,
@@ -48,7 +56,7 @@ def get_representation(
             inference_batch_size,
         )
     else:
-        raise ValueError(f"model_type {cfg.model_type} not supported")
+        raise ValueError(f"model_type {model_type} not supported")
 
     return embeddings
 
@@ -123,7 +131,7 @@ def get_intrinsic_score(
             intrinsic_inds = np.arange(len(embeddings))  # type: ignore[arg-type]
         clf = LocalOutlierFactor()
         clf.fit_predict(embeddings[intrinsic_inds])  # type: ignore[index]
-        intrinsic_scores: "npt.ArrayLike" = clf.negative_outlier_factor_  # type: ignore[no-redef]
+        intrinsic_scores: npt.ArrayLike = clf.negative_outlier_factor_  # type: ignore[no-redef]
         # Sort the DBSCAN outliers by LOF score.
         # The smaller the lof_score, the more likely the point is an outlier.
         sorted_lof_inds = np.argsort(intrinsic_scores)

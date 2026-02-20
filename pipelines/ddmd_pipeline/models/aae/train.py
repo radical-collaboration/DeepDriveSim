@@ -68,7 +68,6 @@ def get_h5_training_file(cfg: AAEModelConfig) -> Tuple[Path, List[str]]:
 
 def get_init_weights(cfg: AAEModelConfig) -> Optional[str]:
     if cfg.init_weights_path is None:
-
         if cfg.stage_idx == 0:
             # Case for first iteration with no pretrained weights
             return None
@@ -163,7 +162,6 @@ def main(
     comm_size = 1
     comm = None
     if distributed and dist.is_available():
-
         import mpi4py  # type: ignore[import]
 
         mpi4py.rc.initialize = False

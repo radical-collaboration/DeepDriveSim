@@ -17,6 +17,7 @@ from ddsim.ddsim_manager import DDSimManager
 
 task_description = {"shell": True}
 
+
 class DummyWorkflow(DDSimManager):
     """Dummy workflow for managing DDMD simulations, training, and predictions."""
 
@@ -27,7 +28,7 @@ class DummyWorkflow(DDSimManager):
         # Default home directory
         self.flow = kwargs.get("asyncflow", None)
         if self.flow is None:
-            raise ValueError('Unable to initiate DummyWorkflow w/o asyncflow')
+            raise ValueError("Unable to initiate DummyWorkflow w/o asyncflow")
         self.learner = Learner(self.flow)
 
         home_dir = Path(kwargs.get("home_dir", Path.home() / "DDSim"))
@@ -59,7 +60,9 @@ class DummyWorkflow(DDSimManager):
         self.prediction_threshold = kwargs.get("prediction_threshold", 0.5)
         self.start_training_threshold = kwargs.get("start_training_threshold", 1)
         self.training_epochs = kwargs.get("training_epochs", 1)
-        self.free_resources_for_train = bool(kwargs.get("free_resources_for_train", True))
+        self.free_resources_for_train = bool(
+            kwargs.get("free_resources_for_train", True)
+        )
 
         self.iteration = 0
         self.retrain_model = self.training_epochs > 0
@@ -190,7 +193,7 @@ class DummyWorkflow(DDSimManager):
             await self.sim_task_queue.put({"sim_idx": sim_idx})
             self.logger.info(f"Re-added Sim {sim_idx} back the queue")
             if sim_idx not in self.sim_inputs:
-                raise ValueError(f'Unable to add  sim {sim_idx} to queue ')
+                raise ValueError(f"Unable to add  sim {sim_idx} to queue ")
 
     # --------------------------------------------------------------------------
     async def check_train_status(self) -> bool:
@@ -200,13 +203,12 @@ class DummyWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def post_process_sim(self, sim_idx):
-        
         """
         Asynchronously delete all files associated
         with a simulation index (safe parallel cleanup).
         """
         del self.sim_inputs[sim_idx]
-        
+
         async def _delete_file(file_path):
             try:
                 await asyncio.to_thread(os.remove, file_path)
@@ -274,7 +276,9 @@ class DummyWorkflow(DDSimManager):
         if len(self.completed_sims) == self.num_files:
             self.shutting_down.set()
             self.run_pipeline = False
-            self.logger.task_completed("All sim have completed...", component="training")
+            self.logger.task_completed(
+                "All sim have completed...", component="training"
+            )
 
     # --------------------------------------------------------------------------
     async def close(self):
@@ -286,7 +290,7 @@ class DummyWorkflow(DDSimManager):
         try:
             await self.flow.shutdown()
         except Exception:
-            pass          
+            pass
 
     # --------------------------------------------------------------------------
     async def stop(self):

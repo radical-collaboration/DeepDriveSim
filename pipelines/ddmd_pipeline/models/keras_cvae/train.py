@@ -19,7 +19,6 @@ from pipelines.ddmd_pipeline.utils import Timer, parse_args
 
 def get_init_weights(cfg: KerasCVAEModelConfig) -> Optional[str]:
     if cfg.init_weights_path is None:
-
         if cfg.stage_idx == 0:
             # Case for first iteration with no pretrained weights
             return None

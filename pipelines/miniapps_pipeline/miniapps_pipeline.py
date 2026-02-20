@@ -28,7 +28,7 @@ class MiniAppsWorkflow(DDSimManager):
 
         self.flow = kwargs.get("asyncflow", None)
         self.learner = Learner(asyncflow)
-        
+
         # Default home directory
         home_dir = Path(kwargs.get("home_dir", Path.home() / "DDMD"))
         self.clean_dir(home_dir)  # ❗Careful: deletes everything in home_dir!
@@ -53,7 +53,9 @@ class MiniAppsWorkflow(DDSimManager):
         # Initial size of simulation batch before training starts
         self.sim_batch_size = self.max_sim_batch + self.training_cores
         # Set to True if training data is available at start
-        self.free_resources_for_train = bool(kwargs.get("free_resources_for_train", True))
+        self.free_resources_for_train = bool(
+            kwargs.get("free_resources_for_train", True)
+        )
         # Stop pipeline after all simulation are done
         self.total_num_sim = kwargs.get("total_num_sim", 25)
         # Training iteration
@@ -137,7 +139,7 @@ class MiniAppsWorkflow(DDSimManager):
             await self.sim_task_queue.put({"sim_idx": sim_idx})
             self.logger.info(f"Re-added Sim {sim_idx} back the queue")
             if sim_idx not in self.sim_inputs:
-                raise ValueError(f'Unable to add  sim {sim_idx} to queue ')
+                raise ValueError(f"Unable to add  sim {sim_idx} to queue ")
 
     # --------------------------------------------------------------------------
     async def check_train_status(self):
@@ -260,7 +262,9 @@ class MiniAppsWorkflow(DDSimManager):
         if len(self.completed_sims) == self.num_files:
             self.shutting_down.set()
             self.run_pipeline = False
-            self.logger.task_completed("All sim have completed...", component="training")
+            self.logger.task_completed(
+                "All sim have completed...", component="training"
+            )
 
     # --------------------------------------------------------------------------
     async def close(self):

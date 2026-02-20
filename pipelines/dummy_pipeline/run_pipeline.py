@@ -4,8 +4,9 @@ import argparse
 from radical.asyncflow import WorkflowEngine
 from dummy_pipeline import DummyWorkflow
 
-SIM_CORES = 3   # For Testing only we set 3 CPUs for simulations
+SIM_CORES = 3  # For Testing only we set 3 CPUs for simulations
 TRAIN_CORE = 1  # For Testing only we set 1 CPUs for training
+
 
 async def run_ddmd(config_file, use_dragon):
 
@@ -19,15 +20,18 @@ async def run_ddmd(config_file, use_dragon):
         engine = await DragonExecutionBackendV3()
     else:
         from rhapsody.backends import ConcurrentExecutionBackend
+
         engine = await ConcurrentExecutionBackend()
 
     # Create the async workflow engine
     asyncflow = await WorkflowEngine.create(engine)
     # Initialize the workflow
-    workflow = DummyWorkflow(asyncflow=asyncflow, training_cores=TRAIN_CORE, max_sim_batch=SIM_CORES)
-    
-    #try:
-        # Run the workflow
+    workflow = DummyWorkflow(
+        asyncflow=asyncflow, training_cores=TRAIN_CORE, max_sim_batch=SIM_CORES
+    )
+
+    # try:
+    # Run the workflow
     await workflow.start()
     # except Exception as e:
     #     print(f"An error occurred during teaching: {e}")
@@ -35,24 +39,20 @@ async def run_ddmd(config_file, use_dragon):
     # Ensure cleanup regardless of errors
     await workflow.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog="run_pipeline.py",
-        description="Dummy DDSim pipeline"
-        )
+        prog="run_pipeline.py", description="Dummy DDSim pipeline"
+    )
 
     parser.add_argument(
         "--config_file",
         type=str,
-        default='config.yaml',
-        help="Path to pipeline configuration file"
+        default="config.yaml",
+        help="Path to pipeline configuration file",
     )
 
-    parser.add_argument(
-        "--use_dragon",
-        action="store_true",
-        help="Use Dragon backend"
-    )
+    parser.add_argument("--use_dragon", action="store_true", help="Use Dragon backend")
 
     args = parser.parse_args()
 

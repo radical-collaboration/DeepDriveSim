@@ -6,18 +6,22 @@ import numpy as np
 import random
 import asyncio
 
+
 def dummy_mse():
     """Return a random value for testing purposes."""
     return random.random()
+
 
 async def load_model(model_filename):
     """Load a pre-trained model asynchronously, return None if loading fails."""
     try:
         try:
             import aiofiles
-            async with aiofiles.open(model_filename, 'rb') as f:
+
+            async with aiofiles.open(model_filename, "rb") as f:
                 data = await f.read()
         except:
+
             def _read_file(path):
                 with open(path, "rb") as f:
                     return f.read()
@@ -26,7 +30,7 @@ async def load_model(model_filename):
         # pickle.load is CPU-bound, run in a thread
         return await asyncio.to_thread(pickle.loads, data)
     except (OSError, pickle.UnpicklingError) as e:
-        #print(f"Warning: Unable to load model from {model_filename} ({e}). Using dummy MSE.")
+        # print(f"Warning: Unable to load model from {model_filename} ({e}). Using dummy MSE.")
         return None
 
 
@@ -35,14 +39,14 @@ async def load_single_npz(file):
     try:
         return await asyncio.to_thread(np.load, file)
     except Exception as e:
-        #print(f"Warning: Failed to load {file}: {e}")
+        # print(f"Warning: Failed to load {file}: {e}")
         return None
 
 
 async def load_validation_data(val_dir):
     """Load all validation data from the given directory asynchronously."""
     val_path = Path(val_dir)
-    npz_files = [f for f in val_path.iterdir() if f.is_file() and f.suffix == '.npz']
+    npz_files = [f for f in val_path.iterdir() if f.is_file() and f.suffix == ".npz"]
 
     # Load files concurrently
     datasets = await asyncio.gather(*(load_single_npz(f) for f in npz_files))
@@ -50,8 +54,8 @@ async def load_validation_data(val_dir):
     X_all, y_all = [], []
     for data in datasets:
         if data is not None:
-            X_all.append(data['X'])
-            y_all.append(data['y'])
+            X_all.append(data["X"])
+            y_all.append(data["y"])
 
     if not X_all:
         return None, None
@@ -59,8 +63,8 @@ async def load_validation_data(val_dir):
     return np.concatenate(X_all, axis=0), np.concatenate(y_all, axis=0)
 
 
-async def check(model_filename='model.pkl', val_dir='val'):
-    #try:
+async def check(model_filename="model.pkl", val_dir="val"):
+    # try:
     model = await load_model(model_filename)
     ##except:
     #    pass
@@ -78,9 +82,15 @@ async def check(model_filename='model.pkl', val_dir='val'):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Check model accuracy against validation data (async).")
-    parser.add_argument('--model_filename', type=str, default='model.pkl', help='Path to model file')
-    parser.add_argument('--val_dir', type=str, default='val', help='Path to validation data directory')
+    parser = argparse.ArgumentParser(
+        description="Check model accuracy against validation data (async)."
+    )
+    parser.add_argument(
+        "--model_filename", type=str, default="model.pkl", help="Path to model file"
+    )
+    parser.add_argument(
+        "--val_dir", type=str, default="val", help="Path to validation data directory"
+    )
     args = parser.parse_args()
 
     asyncio.run(check(args.model_filename, args.val_dir))

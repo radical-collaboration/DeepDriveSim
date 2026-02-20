@@ -4,7 +4,8 @@ from typing import Optional
 
 import openmm as omm  # type: ignore[import]
 import openmm.app as app  # type: ignore[import]
-#import openmm.unit as u  # type: ignore[import]
+
+# import openmm.unit as u  # type: ignore[import]
 from mdtools.openmm.reporter import OfflineReporter  # type: ignore[import]
 from mdtools.openmm.sim import configure_simulation  # type: ignore[import]
 
@@ -159,16 +160,16 @@ def configure_reporters(
 def run_simulation(cfg: OpenMMConfig) -> None:
 
     # openmm typed variables
-    dt_ps = cfg.dt_ps #* u.picoseconds
-    report_interval_ps = cfg.report_interval_ps #* u.picoseconds
-    simulation_length_ns = cfg.simulation_length_ns #* u.nanoseconds
-    temperature_kelvin = cfg.temperature_kelvin #* u.kelvin
+    dt_ps = cfg.dt_ps  # * u.picoseconds
+    report_interval_ps = cfg.report_interval_ps  # * u.picoseconds
+    simulation_length_ns = cfg.simulation_length_ns  # * u.nanoseconds
+    temperature_kelvin = cfg.temperature_kelvin  # * u.kelvin
 
     # Handle files
     with Timer("molecular_dynamics_SimulationContext"):
         ctx = SimulationContext(cfg)
 
-    print('sim1')
+    print("sim1")
 
     # Create openmm simulation object
     with Timer("molecular_dynamics_configure_simulation"):
@@ -182,7 +183,7 @@ def run_simulation(cfg: OpenMMConfig) -> None:
             heat_bath_friction_coef=cfg.heat_bath_friction_coef,
         )
 
-    print('sim2')
+    print("sim2")
     # Write all frames to a single HDF5 file
     frames_per_h5 = int(simulation_length_ns / report_interval_ps)
     # Steps between reporting DCD frames and logs
@@ -194,11 +195,11 @@ def run_simulation(cfg: OpenMMConfig) -> None:
     with Timer("molecular_dynamics_configure_reporters"):
         configure_reporters(sim, ctx, cfg, report_steps, frames_per_h5)
 
-    print('sim3', nsteps)
+    print("sim3", nsteps)
     # Run simulation for nsteps
     with Timer("molecular_dynamics_step"):
         sim.step(nsteps)
-    print('sim4')
+    print("sim4")
     # Move simulation data to persistent storage
     with Timer("molecular_dynamics_move_results"):
         if cfg.node_local_path is not None:

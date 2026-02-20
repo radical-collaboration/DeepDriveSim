@@ -128,7 +128,6 @@ class Stage_API:
 
 
 class DeepDriveMD_API:
-
     # Directory structure for experiment stages
     MOLECULAR_DYNAMICS_DIR = "molecular_dynamics_runs"
     AGGREGATE_DIR = "aggregation_runs"

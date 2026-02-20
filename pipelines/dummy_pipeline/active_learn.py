@@ -11,6 +11,7 @@ UNLABELED_DATA = []
 LABELED_DATA = []
 LABELS = {}
 
+
 async def load_model(model_filename: Union[str, Path]):
     return "model"
     # """Load a model from a pickle file in a thread."""
@@ -22,21 +23,25 @@ async def load_model(model_filename: Union[str, Path]):
     #     print(f"⚠ Unable to load model from {model_filename}: {e}")
     #     return None
 
+
 async def train_model(labeled_data, labels):
     """Simulate model training."""
     await asyncio.sleep(0.5)
     print(f"Trained model on {len(labeled_data)} samples")
     return "model"
 
+
 async def get_uncertainty_scores(model, unlabeled_data):
     """Simulate computing uncertainty scores for unlabeled samples."""
     await asyncio.sleep(0.2)
     return {i: random.random() for i in range(len(unlabeled_data))}
 
+
 async def label_data(samples):
     """Simulate labeling process (e.g., human annotation or simulation)."""
     await asyncio.sleep(0.3)
     return {s: random.choice([0, 1]) for s in samples}
+
 
 def load_unlabeled_data(train_dir: str):
     """Load all .npz files from train_dir into UNLABELED_DATA."""
@@ -44,7 +49,7 @@ def load_unlabeled_data(train_dir: str):
     train_dir = Path(train_dir)
     if not train_dir.is_dir():
         raise ValueError(f"Train directory {train_dir} does not exist")
-    
+
     UNLABELED_DATA = []
     for file in train_dir.iterdir():
         if file.is_file() and file.suffix == ".npz":
@@ -53,7 +58,10 @@ def load_unlabeled_data(train_dir: str):
             UNLABELED_DATA.extend([x for x in X])
     print(f"Loaded {len(UNLABELED_DATA)} unlabeled samples from {train_dir}")
 
-def move_labeled_to_train_al(train_al_dir: str, sample_indices, unlabeled_data_snapshot, labels_snapshot):
+
+def move_labeled_to_train_al(
+    train_al_dir: str, sample_indices, unlabeled_data_snapshot, labels_snapshot
+):
     """
     Move newly labeled data to train_al_dir for next training iteration.
 
@@ -65,7 +73,7 @@ def move_labeled_to_train_al(train_al_dir: str, sample_indices, unlabeled_data_s
     """
     train_al_dir = Path(train_al_dir)
     train_al_dir.mkdir(parents=True, exist_ok=True)
-    
+
     for idx in sample_indices:
         sample_file = train_al_dir / f"sample_{idx}.npz"
         X = unlabeled_data_snapshot[idx]
@@ -74,14 +82,13 @@ def move_labeled_to_train_al(train_al_dir: str, sample_indices, unlabeled_data_s
     print(f"Moved {len(sample_indices)} labeled samples to {train_al_dir}")
 
 
-async def active_learning_loop(model_filename: str,
-                               train_dir: str,
-                               train_al_dir: str,
-                               iterations=5, batch_size=5)-> None:
+async def active_learning_loop(
+    model_filename: str, train_dir: str, train_al_dir: str, iterations=5, batch_size=5
+) -> None:
     global UNLABELED_DATA, LABELED_DATA, LABELS
 
     for it in range(iterations):
-        print(f"\n=== AL Iteration {it+1} ===")
+        print(f"\n=== AL Iteration {it + 1} ===")
 
         # Load model
         model = await load_model(model_filename)
@@ -107,21 +114,36 @@ async def active_learning_loop(model_filename: str,
         for s, lbl in new_labels.items():
             LABELS[s] = lbl
             LABELED_DATA.append(UNLABELED_DATA[s])
-        UNLABELED_DATA = [x for i, x in enumerate(UNLABELED_DATA) if i not in most_uncertain]
+        UNLABELED_DATA = [
+            x for i, x in enumerate(UNLABELED_DATA) if i not in most_uncertain
+        ]
 
         # Move newly labeled data using the snapshot
-        move_labeled_to_train_al(train_al_dir, list(new_labels.keys()), unlabeled_snapshot, new_labels)
-
+        move_labeled_to_train_al(
+            train_al_dir, list(new_labels.keys()), unlabeled_snapshot, new_labels
+        )
 
     print("\nFinal labeled dataset size:", len(LABELED_DATA))
-    #print("Labels:", LABELS)
+    # print("Labels:", LABELS)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Select batch for the next training iteration.")
-    parser.add_argument('--model_filename', required=True, help='Path to model weights (pickle file)')
-    parser.add_argument('--train_dir', type=str, help='Path to all available training data')
-    parser.add_argument('--train_al_dir', type=str, help='Path to training data selected for next AL iteration')
+    parser = argparse.ArgumentParser(
+        description="Select batch for the next training iteration."
+    )
+    parser.add_argument(
+        "--model_filename", required=True, help="Path to model weights (pickle file)"
+    )
+    parser.add_argument(
+        "--train_dir", type=str, help="Path to all available training data"
+    )
+    parser.add_argument(
+        "--train_al_dir",
+        type=str,
+        help="Path to training data selected for next AL iteration",
+    )
     args = parser.parse_args()
 
-    asyncio.run(active_learning_loop(args.model_filename, args.train_dir, args.train_al_dir))
+    asyncio.run(
+        active_learning_loop(args.model_filename, args.train_dir, args.train_al_dir)
+    )

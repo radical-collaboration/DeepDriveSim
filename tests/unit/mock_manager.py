@@ -9,8 +9,6 @@ DDSimManager = pytest.importorskip(
     reason="ddsim.ddsim_manager not importable (missing radical.asyncflow)",
 ).DDSimManager
 
-# from unittest.mock import Mock
-
 
 # ---------------------------
 # Minimal stubs for logger/learner
@@ -53,8 +51,8 @@ class MockLearner(DDSimManager):
         super().__init__(asyncflow)
 
         # Override timing for faster tests
-        self.time_between_predictions = 0.1
-        self.time_before_shutdown = 0.1
+        self.time_between_predictions = 0.01
+        self.time_before_shutdown = 0.01
 
         # Register learner tasks
         self._register_learner_tasks()
@@ -98,13 +96,11 @@ class MockLearner(DDSimManager):
 
         @self.learner.simulation_task(as_executable=False)
         async def simulation(*args, **kwargs):
-            await asyncio.sleep(5)
+            await asyncio.sleep(0.01)
             return True
 
         self.simulation = simulation
 
-        # will work after UQ branch of ROSE is finalized
-        # @self.learner.prediction_task(as_executable=False)
         @self.learner.utility_task(as_executable=False)
         async def prediction(*args, **kwargs):
             """Dummy prediction: assign random score to each sim."""
@@ -116,17 +112,3 @@ class MockLearner(DDSimManager):
     # --------------------------------------------------------------------------
     async def train_model(self):
         pass
-
-
-# @pytest.fixture
-# def mock_execution_backend():
-#     """Mock execution backend"""
-#     return Mock()
-
-
-# @pytest.fixture
-# def ddmd_workflow(mock_execution_backend):
-#     """Create an ImpressManager instance for testing"""
-#     manager = MockLearner(asyncflow=mock_execution_backend)
-#     manager.logger = Mock()  # Mock the logger
-#     return manager

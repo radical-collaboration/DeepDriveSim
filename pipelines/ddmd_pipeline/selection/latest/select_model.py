@@ -105,7 +105,9 @@ def latest_model_checkpoint(cfg: LatestCheckpointConfig) -> None:
     """
     api = DeepDriveMD_API(cfg.experiment_directory)
 
-    print('SELECTION:', cfg.stage_idx , cfg.retrain_freq, cfg.stage_idx % cfg.retrain_freq)
+    print(
+        "SELECTION:", cfg.stage_idx, cfg.retrain_freq, cfg.stage_idx % cfg.retrain_freq
+    )
 
     # Check if there is a new model
     if cfg.stage_idx % cfg.retrain_freq == 0:

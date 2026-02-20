@@ -1,6 +1,5 @@
 import itertools
 import shutil
-from pathlib import Path
 
 from ddsim.ddsim_manager import DDSimManager
 from pipelines.ddmd_pipeline.config import ExperimentConfig
@@ -28,7 +27,8 @@ class DDMdWorkflow(DDSimManager):
 
         # Load and validate experiment configuration from YAML
         self.experiment_config = ExperimentConfig.from_yaml(config)
-        self.skip_aggregation = self.experiment_config.aggregation_stage.skip_aggregation
+        agg_stage = self.experiment_config.aggregation_stage
+        self.skip_aggregation = agg_stage.skip_aggregation
         self.api = DeepDriveMD_API(self.experiment_config.experiment_directory)
 
         # Stage index tracks the current DeepDriveMD iteration (0-based)
@@ -60,10 +60,14 @@ class DDMdWorkflow(DDSimManager):
         # If False, skip retraining (e.g. when model accuracy is sufficient)
         self.retrain_model = True
 
+        # Enable post_process() to advance iterations after each inference cycle
+        self.run_post_process = True
+
         # Register simulation, training, aggregation, inference, selection tasks
         self.register_tasks()
         # Dic to store inputs for simulation
         self.sim_inputs = {}
+        self.train_models = [self.train_model]
 
     # --------------------------------------------------------------------------
     def _generate_stage_config(self):
@@ -207,8 +211,9 @@ class DDMdWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     def _init_update_config(self, cfg):
         """Set shared experiment-level fields on a stage's task_config."""
-        cfg.task_config.experiment_directory = self.experiment_config.experiment_directory
-        cfg.task_config.node_local_path = self.experiment_config.node_local_path
+        exp = self.experiment_config
+        cfg.task_config.experiment_directory = exp.experiment_directory
+        cfg.task_config.node_local_path = exp.node_local_path
 
     # --------------------------------------------------------------------------
     def register_tasks(self):

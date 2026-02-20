@@ -58,7 +58,6 @@ def next_input(
     """
     while True:
         with Timer("ml_read"):
-
             z = streams.next()
             print("z=", z)
             print("type(z)=", type(z))
@@ -152,7 +151,6 @@ def train(
     noise = torch.FloatTensor(cfg.batch_size, cfg.latent_dim).to(device)
 
     for batch in tqdm(train_loader):
-
         x = batch["X"].to(device, non_blocking=True)
 
         # Encoder/Discriminator forward

@@ -22,43 +22,39 @@ class DDSimManager:
     """
     Orchestrates the scheduling, monitoring, and cancellation of simulations
     in an AI-steered ensemble simulation workflow.
+
+    Subclasses must define:
+        - sim_batch_size, max_sim_batch, training_cores
+        - retrain_model (flag to control training loop)
+        - init_sim_queue, check_train_status, train_model
+        - stop_simulation (returns True if sim should be canceled)
+        - add_sims_to_queue (re-queue paused sims)
+        - post_process_sim (per-simulation cleanup)
+        - run_inference (collect prediction scores)
+        - close
+    Optional:
+        - free_resources_for_train (default False)
+        - run_post_process (default False) + post_process method
     """
 
     def __init__(self):
         self.logger = Logger(use_colors=True)
         self.registered_sims = OrderedDict()  # Active simulations: {tag: asyncio.Task}
         self.sim_task_queue = asyncio.Queue()  # Queue of pending simulation inputs
-        self.completed_sims = []  # To Store completed simulations
+        self.completed_sims = []  # Completed simulations
         self.sim_predictions = {}
+        self.train_models = []  # Additional training coroutines to run in parallel
 
         self.sleep_time = 20  # Delay between prediction/start train checks
         self.debug = False
 
         self.run_pipeline = True
+        self.free_resources_for_train = False
+        self.run_post_process = False
 
         # Event should be set inside pipeline code to stop simulation loop
         self.shutting_down = asyncio.Event()
         self.logger.info("DDSim Manager initialized...")
-
-        """These attributes should be defined in pipeline subclass:
-            - sim_batch_size
-            - max_sim_batch
-            - retrain_model            >>flag to stop training
-            - free_resources_for_train >>flag to reassign resources
-            - training_cores           >> training resources
-            >> routines:
-            - init_sim_queue
-            - register_tasks must be defined in subclass to register
-                all tasks like  simulation, training, etc.
-            - check_train_status       >> flag to start training
-            - train_model
-            - stop_simulation          >> returns True if sim should be canceled
-            - add_sims_to_queue        >> add paused sims back to queue
-            - post_process_sim         >> post process for completed sims
-            - post_process             >> set shutting_down event and
-                                       >> run_pipeline to False to complete workflow
-            - close
-        """
 
     # --------------------------------------------------------------------------
     def add_sims_to_queue(self, *args, **kwargs):
@@ -107,11 +103,23 @@ class DDSimManager:
 
     # --------------------------------------------------------------------------
     async def train_model(self):
+        """Run the primary model training step.
+
+        Override in subclass. For parallel training of multiple models,
+        append async callables to ``self.train_models``; they will be
+        gathered concurrently alongside this method in ``start()``.
+
+        If only ``self.train_models`` is used, this method can be left
+        as the default no-op.
         """
-        Define all step required for model training.
+        pass
+
+    # --------------------------------------------------------------------------
+    async def run_inference(self):
+        """Collect prediction scores for all running simulations.
         Override this with actual logic in pipeline subclass.
         """
-        raise NotImplementedError("train_model must be implemented")
+        pass
 
     # --------------------------------------------------------------------------
     async def close(self):
@@ -181,15 +189,26 @@ class DDSimManager:
         for sim_idx, task in self.registered_sims.items():
             if task.done():
                 unregistered_sims.append(sim_idx)
-                self.logger.task_completed(f"Sim {sim_idx}", component="simulation")
-                await self.post_process_sim(sim_idx)
                 self.sim_batch_size += 1
 
-                if task.exception():
+                try:
+                    exc = task.exception()
+                except asyncio.CancelledError:
+                    self.logger.info(
+                        f"Sim {sim_idx} was cancelled", component="simulation"
+                    )
+                    continue
+
+                if exc:
                     self.logger.error(
-                        f"Sim {sim_idx} failed: {task.exception()}",
+                        f"Sim {sim_idx} failed: {exc}",
                         component="simulation",
                     )
+                else:
+                    self.logger.task_completed(
+                        f"Sim {sim_idx}", component="simulation"
+                    )
+                    await self.post_process_sim(sim_idx)
         await self._unregister_sims(unregistered_sims)
 
     # --------------------------------------------------------------------------
@@ -304,7 +323,9 @@ class DDSimManager:
                             break
                         else:
                             await asyncio.sleep(self.sleep_time)
-                await self.train_model()
+                tasks = [self.train_model()]
+                tasks.extend(t() for t in self.train_models)
+                await asyncio.gather(*tasks)
             else:
                 await asyncio.sleep(self.sleep_time)
 
@@ -313,18 +334,18 @@ class DDSimManager:
             await self.run_inference()
             self.logger.task_completed("Model Inference", component="inference")
 
-            cancelled = self.cancel_sims()
+            cancel_task = asyncio.create_task(self.cancel_sims())
 
-            post_processed = None
-            if self.post_process:
-                post_processed = self.post_process()
+            post_process_task = None
+            if self.run_post_process:
+                post_process_task = asyncio.create_task(self.post_process())
 
             if self.sim_task_queue.empty():
                 await self.monitor_sims()
 
-            if post_processed:
-                await post_processed
-            await cancelled
+            if post_process_task:
+                await post_process_task
+            await cancel_task
 
             await asyncio.sleep(1)
 

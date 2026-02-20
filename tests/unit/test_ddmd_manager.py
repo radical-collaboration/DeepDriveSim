@@ -10,7 +10,7 @@ radical_asyncflow = pytest.importorskip(
 ConcurrentExecutionBackend = radical_asyncflow.ConcurrentExecutionBackend
 WorkflowEngine = radical_asyncflow.WorkflowEngine
 
-from tests.unit.mock_manager import MockLearner
+from tests.unit.mock_manager import MockLearner  # noqa: E402
 
 
 # ---------------------------
@@ -30,49 +30,49 @@ def make_failing_task(exc_msg="boom"):
     return asyncio.create_task(_fail())
 
 
-# # ---------------------------
-# # Fixtures
-# # ---------------------------
-
-# @pytest.fixture
-# def mock_asyncflow():
-#     mock = MagicMock(spec=WorkflowEngine)
-#     # manually add attributes that aren’t in WorkflowEngine
-#     #type(mock).task = MagicMock()
-#     #mock.task.return_value = "dummy_task"
-#     return mock
-
-# @pytest.fixture
-# def manager(mock_asyncflow):
-#     return MockLearner(asyncflow=mock_asyncflow)
+async def wait_until(predicate, timeout=2.0, interval=0.01):
+    """Poll until predicate() is truthy, or raise TimeoutError."""
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + timeout
+    while not predicate():
+        if loop.time() > deadline:
+            raise TimeoutError(f"Condition not met within {timeout}s")
+        await asyncio.sleep(interval)
 
 
-# @pytest.fixture
-# def learner(mock_asyncflow):
-#     mock = MagicMock(spec=Learner)
-#     type(mock).function_task = MagicMock()
-#     mock.function_task.return_value = "dummy_task"
-#     return mock
+# ---------------------------
+# Shared fixture
+# ---------------------------
+@pytest.fixture
+async def manager(**kwargs):
+    """Create a MockLearner with a fresh engine and asyncflow."""
+    engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
+    asyncflow = await WorkflowEngine.create(engine)
+    return MockLearner(asyncflow=asyncflow, **kwargs)
+
+
+async def make_manager(**kwargs):
+    """Factory for creating MockLearner instances with custom kwargs."""
+    engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
+    asyncflow = await WorkflowEngine.create(engine)
+    return MockLearner(asyncflow=asyncflow, **kwargs)
+
+
 # ---------------------------
 # Group 1: Simulation lifecycle
 # ---------------------------
 class TestSimulationLifecycle:
     @pytest.mark.asyncio
     async def test_submit_sims_registers_and_respects_batch(self):
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-        asyncflow = await WorkflowEngine.create(engine)
-        manager = MockLearner(asyncflow=asyncflow)
+        manager = await make_manager()
 
         await manager.collect_sim_inputs(n=2)
         manager.sim_batch_size = 2
 
-        # Run submit_sims as a background task
         submit_task = asyncio.create_task(manager.submit_sims())
 
-        # Wait briefly for sims to be submitted
-        await asyncio.sleep(0.3)
+        await wait_until(lambda: len(manager.registered_sims) >= 2)
 
-        # Signal shutdown to stop the loop
         manager.shutting_down.set()
         await submit_task
 
@@ -83,9 +83,7 @@ class TestSimulationLifecycle:
 
     @pytest.mark.asyncio
     async def test_monitor_sims_unregisters_done_and_increments_batch(self):
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-        asyncflow = await WorkflowEngine.create(engine)
-        manager = MockLearner(asyncflow=asyncflow, max_sim_batch=1, training_cores=1)
+        manager = await make_manager(max_sim_batch=1, training_cores=1)
         done = make_done_task("done:sim_0")
         running = manager.simulation(sim_inputs={"sim_tag": "sim_1"})
         manager.registered_sims["sim_0"] = done
@@ -101,9 +99,7 @@ class TestSimulationLifecycle:
 
     @pytest.mark.asyncio
     async def test_monitor_sims_logs_failures_and_unregs(self):
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-        asyncflow = await WorkflowEngine.create(engine)
-        manager = MockLearner(asyncflow=asyncflow, max_sim_batch=1, training_cores=1)
+        manager = await make_manager(max_sim_batch=1, training_cores=1)
         failing = make_failing_task()
         ok = make_done_task()
         manager.registered_sims["sim_fail"] = failing
@@ -121,43 +117,8 @@ class TestSimulationLifecycle:
         manager.logger.error.assert_called()
 
 
-# # ---------------------------
-# # Group 2: Training behavior
-# # ---------------------------
-# class TestTrainingBehavior:
-#     @pytest.mark.asyncio
-#     @pytest.mark.parametrize(
-#         "_force_start_training, expected_queue_empty, expected_batch_min",
-#         [
-#             (True, False, 1),
-#             (False, True, 0),
-#         ]
-#     )
-#     async def test_monitor_training_data_param(self, _force_start_training,
-#                        expected_queue_empty, expected_batch_min):
-#         engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-#         asyncflow = await WorkflowEngine.create(engine)
-#         manager = MockLearner(asyncflow=asyncflow)
-#         s0 = manager.simulation(sim_inputs={"sim_tag": "sim_0"})
-#         s1 = manager.simulation(sim_inputs={"sim_tag": "sim_1"})
-#         manager.registered_sims["sim_0"] = s0
-#         manager.registered_sims["sim_1"] = s1
-#         manager.training_cores = 1
-#         manager._force_start_training = _force_start_training
-
-#         await manager.monitor_training_data()
-
-#         assert (manager.sim_task_queue.empty() == expected_queue_empty)
-#         assert manager.sim_batch_size >= expected_batch_min
-
-#         if _force_start_training:
-#             manager.logger.task_killed.assert_called()
-#         else:
-#             manager.logger.task_killed.assert_not_called()
-
-
 # ---------------------------
-# Group 3: Cancel sims behavior
+# Group 2: Cancel sims behavior
 # ---------------------------
 class TestCancelSimsBehavior:
     @pytest.mark.asyncio
@@ -173,9 +134,7 @@ class TestCancelSimsBehavior:
     async def test_cancel_sims_various_cases(
         self, predictions, clean_flag, expected_deleted, expected_remaining
     ):
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-        asyncflow = await WorkflowEngine.create(engine)
-        manager = MockLearner(asyncflow=asyncflow)
+        manager = await make_manager()
         for tag in predictions.keys():
             task = manager.simulation(sim_inputs={"sim_tag": tag})
             manager.registered_sims[tag] = task
@@ -187,7 +146,6 @@ class TestCancelSimsBehavior:
 
         for sim in expected_deleted:
             assert sim not in manager.registered_sims.keys()
-        print(manager.registered_sims)
         for sim in expected_remaining:
             if predictions.get(sim, 1.0) >= 0.5 or not clean_flag:
                 assert sim in manager.registered_sims.keys() or not clean_flag
@@ -196,14 +154,12 @@ class TestCancelSimsBehavior:
 
 
 # ---------------------------
-# Group 4: Start flow (renamed from teach)
+# Group 3: Start flow
 # ---------------------------
 class TestStartFlow:
     @pytest.mark.asyncio
     async def test_start_runs_full_cycle_and_exits(self):
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-        asyncflow = await WorkflowEngine.create(engine)
-        manager = MockLearner(asyncflow=asyncflow)
+        manager = await make_manager()
         manager.retrain_model = False
 
         await manager.start()
@@ -215,27 +171,23 @@ class TestStartFlow:
 
 
 # ---------------------------
-# Group 5: Shutdown safety
+# Group 4: Shutdown safety
 # ---------------------------
 class TestShutdownSafety:
     @pytest.mark.asyncio
     async def test_close_and_stop_are_safe(self):
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-        asyncflow = await WorkflowEngine.create(engine)
-        manager = MockLearner(asyncflow=asyncflow)
+        manager = await make_manager()
         await manager.close()
         await manager.stop()
 
 
 # ---------------------------
-# Group 6: File deletion
+# Group 5: File deletion
 # ---------------------------
 class TestDelFilesBehavior:
     @pytest.mark.asyncio
     async def test_del_files_records_multiple_deletions(self):
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-        asyncflow = await WorkflowEngine.create(engine)
-        manager = MockLearner(asyncflow=asyncflow)
+        manager = await make_manager()
         sims = ["sim_0", "sim_1", "sim_2"]
         for sim in sims:
             await manager.del_files(sim)
@@ -245,19 +197,17 @@ class TestDelFilesBehavior:
 
 
 # ---------------------------
-# Group 7: Simulation queue edge cases
+# Group 6: Simulation queue edge cases
 # ---------------------------
 class TestSimulationQueueEdgeCases:
     @pytest.mark.asyncio
     async def test_submit_sims_with_empty_queue(self):
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-        asyncflow = await WorkflowEngine.create(engine)
-        manager = MockLearner(asyncflow=asyncflow)
+        manager = await make_manager()
         manager.sim_batch_size = 2
 
-        # Run submit_sims as a background task
         submit_task = asyncio.create_task(manager.submit_sims())
-        await asyncio.sleep(0.2)
+
+        await asyncio.sleep(0.05)
         manager.shutting_down.set()
         await submit_task
 
@@ -265,36 +215,30 @@ class TestSimulationQueueEdgeCases:
 
     @pytest.mark.asyncio
     async def test_submit_sims_with_partial_queue(self):
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-        asyncflow = await WorkflowEngine.create(engine)
-        manager = MockLearner(asyncflow=asyncflow)
+        manager = await make_manager()
         await manager.collect_sim_inputs(n=1)
         manager.sim_batch_size = 3
 
-        # Run submit_sims as a background task
         submit_task = asyncio.create_task(manager.submit_sims())
-        await asyncio.sleep(0.3)
+
+        await wait_until(lambda: len(manager.registered_sims) >= 1)
         manager.shutting_down.set()
         await submit_task
 
-        # Only 1 task submitted because queue has 1
         assert len(manager.registered_sims) == 1
         assert manager.sim_task_queue.empty()
 
     @pytest.mark.asyncio
     async def test_submit_sims_with_batch_larger_than_queue(self):
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-        asyncflow = await WorkflowEngine.create(engine)
-        manager = MockLearner(asyncflow=asyncflow)
+        manager = await make_manager()
         await manager.collect_sim_inputs(n=2)
         manager.sim_batch_size = 5
 
-        # Run submit_sims as a background task
         submit_task = asyncio.create_task(manager.submit_sims())
-        await asyncio.sleep(0.3)
+
+        await wait_until(lambda: len(manager.registered_sims) >= 2)
         manager.shutting_down.set()
         await submit_task
 
-        # Queue had 2 inputs, sim_batch_size > queue
         assert len(manager.registered_sims) == 2
         assert manager.sim_task_queue.empty()
