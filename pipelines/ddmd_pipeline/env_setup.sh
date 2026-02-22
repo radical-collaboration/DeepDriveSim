@@ -55,3 +55,5 @@ pip install -e .
 pip install -r "$WORK_DIR/requirements.txt"
 
 conda deactivate
+
+cd $WORK_DIR
