@@ -1,10 +1,14 @@
 import json
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 if TYPE_CHECKING:
     import numpy.typing as npt
+
+# Disable HDF5 file locking for parallel filesystems (GPFS/Lustre)
+os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")
 
 import numpy as np
 
@@ -19,6 +23,7 @@ from pipelines.ddmd_pipeline.utils import Timer, parse_args
 
 def get_init_weights(cfg: KerasCVAEModelConfig) -> Optional[str]:
     if cfg.init_weights_path is None:
+
         if cfg.stage_idx == 0:
             # Case for first iteration with no pretrained weights
             return None
@@ -141,7 +146,9 @@ def main(cfg: KerasCVAEModelConfig) -> None:
     # Log checkpoint
     with Timer("machine_learning_logging"):
         checkpoint_path = cfg.output_path / "checkpoint"
-        checkpoint_path.mkdir()
+        #checkpoint_path.mkdir()
+        checkpoint_path.mkdir(parents=True, exist_ok=True)
+
         time_stamp = time.strftime(f"epoch-{epochs}-%Y%m%d-%H%M%S.weights.h5")
         cvae.model.save_weights(str(checkpoint_path / time_stamp))
 

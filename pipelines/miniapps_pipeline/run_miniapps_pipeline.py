@@ -2,28 +2,26 @@
 import asyncio
 import argparse
 from radical.asyncflow import WorkflowEngine
-from ddsim import MiniAppsWorkflow
+from pipelines.miniapps_pipeline.miniapps_pipeline import MiniAppsWorkflow
 
 
 SIM_CORES = 3  # For Testing only we set 3 CPUs for simulations
 TRAIN_CORE = 1  # For Testing only we set 1 CPUs for training
 
 
-async def run_ddmd(config_file, use_dragon):
+async def run_miniapps(config_file, use_dragon):
 
     if use_dragon:
         try:
-            from radical.asyncflow import DragonExecutionBackendV3
+            from rhapsody.backends import DragonExecutionBackendV3
         except:
             use_dragon = False
 
     if use_dragon:
         engine = await DragonExecutionBackendV3()
     else:
-        from radical.asyncflow import ConcurrentExecutionBackend
-        from concurrent.futures import ThreadPoolExecutor
-
-        engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
+        from rhapsody.backends import ConcurrentExecutionBackend
+        engine = await ConcurrentExecutionBackend()
 
     # Create the async workflow engine
     asyncflow = await WorkflowEngine.create(engine)
@@ -59,4 +57,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    asyncio.run(run_ddmd(args.config_file, args.use_dragon))
+    asyncio.run(run_miniapps(args.config_file, args.use_dragon))

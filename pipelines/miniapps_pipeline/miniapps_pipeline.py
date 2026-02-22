@@ -12,7 +12,7 @@ import yaml
 from ddsim.ddsim_manager import DDSimManager
 
 TASK_PRE_EXEC = [
-    "module load anaconda",
+    "module load anaconda3",
     "source activate base",
     "conda activate /anvil/scratch/x-mgoliyad1/conda_env/rose_env",
     'export RADICAL_PROFILE="TRUE"',
@@ -27,7 +27,7 @@ class MiniAppsWorkflow(DDSimManager):
         super().__init__()
 
         self.flow = kwargs.get("asyncflow", None)
-        self.learner = Learner(asyncflow)
+        self.learner = Learner(self.flow)
 
         # Default home directory
         home_dir = Path(kwargs.get("home_dir", Path.home() / "DDMD"))
@@ -69,28 +69,21 @@ class MiniAppsWorkflow(DDSimManager):
             kwargs.get("clean_unregistered_sims", False)
         )
 
-        # No data aggregation prior training is needed
-        self.aggregation = None
-        # No post processing stage
-        self.post_process = None
-
-        if self.device == "gpu":
-            self.task_description = {
-                "ranks": 1,
-                "gpus_per_rank": 1,
-                "pre_exec": TASK_PRE_EXEC,
-            }
-        else:
-            self.task_description = {
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "pre_exec": TASK_PRE_EXEC,
-            }
+        self.task_description = {
+            "ranks": 1,
+             "cores_per_rank": 1,
+            "gpus_per_rank": 1,
+            "pre_exec": TASK_PRE_EXEC,
+            "shell": True,
+        }
 
         # Register learner tasks
         self.register_tasks()
         # To store input files
         self.sim_inputs = {}
+
+        self.run_post_process = True  # Whether to run post_process after each training
+
 
     # --------------------------------------------------------------------------
     @staticmethod
@@ -110,7 +103,7 @@ class MiniAppsWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def run_inference(self):
-        self.prediction()
+        await self.prediction()
         with open(self.prediction_file) as f:
             predictions = yaml.safe_load(f)
         self.sim_predictions = predictions
@@ -158,7 +151,7 @@ class MiniAppsWorkflow(DDSimManager):
             Path(root_path, f"data_{rank}_{self.iteration}.h5") for rank in range(ranks)
         ]
 
-        print(f"Waiting for {len(filenames)} file to start training... ")
+        self.logger.info(f"Waiting for {len(filenames)} file to start training... ")
         start_trainig = False
         while True:
             if start_trainig:
@@ -168,12 +161,12 @@ class MiniAppsWorkflow(DDSimManager):
             for filename in filenames:
                 if not filename.exists():
                     if self.debug:
-                        print(f"File {filename} not found yet, wait...")
+                        self.logger.info(f"File {filename} not found yet, wait...")
                     start_trainig = False
                     await asyncio.sleep(1)
                     break
 
-        print("All required files are available. Starting training...")
+        self.logger.info("All required files are available. Starting training...")
         return True
 
     # --------------------------------------------------------------------------
@@ -196,13 +189,9 @@ class MiniAppsWorkflow(DDSimManager):
 
         @self.learner.training_task
         async def training(task_description=self.task_description):
-            if len(self.completed_sims) > 0:
-                sim_idx = list(self.completed_sims)[0]
-            else:
-                sim_idx = self.registered_sims.keys()[0]
             args = (
                 f"--data_root_dir {self.sim_output_dir} "
-                f"--instance_index {sim_idx} "
+                f"--instance_index {self.iteration} "
                 f"--phase {self.phase} "
                 f"--num_epochs 1"
             )
@@ -213,13 +202,9 @@ class MiniAppsWorkflow(DDSimManager):
 
         @self.learner.prediction_task(as_executable=True)
         async def prediction(task_description=self.task_description):
-            if len(self.completed_sims) > 0:
-                sim_idx = list(self.completed_sims)[0]
-            else:
-                sim_idx = self.registered_sims.keys()[0]
             args = (
                 f"--data_root_dir {self.sim_output_dir} "
-                f"--instance_index {sim_idx} "
+                f"--instance_index {self.iteration} "
                 f"--phase {self.phase} "
                 f"--num_epochs 1 "
                 f" --num_mult_outlier 1 "
@@ -231,16 +216,12 @@ class MiniAppsWorkflow(DDSimManager):
 
         self.prediction = prediction
 
-        @self.learner.utility_task(as_executable=True)
+        @self.learner.utility_task(as_executable=False)
         async def selection(*args, **kwargs):
             """Dummy selection: assign random score to each sim."""
-            if len(self.completed_sims) > 0:
-                sim_idx = list(self.completed_sims)[0]
-            else:
-                sim_idx = self.registered_sims.keys()[0]
             args = (
                 f"--data_root_dir {self.sim_output_dir} "
-                f"--instance_index {sim_idx} "
+                f"--instance_index {self.iteration} "
                 f"--phase {self.phase}"
             )
             return f"{self.code_path}/selection.py {args}"
@@ -259,13 +240,13 @@ class MiniAppsWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def post_process(self):
-        if len(self.completed_sims) == self.num_files:
+        if len(self.completed_sims) >= self.total_num_sim:
             self.shutting_down.set()
             self.run_pipeline = False
-            self.logger.task_completed(
-                "All sim have completed...", component="training"
-            )
+            self.logger.info("All sim have completed...")
 
+    async def post_process_sim(self, sim_idx, ):
+        pass
     # --------------------------------------------------------------------------
     async def close(self):
         """Gracefully shutdown learner."""

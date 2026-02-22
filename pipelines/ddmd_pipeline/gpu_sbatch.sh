@@ -1,16 +1,17 @@
 #!/bin/sh -l
-#SBATCH -A ***
-#SBATCH --partition=GPU
+
+#SBATCH -A dmr170002p 
+#SBATCH --partition=GPU-shared
 #SBATCH --nodes=1
-#SBATCH --tasks-per-node=1
-#SBATCH --cpus-per-task=64
-#SBATCH --gpus-per-node=8
+#SBATCH --tasks-per-node=4
+#SBATCH --cpus-per-task=1
+#xSBATCH --gpus=v100-32:8
+#SBATCH --gpus=4
 #SBATCH --export    NONE
 #SBATCH --time=00:30:00
 #SBATCH --job-name ddmd_gpu
-#SBATCH --mail-user=***
+#SBATCH --mail-user=mg2347@soe.rutgers.edu
 #SBATCH --mail-type=ALL      # When to send emails (BEGIN, END, FAIL, ALL)
-
 
 export BASE_DIR="/ocean/projects/dmr170002p/goliyad/DeepDriveSim"
 export WORK_DIR="${BASE_DIR}/pipelines/ddmd_pipeline"
@@ -24,6 +25,7 @@ rm -rf $EXPRMNT_DIR
 
 unset SLURM_EXPORT_ENV
 module load anaconda3
+module load anaconda
 source activate base
 conda activate   $CONDA_ENV/deepdrivesim
 

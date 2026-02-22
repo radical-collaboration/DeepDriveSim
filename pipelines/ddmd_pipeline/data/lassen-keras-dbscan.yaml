@@ -88,11 +88,18 @@ machine_learning_stage:
     - export HDF5_USE_FILE_LOCKING=FALSE
     - export IBM_POWERAI_LICENSE_ACCEPT=yes
     - unset PYTHONPATH
+#    - module load gcc
+    - module load cuda/12.6.1
+    - module load cudnn/8.0.4   # <-- consider switching to cudnn 8 if available
+    - export XLA_FLAGS=--xla_gpu_strict_conv_algorithm_picker=false
+    - export TF_ENABLE_XLA=0
+    - export TF_FORCE_GPU_ALLOW_GROWTH=true
     - module load anaconda3
     - source activate base
     - conda activate ${CONDA_ENV}/conda-keras
     - unset CUDA_VISIBLE_DEVICES
     - export OMP_NUM_THREADS=4
+    - export LD_LIBRARY_PATH=$(CUDA_HOME)/lib64:$(LD_LIBRARY_PATH)
     executable: ${CONDA_ENV}/conda-keras/bin/python
     arguments:
     - ${WORK_DIR}/models/keras_cvae/train.py
@@ -195,6 +202,8 @@ agent_stage:
     #- . /etc/profile.d/conda.sh
     #- export IBM_POWERAI_LICENSE_ACCEPT=yes
     #- unset PYTHONPATH
+    - module load cuda
+    - module load gcc
     - module load anaconda3
     - source activate base
     - conda activate ${CONDA_ENV}/conda-keras

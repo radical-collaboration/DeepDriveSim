@@ -67,7 +67,7 @@ class DDMdWorkflow(DDSimManager):
         self.register_tasks()
         # Dic to store inputs for simulation
         self.sim_inputs = {}
-        self.train_models = [self.train_model]
+        self.train_models = []
 
     # --------------------------------------------------------------------------
     def _generate_stage_config(self):

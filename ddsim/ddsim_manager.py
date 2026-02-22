@@ -136,9 +136,10 @@ class DDSimManager:
     # --------------------------------------------------------------------------
     async def _unregister_sims(self, unregistered_sims):
         """Remove completed or canceled simulations from the registry."""
-        for sim_idx in unregistered_sims:
+        for status, sim_idx in unregistered_sims:
             self.registered_sims.pop(sim_idx, None)
-            self.completed_sims.append(sim_idx)
+            if status == 'completed':
+                self.completed_sims.append(sim_idx)
 
         if unregistered_sims and not self.sim_task_queue.empty():
             # Adjust next batch size (ensure it does not exceed max_sim_batch)
@@ -188,7 +189,7 @@ class DDSimManager:
         unregistered_sims = []
         for sim_idx, task in self.registered_sims.items():
             if task.done():
-                unregistered_sims.append(sim_idx)
+                unregistered_sims.append(('completed', sim_idx))
                 self.sim_batch_size += 1
 
                 try:
@@ -208,7 +209,8 @@ class DDSimManager:
                     self.logger.task_completed(
                         f"Sim {sim_idx}", component="simulation"
                     )
-                    await self.post_process_sim(sim_idx)
+                    if self.post_process_sim:
+                        await self.post_process_sim(sim_idx)
         await self._unregister_sims(unregistered_sims)
 
     # --------------------------------------------------------------------------
@@ -228,11 +230,11 @@ class DDSimManager:
                 # Suspend simulations to free up resources for training
                 for sim_idx, task in list(self.registered_sims.items()):
                     if task.done():
-                        unregistered_sims.append(sim_idx)
+                        unregistered_sims.append(('completed', sim_idx))
                     else:
                         try:
                             task.cancel()
-                            unregistered_sims.append(sim_idx)
+                            unregistered_sims.append(('cancelled', sim_idx))
                             self.logger.task_killed(
                                 f"Cancelling Sim {sim_idx} to free training resources",
                                 #  f"(ROSE task ID {getattr(task, 'id', 'N/A')})"

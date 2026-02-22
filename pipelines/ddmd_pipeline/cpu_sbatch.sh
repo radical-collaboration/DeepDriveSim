@@ -1,5 +1,5 @@
 #!/bin/sh -l
-#SBATCH -A ***
+#SBATCH -A dmr170002p
 #SBATCH --partition=RM
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1
@@ -8,7 +8,7 @@
 #SBATCH --export    NONE
 #SBATCH --time=01:30:00
 #SBATCH --job-name br_ddmd_cpu
-#SBATCH --mail-user=***
+#xSBATCH --mail-user=mg2347@soe.rutgers.edu
 #SBATCH --mail-type=ALL      # When to send emails (BEGIN, END, FAIL, ALL)
 
 
@@ -24,6 +24,7 @@ rm -rf $EXPRMNT_DIR
 
 unset SLURM_EXPORT_ENV
 module load anaconda3
+module load anaconda
 source activate base
 conda activate   $CONDA_ENV/deepdrivesim
 

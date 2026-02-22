@@ -48,7 +48,8 @@ conda create -y -p $CONDA_ENV/conda-keras python=3.9
 conda activate $CONDA_ENV/conda-keras
 conda install -y scikit-learn
 pip install --upgrade pip setuptools wheel
-pip install tensorflow pandas
+pip install tensorflow==2.20.0 pandas
+pip install nvidia-cudnn-cu12 nvidia-cuda-runtime-cu12 nvidia-cublas-cu12
 cd $BASE_DIR
 pip install -e .
 pip install -r "$WORK_DIR/requirements.txt"

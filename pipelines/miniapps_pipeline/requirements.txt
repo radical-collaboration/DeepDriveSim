@@ -1,0 +1,7 @@
+ROSE @ git+https://github.com/radical-cybertools/ROSE.git
+pyyaml
+numpy
+cupy-cuda12x
+nvidia-nccl-cu12>=2.16.5,<3
+h5py
+mpi4py

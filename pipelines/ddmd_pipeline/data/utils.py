@@ -1,5 +1,6 @@
 """Data utility functions for handling HDF5 files."""
 
+import os
 import random
 import shutil
 from pathlib import Path
@@ -8,7 +9,11 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 if TYPE_CHECKING:
     import numpy.typing as npt
 
-import h5py  # type: ignore[import]
+# Disable HDF5 file locking — required on parallel filesystems (GPFS, Lustre)
+# where advisory locks cause BlockingIOError (errno 11).
+os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")
+
+import h5py  # type: ignore[import]  # noqa: E402
 
 from pipelines.ddmd_pipeline.utils import PathLike
 
@@ -31,36 +36,39 @@ def concatenate_virtual_h5(
         Which dataset fields to concatenate. Will concatenate all fields by default.
     """
 
-    # Open first file to get dataset shape and dtype
-    # Assumes uniform number of data points per file
-    h5_file = h5py.File(input_file_names[0], "r")
+    # Read shape/dtype info from first file, then close before writing
+    with h5py.File(input_file_names[0], "r") as h5_file:
+        if not fields:
+            fields = list(h5_file.keys())
 
-    if not fields:
-        fields = list(h5_file.keys())
+        field_info = {
+            field: (h5_file[field].shape, h5_file[field].dtype)
+            for field in fields
+        }
 
     # Helper function to output concatenated shape
     def concat_shape(shape: Tuple[int]) -> Tuple[int]:
         return (len(input_file_names) * shape[0], *shape[1:])
 
-    # Create a virtual layout for each input field
+    # Create virtual layouts from cached shape/dtype
     layouts = {
         field: h5py.VirtualLayout(
-            shape=concat_shape(h5_file[field].shape),
-            dtype=h5_file[field].dtype,
+            shape=concat_shape(shape), dtype=dtype
         )
-        for field in fields
+        for field, (shape, dtype) in field_info.items()
     }
 
     with h5py.File(output_name, "w", libver="latest") as f:
         for field in fields:
+            shape = field_info[field][0]
             for i, filename in enumerate(input_file_names):
-                shape = h5_file[field].shape
-                vsource = h5py.VirtualSource(filename, field, shape=shape)
-                layouts[field][i * shape[0] : (i + 1) * shape[0], ...] = vsource
+                vsource = h5py.VirtualSource(
+                    filename, field, shape=shape
+                )
+                start = i * shape[0]
+                layouts[field][start : start + shape[0], ...] = vsource
 
             f.create_virtual_dataset(field, layouts[field])
-
-    h5_file.close()
 
 
 def get_virtual_h5_file(
