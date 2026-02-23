@@ -273,12 +273,10 @@ class DummyWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def post_process(self):
-        if len(self.completed_sims) == self.num_files:
+        if len(self.completed_sims) >= self.num_files:
             self.shutting_down.set()
             self.run_pipeline = False
-            self.logger.task_completed(
-                "All sim have completed...", component="training"
-            )
+            self.logger.info("All sim have completed...")
 
     # --------------------------------------------------------------------------
     async def close(self):

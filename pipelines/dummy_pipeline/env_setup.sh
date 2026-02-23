@@ -3,7 +3,7 @@ export BASE_DIR="/ocean/projects/dmr170002p/goliyad/DeepDriveSim"
 export WORK_DIR="${BASE_DIR}/pipelines/dummy_pipeline"
 export CONDA_ENV="${WORK_DIR}/conda_env"
 
-mkdir $CONDA_ENV
+#mkdir $CONDA_ENV
 
 module load anaconda3
 
@@ -16,6 +16,5 @@ conda activate $CONDA_ENV/dummy_pipeline
 pip install --upgrade pip setuptools wheel
 cd $BASE_DIR
 pip install -e .
-pip install -r "$WORK_DIR/requirements.txt"
-
-conda deactivate
+cd $WORK_DIR
+pip install -r "requirements.txt"

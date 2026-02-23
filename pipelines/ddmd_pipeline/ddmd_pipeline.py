@@ -60,9 +60,6 @@ class DDMdWorkflow(DDSimManager):
         # If False, skip retraining (e.g. when model accuracy is sufficient)
         self.retrain_model = True
 
-        # Enable post_process() to advance iterations after each inference cycle
-        self.run_post_process = True
-
         # Register simulation, training, aggregation, inference, selection tasks
         self.register_tasks()
         # Dic to store inputs for simulation

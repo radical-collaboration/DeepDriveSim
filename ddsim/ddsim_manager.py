@@ -34,7 +34,6 @@ class DDSimManager:
         - close
     Optional:
         - free_resources_for_train (default False)
-        - run_post_process (default False) + post_process method
     """
 
     def __init__(self):
@@ -50,7 +49,6 @@ class DDSimManager:
 
         self.run_pipeline = True
         self.free_resources_for_train = False
-        self.run_post_process = False
 
         # Event should be set inside pipeline code to stop simulation loop
         self.shutting_down = asyncio.Event()
@@ -247,6 +245,7 @@ class DDSimManager:
 
                     count += 1
                     if count >= self.training_cores:
+                        self.free_resources_for_train = False
                         break
 
                 self.logger.info(
@@ -283,7 +282,7 @@ class DDSimManager:
             if self.stop_simulation(prediction=pred):
                 task = self.registered_sims[sim_idx]
                 task.cancel()
-                unregister_sims.append(sim_idx)
+                unregister_sims.append(('cancelled', sim_idx))
                 self.logger.task_killed(
                     f"Sim {sim_idx} canceled due to prediction score {pred} ",
                     component="simulation",
@@ -307,24 +306,26 @@ class DDSimManager:
         await self.init_sim_queue()
         submit_task = asyncio.create_task(self.submit_sims())
 
+        # Train model if flag is set
+        if self.retrain_model:
+            # Skip waiting for training data if it is available at start
+            if self.free_resources_for_train:
+                await self.monitor_training_data()  # blocks until training starts
+            else:
+                while True:
+                    start_training = await self.check_train_status()
+                    if start_training:
+                        self.logger.info("Training can start now.")
+                        break
+                    else:
+                        await asyncio.sleep(self.sleep_time)
+                        
         while self.run_pipeline:
             self.logger.info(f"{len(self.registered_sims)} simulation(s) running...")
             if self.debug:
                 self.logger.info(f"{list(self.registered_sims.keys())}")
 
-            # Train model if flag is set
-            if self.retrain_model:
-                # Skip waiting for training data if it is available at start
-                if self.free_resources_for_train:
-                    await self.monitor_training_data()  # blocks until training starts
-                else:
-                    while True:
-                        start_training = await self.check_train_status()
-                        if start_training:
-                            self.logger.info("Training can start now.")
-                            break
-                        else:
-                            await asyncio.sleep(self.sleep_time)
+
                 tasks = [self.train_model()]
                 tasks.extend(t() for t in self.train_models)
                 await asyncio.gather(*tasks)
@@ -338,9 +339,7 @@ class DDSimManager:
 
             cancel_task = asyncio.create_task(self.cancel_sims())
 
-            post_process_task = None
-            if self.run_post_process:
-                post_process_task = asyncio.create_task(self.post_process())
+            post_process_task = asyncio.create_task(self.post_process())
 
             if self.sim_task_queue.empty():
                 await self.monitor_sims()

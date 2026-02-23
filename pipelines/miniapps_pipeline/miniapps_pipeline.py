@@ -82,8 +82,6 @@ class MiniAppsWorkflow(DDSimManager):
         # To store input files
         self.sim_inputs = {}
 
-        self.run_post_process = True  # Whether to run post_process after each training
-
 
     # --------------------------------------------------------------------------
     @staticmethod
