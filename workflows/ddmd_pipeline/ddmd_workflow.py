@@ -16,7 +16,8 @@ class DDMdWorkflow(DDSimManager):
 
     def __init__(self, *args, **kwargs):
         # Initialize parent class (sets up logger, queues, event flags, etc.)
-        super().__init__()
+        resource_manager = kwargs.get("resource_manager", None)
+        super().__init__(resource_manager=resource_manager)
 
         # Asyncflow engine for registering and dispatching tasks
         self.flow = kwargs.get("asyncflow", None)
@@ -25,12 +26,57 @@ class DDMdWorkflow(DDSimManager):
 
         config = kwargs.get("config")
 
+        
+
         # Load and validate experiment configuration from YAML
         self.experiment_config = ExperimentConfig.from_yaml(config)
+
         agg_stage = self.experiment_config.aggregation_stage
         self.skip_aggregation = agg_stage.skip_aggregation
         self.api = DeepDriveMD_API(self.experiment_config.experiment_directory)
 
+        self.tasks_config = {  
+            "simulation": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0.5
+            },
+            "train_model": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  1
+            },
+            "selection": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0,
+                "on_completion":  "inference"
+            },
+            "aggregation": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0,
+                "on_completion":  "inference"
+            },
+            "inference": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0
+            },
+            "post_process": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0
+            },
+        }
+
+        self.workflow_id = 'ddsim_workflow'
         # Stage index tracks the current DeepDriveMD iteration (0-based)
         self.stage_idx = 0
 
@@ -65,6 +111,8 @@ class DDMdWorkflow(DDSimManager):
         # Dic to store inputs for simulation
         self.sim_inputs = {}
         self.train_models = []
+
+        print('fin init of DDMdWorkflow')
 
     # --------------------------------------------------------------------------
     def _generate_stage_config(self):

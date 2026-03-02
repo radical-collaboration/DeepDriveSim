@@ -20,7 +20,6 @@ async def run_ddmd(config_file, use_dragon):
         engine = await DragonExecutionBackendV3()
     else:
         from rhapsody.backends import ConcurrentExecutionBackend
-
         engine = await ConcurrentExecutionBackend()
 
     # Create the async workflow engine

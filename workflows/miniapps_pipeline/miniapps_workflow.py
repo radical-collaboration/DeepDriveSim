@@ -82,6 +82,33 @@ class MiniAppsWorkflow(DDSimManager):
         # To store input files
         self.sim_inputs = {}
 
+        self.tasks_config = {  
+            "simulation": {
+                "priority":       8,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0.5
+            },
+            "train_model": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  1
+            },
+            "inference": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0
+            },
+            "post_process": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0
+            },
+        }
+
 
     # --------------------------------------------------------------------------
     @staticmethod

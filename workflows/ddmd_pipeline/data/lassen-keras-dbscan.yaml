@@ -4,11 +4,11 @@ queue: GPU
 schema_: local
 project: cv19-a01
 walltime_min: 290
-max_iteration: 3
+max_iteration: 5
 cpus_per_node: 40
 gpus_per_node: 8
 hardware_threads_per_cpu: 1
-experiment_directory: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/ddmd_test_experiments/bba-keras-dbscan-run-0
+experiment_directory: ${EXPRMNT_DIR}/bba-keras-dbscan-run-0
 node_local_path: /tmp
 molecular_dynamics_stage:
     pre_exec:
@@ -17,10 +17,10 @@ molecular_dynamics_stage:
     #- unset PYTHONPATH
     - module load anaconda3
     - source activate base
-    - conda activate /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/conda_env/conda-openmm
-    executable: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/conda_env/conda-openmm/bin/python
+    - conda activate ${CONDA_ENV}/conda-openmm
+    executable: ${CONDA_ENV}/conda-openmm/bin/python
     arguments:
-    - /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/sim/openmm/run_openmm.py
+    - ${WORK_DIR}/sim/openmm/run_openmm.py
     cpu_reqs:
         processes: 1
         process_type: null
@@ -39,7 +39,7 @@ molecular_dynamics_stage:
         output_path: set_by_deepdrivemd
         node_local_path: set_by_deepdrivemd
         pdb_file: set_by_deepdrivemd
-        initial_pdb_dir: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/data/bba
+        initial_pdb_dir: ${WORK_DIR}/data/bba
         solvent_type: implicit
         top_suffix: null
         simulation_length_ns: 100.0
@@ -48,7 +48,7 @@ molecular_dynamics_stage:
         temperature_kelvin: 310.0
         heat_bath_friction_coef: 1.0
         wrap: false
-        reference_pdb_file: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/data/bba/1FME-folded.pdb
+        reference_pdb_file: ${WORK_DIR}/data/bba/1FME-folded.pdb
         openmm_selection:
         - CA
         mda_selection: protein and name CA
@@ -88,14 +88,21 @@ machine_learning_stage:
     - export HDF5_USE_FILE_LOCKING=FALSE
     - export IBM_POWERAI_LICENSE_ACCEPT=yes
     - unset PYTHONPATH
+#    - module load gcc
+    - module load cuda/12.6.1
+    - module load cudnn    #/8.0.4   # <-- consider switching to cudnn 8 if available
+    - export XLA_FLAGS=--xla_gpu_strict_conv_algorithm_picker=false
+    - export TF_ENABLE_XLA=0
+    - export TF_FORCE_GPU_ALLOW_GROWTH=true
     - module load anaconda3
     - source activate base
-    - conda activate /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/conda_env/conda-keras
+    - conda activate ${CONDA_ENV}/conda-keras
     - unset CUDA_VISIBLE_DEVICES
     - export OMP_NUM_THREADS=4
-    executable: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/conda_env/conda-keras/bin/python
+    - export LD_LIBRARY_PATH=$(CUDA_HOME)/lib64:$(LD_LIBRARY_PATH)
+    executable: ${CONDA_ENV}/conda-keras/bin/python
     arguments:
-    - /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/models/keras_cvae/train.py
+    - ${WORK_DIR}/models/keras_cvae/train.py
     cpu_reqs:
         processes: 1
         process_type: MPI
@@ -167,10 +174,10 @@ model_selection_stage:
     #- unset PYTHONPATH
     - module load anaconda3
     - source activate base
-    - conda activate /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/conda_env/conda-keras
-    executable: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/conda_env/conda-keras/bin/python
+    - conda activate ${CONDA_ENV}/conda-keras
+    executable: ${CONDA_ENV}/conda-keras/bin/python
     arguments:
-    - /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/selection/latest/select_model.py
+    - ${WORK_DIR}/selection/latest/select_model.py
     cpu_reqs:
         processes: 1
         process_type: null
@@ -195,16 +202,18 @@ agent_stage:
     #- . /etc/profile.d/conda.sh
     #- export IBM_POWERAI_LICENSE_ACCEPT=yes
     #- unset PYTHONPATH
+    - module load cuda
+    - module load gcc
     - module load anaconda3
     - source activate base
-    - conda activate /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/conda_env/conda-keras
+    - conda activate ${CONDA_ENV}/conda-keras
     - export LANG=en_US.utf-8
     - export LC_ALL=en_US.utf-8
     - unset CUDA_VISIBLE_DEVICES
     - export OMP_NUM_THREADS=4
-    executable: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/conda_env/conda-keras/bin/python
+    executable: ${CONDA_ENV}/conda-keras/bin/python
     arguments:
-    - /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/ddmd_pipeline/agents/lof/lof.py
+    - ${WORK_DIR}/agents/lof/lof.py
     cpu_reqs:
         processes: 1
         process_type: null

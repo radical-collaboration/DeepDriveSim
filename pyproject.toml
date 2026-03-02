@@ -38,7 +38,7 @@ maintainers = [
 readme = "README.md"
 requires-python = ">=3.9"
 
-dependencies = ["rhapsody-py", "pyyaml", "ROSE @ git+https://github.com/radical-cybertools/ROSE.git", "radical-asyncflow @ git+https://github.com/radical-cybertools/radical.asyncflow.git@feature/rhapsody-2"]
+dependencies = ["rhapsody-py", "pyyaml", "radical.asyncflow==0.3.0"]
 
 [tool.setuptools.packages.find]
 include = ["ddsim*", "pipelines*"]

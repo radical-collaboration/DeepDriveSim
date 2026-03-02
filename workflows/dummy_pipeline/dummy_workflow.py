@@ -21,9 +21,11 @@ task_description = {"shell": True}
 class DummyWorkflow(DDSimManager):
     """Dummy workflow for managing DDMD simulations, training, and predictions."""
 
+    workflow_id = "dummy_workflow"
+
     def __init__(self, **kwargs):
-        # Initialize parent class (sets up logger, queues, etc.)
-        super().__init__()
+        # Initialize parent class — pass resource_manager so RM scheduling is active
+        super().__init__(resource_manager=kwargs.get("resource_manager"))
 
         # Default home directory
         self.flow = kwargs.get("asyncflow", None)
@@ -35,8 +37,6 @@ class DummyWorkflow(DDSimManager):
         self._clean_dir(home_dir)  # ❗Careful: deletes everything in home_dir!
 
         # Create workflow directories
-        self.sim_output_dir = kwargs.get("sim_output_dir", home_dir / "sim_output")
-        self.sim_output_dir = self._clean_dir(self.sim_output_dir)
         self.sim_output_dir = self._ensure_dir(
             kwargs.get("sim_output_dir", home_dir / "sim_output")
         )
@@ -51,7 +51,7 @@ class DummyWorkflow(DDSimManager):
 
         # Simulation/training config
         # Max number of simulation to run at once
-        self.max_sim_batch = kwargs.get("max_sim_batch", 4)
+        self.max_sim_batch = kwargs.get("max_sim_batch", 24)
         # Number of cores reserved for training
         self.training_cores = kwargs.get("training_cores", 1)
         # Initial size of simulation batch before training starts
@@ -63,22 +63,51 @@ class DummyWorkflow(DDSimManager):
         self.free_resources_for_train = bool(
             kwargs.get("free_resources_for_train", True)
         )
+        self.run_post_process = True
 
         self.iteration = 0
         self.retrain_model = self.training_epochs > 0
 
         # Paths for executables and model
-        self.src_dir = kwargs.get("src_dir", os.getcwd())
+        #self.src_dir = kwargs.get("src_dir", os.getcwd())
+        self.src_dir = ' /ocean/projects/dmr170002p/goliyad/DeepDriveSim/pipelines/dummy_pipeline/'
         self.code_path = kwargs.get("code_path", f"{sys.executable} {self.src_dir}")
         self.model_filename = home_dir / "model.pkl"
         self.prediction_file = home_dir / "predictions.yml"  # fixed typo ("predicions")
 
         # Register learner tasks
         self.register_tasks()
-        self.num_files = kwargs.get("num_files", 5)
+        self.num_files = kwargs.get("num_files", 205)
         # Generate dummy input files
         self.sim_inputs = {}
         self._generate_sim_inputs(self.sim_inputs_dir, num_files=self.num_files)
+
+        self.tasks_config = {  
+            "simulation": {
+                "priority":       8,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0.5
+            },
+            "train_model": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  1
+            },
+            "inference": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0
+            },
+            "post_process": {
+                "priority":       10,
+                "ranks":          1,
+                "cores_per_rank": 1,
+                "gpus_per_rank":  0
+            },
+        }
 
     # --------------------------------------------------------------------------
     @staticmethod
@@ -190,10 +219,10 @@ class DummyWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     async def add_sims_to_queue(self, resubmitted_sims):
         for sim_idx in resubmitted_sims:
-            await self.sim_task_queue.put({"sim_idx": sim_idx})
-            self.logger.info(f"Re-added Sim {sim_idx} back the queue")
             if sim_idx not in self.sim_inputs:
-                raise ValueError(f"Unable to add  sim {sim_idx} to queue ")
+                raise ValueError(f"Unable to add sim {sim_idx} to queue")
+            await self.sim_task_queue.put({"sim_idx": sim_idx})
+            self.logger.info(f"Re-added Sim {sim_idx} back to queue")
 
     # --------------------------------------------------------------------------
     async def check_train_status(self) -> bool:
@@ -273,6 +302,7 @@ class DummyWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def post_process(self):
+        print("Post-processing results...", len(self.completed_sims) , self.num_files)
         if len(self.completed_sims) >= self.num_files:
             self.shutting_down.set()
             self.run_pipeline = False
