@@ -39,7 +39,7 @@ class DDSimManager:
         self.sleep_time = 20  # Delay between prediction/start train checks
         self.debug = False
 
-        self.run_pipeline = True
+        self.run_workflow = True
         self.free_resources_for_train = False
 
         # ---- resource manager ----------------------------------------
@@ -55,7 +55,7 @@ class DDSimManager:
         # trigger an unnecessary _try_dispatch_locked.
         self._rm_preempted_ids: set = set()
 
-        # Event should be set inside pipeline code to stop simulation loop
+        # Event should be set inside workflow code to stop simulation loop
         self.shutting_down = asyncio.Event()
         self.logger.info("DDSim Manager initialized...")
 
@@ -169,7 +169,7 @@ class DDSimManager:
     async def init_sim_queue(self):
         """
         Collect all simulation input files into task queue (sim_task_queue).
-        Override this with actual logic in pipeline subclass.
+        Override this with actual logic in workflow subclass.
         """
         raise NotImplementedError("init_sim_queue must be implemented")
 
@@ -177,7 +177,7 @@ class DDSimManager:
     async def check_train_status(self):
         """
         Check if enough training data is available to start training.
-        Override this with actual logic in pipeline subclass.
+        Override this with actual logic in workflow subclass.
         """
         raise NotImplementedError("check_train_status must be implemented")
 
@@ -197,14 +197,14 @@ class DDSimManager:
     # --------------------------------------------------------------------------
     async def run_inference(self):
         """Collect prediction scores for all running simulations.
-        Override this with actual logic in pipeline subclass.
+        Override this with actual logic in workflow subclass.
         """
         pass
 
     # --------------------------------------------------------------------------
     async def close(self):
         """Gracefully shutdown learner.
-        Override this with actual logic in pipeline subclass.
+        Override this with actual logic in workflow subclass.
         """
         raise NotImplementedError("close must be implemented")
 
@@ -372,7 +372,7 @@ class DDSimManager:
         await self.init_sim_queue()
         submit_task = asyncio.create_task(self.submit_sims())
                         
-        while self.run_pipeline:
+        while self.run_workflow:
             self.logger.info(f"{len(self.registered_sims)} simulation(s) running...")
             if self.debug:
                 self.logger.info(f"{list(self.registered_sims.keys())}")

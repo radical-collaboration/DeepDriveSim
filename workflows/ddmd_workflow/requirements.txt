@@ -1,0 +1,7 @@
+gsd<2.0
+PyYAML
+pydantic
+pydantic-settings
+MDAnalysis
+numpy
+pathos

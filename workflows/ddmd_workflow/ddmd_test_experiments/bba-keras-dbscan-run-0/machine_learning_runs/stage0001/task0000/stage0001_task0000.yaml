@@ -1,0 +1,52 @@
+experiment_directory: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/ddmd_test_experiments/bba-keras-dbscan-run-0
+stage_idx: 1
+task_idx: 0
+output_path: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/ddmd_test_experiments/bba-keras-dbscan-run-0/machine_learning_runs/stage0001/task0000
+node_local_path: /tmp
+model_tag: stage0000_task0000
+init_weights_path: null
+last_n_h5_files: 8
+k_random_old_h5_files: 8
+dataset_name: contact_map
+initial_shape:
+- 28
+- 28
+final_shape:
+- 28
+- 28
+- 1
+initial_epochs: 5
+epochs: 5
+batch_size: 32
+split_pct: 0.8
+shuffle: true
+latent_dim: 10
+conv_layers: 4
+conv_filters:
+- 64
+- 64
+- 64
+- 64
+conv_filter_shapes:
+-   - 3
+    - 3
+-   - 3
+    - 3
+-   - 3
+    - 3
+-   - 3
+    - 3
+conv_strides:
+-   - 1
+    - 1
+-   - 2
+    - 2
+-   - 1
+    - 1
+-   - 1
+    - 1
+dense_layers: 1
+dense_neurons:
+- 128
+dense_dropouts:
+- 0.25

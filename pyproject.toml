@@ -41,7 +41,7 @@ requires-python = ">=3.9"
 dependencies = ["rhapsody-py", "pyyaml", "radical.asyncflow==0.3.0"]
 
 [tool.setuptools.packages.find]
-include = ["ddsim*", "pipelines*"]
+include = ["ddsim*", "workflows*"]
 
 [project.urls]
 Homepage = "https://github.com/radical-collaboration/DeepDriveSim"
@@ -59,6 +59,12 @@ dev = [
     "pydantic-settings",
     "ruff",
     "tox"
+]
+
+# Dragon/RADICAL support
+dragon = [
+    "dragonhpc",
+    "nvidia-ml-py"
 ]
 
 doc = [
@@ -97,7 +103,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["ddsim", "pipelines"]
+source = ["ddsim", "workflows"]
 omit = ["tests/*"]
 
 [tool.coverage.report]
