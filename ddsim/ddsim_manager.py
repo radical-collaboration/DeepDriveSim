@@ -146,14 +146,14 @@ class DDSimManager:
     # --------------------------------------------------------------------------
     def post_process_sim(self, *args, **kwargs):
         """
-        Specify any post pprecess required after each sim completed
+        Specify any post process required after each sim completed
         """
         raise NotImplementedError("post_process_sim must be implemented")
 
     # --------------------------------------------------------------------------
     def post_process(self, *args, **kwargs):
         """
-        Specify any post pprecess required after each Inference iteration
+        Specify any post process required after each Inference iteration
         """
         raise NotImplementedError("post_process must be implemented")
 
@@ -371,7 +371,7 @@ class DDSimManager:
         self.logger.separator("DDSim MANAGER STARTING")
         await self.init_sim_queue()
         submit_task = asyncio.create_task(self.submit_sims())
-                        
+
         while self.run_workflow:
             self.logger.info(f"{len(self.registered_sims)} simulation(s) running...")
             if self.debug:

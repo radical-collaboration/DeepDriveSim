@@ -34,7 +34,7 @@ class LogLevel(Enum):
 
 
 class Logger:
-    def __init__(self, name="DDMDManager", use_colors=True, output_stream=None):
+    def __init__(self, name="DDSimManager", use_colors=True, output_stream=None):
         self.name = name
         self.use_colors = use_colors
         self.output_stream = output_stream or sys.stdout

@@ -65,7 +65,7 @@ pip install -e ".[doc]"
 
 See the [examples/](examples/) directory for complete working examples:
 
-- **[ddmd_pipeline/](examples/dddmd_pipeline/)**: Deep-Learning Driven Adaptive Molecular Simulations
+- **[ddmd_pipeline/](examples/ddmd_pipeline/)**: Deep-Learning Driven Adaptive Molecular Simulations
     https://github.com/DeepDriveMD/DeepDriveMD-pipeline
 - **[dummy_pipeline/](examples/dummy_pipeline/)**: Standalone demo with synthetic data
 - **[miniapps_pipeline/](examples/miniapps_pipeline/)**  

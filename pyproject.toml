@@ -38,7 +38,7 @@ maintainers = [
 readme = "README.md"
 requires-python = ">=3.9"
 
-dependencies = ["rhapsody-py", "pyyaml", "radical.asyncflow==0.3.0"]
+dependencies = ["rhapsody-py", "pyyaml", "radical.asyncflow>=0.3.0"]
 
 [tool.setuptools.packages.find]
 include = ["ddsim*", "workflows*"]
