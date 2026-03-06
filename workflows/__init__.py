@@ -25,11 +25,17 @@ DummyWorkflow = _optional_import(
 MiniAppsWorkflow = _optional_import(
     "workflows.miniapps_workflow.miniapps_workflow", "MiniAppsWorkflow"
 )
-
+MiniAppsWorkflow = _optional_import(
+    "workflows.miniapps_workflow.miniapps_workflow", "MiniAppsWorkflow"
+)
+AdaptiveWorkflow = _optional_import(
+    "workflows.adaptive_ensemble.adaptive_workflow", "AdaptiveWorkflow"
+)
 __version__ = "0.1.0"
 
 __all__ = [
     "DDMdWorkflow",
     "DummyWorkflow",
     "MiniAppsWorkflow",
+    "AdaptiveWorkflow",
 ]
