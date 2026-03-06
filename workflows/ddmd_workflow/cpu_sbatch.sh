@@ -1,5 +1,5 @@
 #!/bin/sh -l
-#SBATCH -A dmr170002p
+#SBATCH -A ***
 #SBATCH --partition=RM
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1

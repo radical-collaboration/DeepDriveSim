@@ -17,7 +17,7 @@ from ddsim.ddsim_manager import DDSimManager
 
 task_description = {
     "shell": True,
-}  # "process_template": {}}
+}
 
 
 class DummyWorkflow(DDSimManager):

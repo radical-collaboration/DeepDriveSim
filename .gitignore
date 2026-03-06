@@ -31,7 +31,8 @@ site/
 # Logs
 log
 *.log
-slurm.*
+workflows/*/slurm*
+workflows/*/*experiment*
 
 # OS
 .DS_Store

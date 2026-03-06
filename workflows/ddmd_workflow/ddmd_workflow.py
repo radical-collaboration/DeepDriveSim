@@ -110,7 +110,7 @@ class DDMdWorkflow(DDSimManager):
 
         # Register simulation, training, aggregation, inference, selection tasks
         self.register_tasks()
-        # Dic to store inputs for simulation
+        # Dict to store inputs for simulation
         self.sim_inputs = {}
         self.train_models = []
 
