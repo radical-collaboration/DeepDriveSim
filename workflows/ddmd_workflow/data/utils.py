@@ -42,8 +42,7 @@ def concatenate_virtual_h5(
             fields = list(h5_file.keys())
 
         field_info = {
-            field: (h5_file[field].shape, h5_file[field].dtype)
-            for field in fields
+            field: (h5_file[field].shape, h5_file[field].dtype) for field in fields
         }
 
     # Helper function to output concatenated shape
@@ -52,9 +51,7 @@ def concatenate_virtual_h5(
 
     # Create virtual layouts from cached shape/dtype
     layouts = {
-        field: h5py.VirtualLayout(
-            shape=concat_shape(shape), dtype=dtype
-        )
+        field: h5py.VirtualLayout(shape=concat_shape(shape), dtype=dtype)
         for field, (shape, dtype) in field_info.items()
     }
 
@@ -62,9 +59,7 @@ def concatenate_virtual_h5(
         for field in fields:
             shape = field_info[field][0]
             for i, filename in enumerate(input_file_names):
-                vsource = h5py.VirtualSource(
-                    filename, field, shape=shape
-                )
+                vsource = h5py.VirtualSource(filename, field, shape=shape)
                 start = i * shape[0]
                 layouts[field][start : start + shape[0], ...] = vsource
 

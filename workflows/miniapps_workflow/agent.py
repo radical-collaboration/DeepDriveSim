@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 
-import io, os, sys, socket
-import random
-import yaml
-import time
 import argparse
+import os
+import random
+import socket
+import time
+
 import wfMiniAPI.kernel as wf
+import yaml
 
 try:
     import cupy
-
     default_device = "gpu"
 except ImportError:
     default_device = "cpu"
@@ -69,7 +70,7 @@ def parse_args():
         "--mat_size",
         type=int,
         default=5000,
-        help="the matrix with have size of mat_size * mat_size, should be the same as it is in simulation",
+        help="the matrix with have size of mat_size * mat_size",
     )
     parser.add_argument(
         "--preprocess_time", type=float, default=20.0, help="time for doing preprocess"
@@ -98,23 +99,18 @@ def parse_args():
 def main():
 
     print(
-        "Temp for Darshan, ml, PID = {}, hostname = {}".format(
-            os.getpid(), socket.gethostname()
-        )
+        f"Temp for Darshan, ml, PID = {os.getpid()}, hostname = {socket.gethostname()}"
     )
     start_time = time.time()
 
     args = parse_args()
     print(args)
 
-    root_path = args.data_root_dir + "/phase{}".format(args.phase) + "/"
+    root_path = args.data_root_dir + f"/phase{args.phase}" + "/"
     print("root_path for data = ", root_path)
 
     device = args.device
     print("device is ", device)
-
-    #    if device == 'gpu':
-    #        print("gpu id is {}".format(cp.cuda.runtime.getDeviceProperties(0)['uuid']))
 
     wf.sleep(args.preprocess_time)
     wf.readNonMPI(args.read_size, root_path, args.instance_index)
@@ -127,9 +123,9 @@ def main():
 
     if device == "gpu":
         wf.dataCopyH2D(args.num_sample * args.dense_dim_in)
-        print("data movement (CPU->GPU) takes {}".format(time.time() - tt))
+        print(f"data movement (CPU->GPU) takes {time.time() - tt}")
     tt = time.time()
-    for ii in range(args.num_mult):
+    for _ in range(args.num_mult):
         wf.matMulGeneral(
             device,
             [args.num_sample, args.dense_dim_in],
@@ -137,16 +133,16 @@ def main():
             ([1], [0]),
         )
         wf.axpy(device, args.dense_dim_in * args.dense_dim_out)
-    print("mult takes {}".format(time.time() - tt))
+    print(f"mult takes {time.time() - tt}")
     tt = time.time()
 
-    for epoch in range(args.num_epochs):
+    for _ in range(args.num_epochs):
         tt = time.time()
         if device == "gpu":
             wf.dataCopyH2D(args.num_sample * args.dense_dim_in)
-            print("data movement (CPU->GPU) takes {}".format(time.time() - tt))
+            print(f"data movement (CPU->GPU) takes {time.time() - tt}")
         tt = time.time()
-        for ii in range(args.num_mult_outlier):
+        for _ in range(args.num_mult_outlier):
             wf.matMulGeneral(
                 device,
                 [args.num_sample, args.dense_dim_in],
@@ -154,7 +150,7 @@ def main():
                 ([1], [0]),
             )
             wf.axpy(device, args.dense_dim_in * args.dense_dim_out)
-            print("mult takes {}".format(time.time() - tt))
+            print(f"mult takes {time.time() - tt}")
         tt = time.time()
 
     wf.writeNonMPI(args.write_size, root_path, args.instance_index)
@@ -167,7 +163,7 @@ def main():
     with open(args.output_file, "w") as f:
         yaml.dump(results, f, sort_keys=True)
     end_time = time.time()
-    print("Total running time is {} seconds".format(end_time - start_time))
+    print(f"Total running time is {end_time - start_time} seconds")
 
 
 if __name__ == "__main__":

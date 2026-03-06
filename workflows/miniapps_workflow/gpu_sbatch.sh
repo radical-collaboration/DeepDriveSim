@@ -14,7 +14,7 @@
 #SBATCH --mail-type=ALL      # When to send emails (BEGIN, END, FAIL, ALL)
 
 export BASE_DIR="${PROJECT}"
-export WORK_DIR="${DDSim_DIR}/DeepDriveSim/workflows/miniapps_workflow"
+export WORK_DIR="${BASE_DIR}/DeepDriveSim/workflows/miniapps_workflow"
 export CONDA_ENV="${BASE_DIR}/conda_env"
 
 unset SLURM_EXPORT_ENV
@@ -24,7 +24,7 @@ module load cuda/12.6.1
 module load cudnn/8.0.4
 module load openmpi/5.0.8-gcc13.3.1
 source activate base
-conda activate $CONDA_ENV/miniapp_workflow
+conda activate $CONDA_ENV/miniapps_workflow
 
 cd  $WORK_DIR
 python run_workflow.py

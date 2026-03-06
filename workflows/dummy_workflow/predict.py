@@ -1,14 +1,14 @@
 # predict_async_limited.py
-import pickle
-import random
-import yaml
-import os
-import numpy as np
-from pathlib import Path
 import argparse
-from typing import Dict, Union
 import asyncio
+import os
+import random
 from asyncio import to_thread
+from pathlib import Path
+from typing import Union
+
+import numpy as np
+import yaml
 
 # Control how many files to load in parallel (tune for HPC)
 MAX_CONCURRENT_FILE_LOADS = 50
@@ -36,7 +36,7 @@ async def evaluate_npz_file(file: Path, model, sem: asyncio.Semaphore) -> float:
     async with sem:  # limit concurrent file access
         try:
             data = await asyncio.to_thread(np.load, file)
-            X_eval = data["X"]
+            x_eval = data["x"]
             y_eval = data["y"]
         except (OSError, KeyError) as e:
             print(f"⚠ Skipping corrupt file {file}: {e}")
@@ -46,7 +46,7 @@ async def evaluate_npz_file(file: Path, model, sem: asyncio.Semaphore) -> float:
             return None
 
         # Uncomment for real model prediction
-        # y_pred_eval = await asyncio.to_thread(model.predict, X_eval)
+        # y_pred_eval = await asyncio.to_thread(model.predict, x_eval)
         # mse_eval = mean_squared_error(y_eval, y_pred_eval)
         mse_eval = random.random()  # placeholder
         return mse_eval
@@ -69,7 +69,7 @@ async def predict(model_filename: str, sim_output_dir: str, output_file: str) ->
     model = await load_model(model_filename)
 
     sim_output_dir = Path(sim_output_dir)
-    results: Dict[str, float] = {}
+    results: dict[str, float] = {}
 
     sem = asyncio.Semaphore(MAX_CONCURRENT_FILE_LOADS)  # limit concurrency
 
@@ -100,7 +100,7 @@ async def predict(model_filename: str, sim_output_dir: str, output_file: str) ->
 
     await asyncio.to_thread(_write)
     await asyncio.sleep(10)
-    print(f"\nExiting Prediction ...")
+    print("\nExiting Prediction ...")
     return
 
 

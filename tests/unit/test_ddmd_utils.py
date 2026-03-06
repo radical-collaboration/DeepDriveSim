@@ -1,11 +1,11 @@
-"""Unit tests for pipelines.ddmd_pipeline.utils module."""
+"""Unit tests for workflows.ddmd_workflow.utils module."""
 
 import sys
 
 import numpy as np
 import pytest
 
-from pipelines.ddmd_pipeline.utils import (
+from workflows.ddmd_workflow.utils import (
     bestk,
     hash2intarray,
     intarray2hash,

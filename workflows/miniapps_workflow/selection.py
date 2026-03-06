@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
-import os, sys, socket
-import time
 import argparse
+import os
+import socket
+import time
+
 import wfMiniAPI.kernel as wf
 
 
@@ -12,7 +14,7 @@ def parse_args():
         "--phase",
         type=int,
         default=0,
-        help="the current phase of workflow, in miniapp all phases do the same thing except rng",
+        help="the current phase of workflow, all phases do the same thing except rng",
     )
     parser.add_argument(
         "--mat_size",
@@ -47,23 +49,22 @@ def parse_args():
 def main():
 
     print(
-        "Temp for Darshan, selection, PID = {}, hostname = {}".format(
-            os.getpid(), socket.gethostname()
-        )
+        f"Temp for Darshan, selection, PID = {os.getpid()}, "
+        f"hostname = {socket.gethostname()}"
     )
     start_time = time.time()
 
     args = parse_args()
     print(args)
 
-    root_path = args.data_root_dir + "/phase{}".format(args.phase) + "/"
+    root_path = args.data_root_dir + f"/phase{args.phase}" + "/"
     print("root_path for data = ", root_path)
 
     wf.readNonMPI(args.read_size, root_path, args.instance_index)
     wf.writeNonMPI(args.write_size, root_path, args.instance_index)
 
     end_time = time.time()
-    print("Total running time is {} seconds".format(end_time - start_time))
+    print(f"Total running time is {end_time - start_time} seconds")
 
 
 if __name__ == "__main__":

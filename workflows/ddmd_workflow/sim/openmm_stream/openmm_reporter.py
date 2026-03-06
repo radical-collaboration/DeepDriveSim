@@ -9,12 +9,11 @@ import adios2
 import MDAnalysis
 import numpy as np
 import simtk.unit as u
+from deepdrivemd.utils import hash2intarray, timer
 from MDAnalysis.analysis import distances, rms
 
-from deepdrivemd.utils import hash2intarray, timer
 
-
-class ContactMapReporter(object):
+class ContactMapReporter:
     """Periodically reports the results of the openmm simulation"""
 
     def __init__(self, reportInterval, cfg):

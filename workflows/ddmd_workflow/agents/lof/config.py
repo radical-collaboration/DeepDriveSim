@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional
 
-from pydantic import model_validator, field_validator
+from pydantic import field_validator, model_validator
 
 from workflows.ddmd_workflow.config import AgentTaskConfig
 

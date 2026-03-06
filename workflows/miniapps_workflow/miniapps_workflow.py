@@ -5,9 +5,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from rose import Learner
-
 import yaml
+from rose import Learner
 
 from ddsim.ddsim_manager import DDSimManager
 
@@ -56,6 +55,11 @@ class MiniAppsWorkflow(DDSimManager):
         self.free_resources_for_train = bool(
             kwargs.get("free_resources_for_train", True)
         )
+        # By default, do not call cancel_sims() after inference
+        self.call_cancel_simulations = True
+        self.call_finalize_results = True
+        self.call_evaluate_simulations = True
+        
         # Stop workflow after all simulation are done
         self.total_num_sim = kwargs.get("total_num_sim", 25)
         # Training iteration
@@ -71,7 +75,7 @@ class MiniAppsWorkflow(DDSimManager):
 
         self.task_description = {
             "ranks": 1,
-             "cores_per_rank": 1,
+            "cores_per_rank": 1,
             "gpus_per_rank": 1,
             "pre_exec": TASK_PRE_EXEC,
             "shell": True,
@@ -82,33 +86,32 @@ class MiniAppsWorkflow(DDSimManager):
         # To store input files
         self.sim_inputs = {}
 
-        self.tasks_config = {  
+        self.tasks_config = {
             "simulation": {
-                "priority":       8,
-                "ranks":          1,
+                "priority": 8,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0.5
+                "gpus_per_rank": 0.5,
             },
             "train_model": {
-                "priority":       10,
-                "ranks":          1,
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  1
+                "gpus_per_rank": 1,
             },
             "inference": {
-                "priority":       10,
-                "ranks":          1,
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0
+                "gpus_per_rank": 0,
             },
-            "post_process": {
-                "priority":       10,
-                "ranks":          1,
+            "finalize_results": {
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0
+                "gpus_per_rank": 0,
             },
         }
-
 
     # --------------------------------------------------------------------------
     @staticmethod
@@ -127,7 +130,7 @@ class MiniAppsWorkflow(DDSimManager):
             shutil.rmtree(dir_path)
 
     # --------------------------------------------------------------------------
-    async def run_inference(self):
+    async def evaluate_simulations(self):
         await self.prediction()
         with open(self.prediction_file) as f:
             predictions = yaml.safe_load(f)
@@ -264,14 +267,15 @@ class MiniAppsWorkflow(DDSimManager):
         self.logger.task_completed("Training Completed")
 
     # --------------------------------------------------------------------------
-    async def post_process(self):
+    async def finalize_results(self):
         if len(self.completed_sims) >= self.total_num_sim:
             self.shutting_down.set()
             self.run_workflow = False
             self.logger.info("All sim have completed...")
 
-    async def post_process_sim(self, sim_idx, ):
+    async def post_process_sim(self, sim_idx):
         pass
+
     # --------------------------------------------------------------------------
     async def close(self):
         """Gracefully shutdown learner."""

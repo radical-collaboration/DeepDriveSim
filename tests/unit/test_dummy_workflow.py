@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("radical.asyncflow", reason="radical.asyncflow not installed")
 pytest.importorskip("rose", reason="ROSE not installed")
-from pipelines.dummy_pipeline.dummy_pipeline import DummyWorkflow
+from workflows.dummy_workflow.dummy_workflow import DummyWorkflow
 
 
 class TestDummyWorkflowInit:
@@ -243,7 +243,7 @@ class TestDummyWorkflowCollectPredictions:
 
 
 class TestDummyWorkflowFinalize:
-    """Test finalize_pipeline method."""
+    """Test finalize_workflow method."""
 
     @pytest.fixture
     def workflow(self):
@@ -254,8 +254,8 @@ class TestDummyWorkflowFinalize:
             yield workflow
 
     @pytest.mark.asyncio
-    async def test_finalize_pipeline_exports_stats(self, workflow):
-        """Test finalize_pipeline exports cancel_stats to JSON."""
+    async def test_finalize_workflow_exports_stats(self, workflow):
+        """Test finalize_workflow exports cancel_stats to JSON."""
         import json
 
         workflow.cancel_stats = {
@@ -269,7 +269,7 @@ class TestDummyWorkflowFinalize:
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             output_path = f.name
 
-        await workflow.finalize_pipeline(path=output_path)
+        await workflow.finalize_workflow(path=output_path)
 
         # Verify file was created and contains correct data
         with open(output_path) as f:
@@ -282,11 +282,11 @@ class TestDummyWorkflowFinalize:
         Path(output_path).unlink()
 
     @pytest.mark.asyncio
-    async def test_finalize_pipeline_raises_without_stats(self, workflow):
-        """Test finalize_pipeline raises error if cancel_stats doesn't exist."""
+    async def test_finalize_workflow_raises_without_stats(self, workflow):
+        """Test finalize_workflow raises error if cancel_stats doesn't exist."""
         # Remove cancel_stats if it exists
         if hasattr(workflow, "cancel_stats"):
             delattr(workflow, "cancel_stats")
 
         with pytest.raises(AttributeError):
-            await workflow.finalize_pipeline()
+            await workflow.finalize_workflow()

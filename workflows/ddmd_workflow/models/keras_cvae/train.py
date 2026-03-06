@@ -23,7 +23,6 @@ from workflows.ddmd_workflow.utils import Timer, parse_args
 
 def get_init_weights(cfg: KerasCVAEModelConfig) -> Optional[str]:
     if cfg.init_weights_path is None:
-
         if cfg.stage_idx == 0:
             # Case for first iteration with no pretrained weights
             return None
@@ -146,7 +145,7 @@ def main(cfg: KerasCVAEModelConfig) -> None:
     # Log checkpoint
     with Timer("machine_learning_logging"):
         checkpoint_path = cfg.output_path / "checkpoint"
-        #checkpoint_path.mkdir()
+        # checkpoint_path.mkdir()
         checkpoint_path.mkdir(parents=True, exist_ok=True)
 
         time_stamp = time.strftime(f"epoch-{epochs}-%Y%m%d-%H%M%S.weights.h5")

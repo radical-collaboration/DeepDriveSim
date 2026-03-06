@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, Dict, List, Tuple
 if TYPE_CHECKING:
     import numpy.typing as npt
 
+import keras.ops as ops
 import numpy as np
 import pandas as pd
-import keras.ops as ops
 import tensorflow as tf
 import tensorflow.keras.backend as K
 import tensorflow.keras.losses as objectives
@@ -84,7 +84,7 @@ class VAESampling(Layer):
         return z_mean + ops.exp(z_log_var) * epsilon
 
 
-class CVAE(object):
+class CVAE:
     """Convolutional variational autoencoder class."""
 
     def __init__(  # noqa
@@ -313,7 +313,7 @@ class CVAE(object):
     def _vae_loss(self, input, output):
         input_flat = ops.reshape(input, [-1])
         output_flat = ops.reshape(output, [-1])
-        xent_loss: "npt.ArrayLike" = (
+        xent_loss: npt.ArrayLike = (
             self.image_size[0]
             * self.image_size[1]
             * objectives.binary_crossentropy(input_flat, output_flat)
@@ -444,7 +444,7 @@ class CVAE(object):
         npt.ArrayLike
             Array of decodings for input data.
         """
-        recon: "npt.ArrayLike" = self.model.predict(data)
+        recon: npt.ArrayLike = self.model.predict(data)
         return recon
 
     def return_embeddings(
@@ -464,7 +464,7 @@ class CVAE(object):
         npt.ArrayLike
             Array of embeddings for input data.
         """
-        embeddings: "npt.ArrayLike" = self.embedder.predict(data, batch_size=batch_size)
+        embeddings: npt.ArrayLike = self.embedder.predict(data, batch_size=batch_size)
         return embeddings
 
     def generate(self, embedding: "npt.ArrayLike") -> "npt.ArrayLike":
@@ -480,5 +480,5 @@ class CVAE(object):
         npt.ArrayLike
             Array of generated output.
         """
-        preds: "npt.ArrayLike" = self.generator.predict(embedding)
+        preds: npt.ArrayLike = self.generator.predict(embedding)
         return preds

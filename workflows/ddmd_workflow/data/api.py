@@ -123,9 +123,9 @@ class Stage_API:
         self, stage_idx: int = -1, task_idx: int = 0
     ) -> Optional[List[Dict[str, Any]]]:
         path = self.json_path(stage_idx, task_idx)
-        if path is None:
+        if path is None or not path.exists():
             return None
-        with open(path, "r") as f:
+        with open(path) as f:
             data: List[Dict[str, Any]] = json.load(f)
         return data
 

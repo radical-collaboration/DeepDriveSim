@@ -56,7 +56,7 @@ class MockLearner(DDSimManager):
         """Register simulation as a plain asyncio.Task factory."""
 
         def simulation(sim_inputs=None, **kwargs):
-            return asyncio.create_task(asyncio.sleep(0.01))
+            return asyncio.create_task(asyncio.sleep(10.0))
 
         self.simulation = simulation
 
@@ -89,6 +89,11 @@ class MockLearner(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def add_sims_to_queue(self, sim_ids):
+        pass
+
+    # --------------------------------------------------------------------------
+    async def del_files(self, sim_idx):
+        """Alias kept for backwards compatibility with existing tests."""
         pass
 
     # --------------------------------------------------------------------------

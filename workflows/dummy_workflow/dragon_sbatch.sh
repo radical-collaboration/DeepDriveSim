@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --export    NONE
 #SBATCH --time=01:30:00
-#SBATCH --job-name dummy
+#SBATCH --job-name dragon
 #SBATCH --mail-user=*** 
 #SBATCH --mail-type=ALL      # When to send emails (BEGIN, END, FAIL, ALL)
 

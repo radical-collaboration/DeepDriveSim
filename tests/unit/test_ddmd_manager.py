@@ -1,16 +1,8 @@
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-radical_asyncflow = pytest.importorskip(
-    "radical.asyncflow",
-    reason="radical.asyncflow not installed",
-)
-ConcurrentExecutionBackend = radical_asyncflow.ConcurrentExecutionBackend
-WorkflowEngine = radical_asyncflow.WorkflowEngine
-
-from tests.unit.mock_manager import MockLearner  # noqa: E402
+from tests.unit.mock_manager import MockLearner
 
 
 # ---------------------------
@@ -41,30 +33,19 @@ async def wait_until(predicate, timeout=2.0, interval=0.01):
 
 
 # ---------------------------
-# Shared fixture
+# Shared factory
 # ---------------------------
-@pytest.fixture
-async def manager(**kwargs):
-    """Create a MockLearner with a fresh engine and asyncflow."""
-    engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-    asyncflow = await WorkflowEngine.create(engine)
-    return MockLearner(asyncflow=asyncflow, **kwargs)
-
-
-async def make_manager(**kwargs):
-    """Factory for creating MockLearner instances with custom kwargs."""
-    engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-    asyncflow = await WorkflowEngine.create(engine)
-    return MockLearner(asyncflow=asyncflow, **kwargs)
+def make_manager(**kwargs):
+    return MockLearner(**kwargs)
 
 
 # ---------------------------
-# Group 1: Simulation lifecycle
+# Group 1: Simulation lifecycle (done-callback mechanism)
 # ---------------------------
 class TestSimulationLifecycle:
     @pytest.mark.asyncio
     async def test_submit_sims_registers_and_respects_batch(self):
-        manager = await make_manager()
+        manager = make_manager()
 
         await manager.collect_sim_inputs(n=2)
         manager.sim_batch_size = 2
@@ -82,15 +63,19 @@ class TestSimulationLifecycle:
         manager.logger.task_started.assert_called()
 
     @pytest.mark.asyncio
-    async def test_monitor_sims_unregisters_done_and_increments_batch(self):
-        manager = await make_manager(max_sim_batch=1, training_cores=1)
+    async def test_done_callback_unregisters_sim_and_increments_batch(self):
+        manager = make_manager(max_sim_batch=1, training_cores=1)
         done = make_done_task("done:sim_0")
-        running = manager.simulation(sim_inputs={"sim_tag": "sim_1"})
+        running = manager.simulation(sim_inputs={"sim_idx": "sim_1"})
+
+        # Register done callbacks as submit_sims would
+        done.add_done_callback(lambda t: manager._on_sim_done(t, "sim_0"))
+        running.add_done_callback(lambda t: manager._on_sim_done(t, "sim_1"))
         manager.registered_sims["sim_0"] = done
         manager.registered_sims["sim_1"] = running
 
-        await asyncio.sleep(0)
-        await manager.monitor_sims()
+        await asyncio.sleep(0)  # Turn 1: done task completes, callback scheduled
+        await asyncio.sleep(0)  # Turn 2: callback fires, _on_sim_done removes sim_0
 
         assert "sim_0" not in manager.registered_sims
         assert "sim_1" in manager.registered_sims
@@ -98,10 +83,13 @@ class TestSimulationLifecycle:
         manager.logger.task_completed.assert_called()
 
     @pytest.mark.asyncio
-    async def test_monitor_sims_logs_failures_and_unregs(self):
-        manager = await make_manager(max_sim_batch=1, training_cores=1)
+    async def test_done_callback_logs_failures_and_unregs(self):
+        manager = make_manager(max_sim_batch=1, training_cores=1)
         failing = make_failing_task()
         ok = make_done_task()
+
+        failing.add_done_callback(lambda t: manager._on_sim_done(t, "sim_fail"))
+        ok.add_done_callback(lambda t: manager._on_sim_done(t, "sim_ok"))
         manager.registered_sims["sim_fail"] = failing
         manager.registered_sims["sim_ok"] = ok
 
@@ -109,7 +97,7 @@ class TestSimulationLifecycle:
             await failing
         await ok
 
-        await manager.monitor_sims()
+        await asyncio.sleep(0)  # Let pending callbacks fire
 
         assert "sim_fail" not in manager.registered_sims
         assert "sim_ok" not in manager.registered_sims
@@ -134,15 +122,18 @@ class TestCancelSimsBehavior:
     async def test_cancel_sims_various_cases(
         self, predictions, clean_flag, expected_deleted, expected_remaining
     ):
-        manager = await make_manager()
+        manager = make_manager()
         for tag in predictions.keys():
-            task = manager.simulation(sim_inputs={"sim_tag": tag})
+            task = manager.simulation(sim_inputs={"sim_idx": tag})
+            task.add_done_callback(lambda t, sid=tag: manager._on_sim_done(t, sid))
             manager.registered_sims[tag] = task
 
         manager.sim_predictions = predictions
         manager.clean_unregistered_sims = clean_flag
 
         await manager.cancel_sims()
+        await asyncio.sleep(0)  # Turn 1: cancelled task's __step runs, callback scheduled
+        await asyncio.sleep(0)  # Turn 2: done callback fires, _on_sim_done removes sim
 
         for sim in expected_deleted:
             assert sim not in manager.registered_sims.keys()
@@ -159,7 +150,7 @@ class TestCancelSimsBehavior:
 class TestStartFlow:
     @pytest.mark.asyncio
     async def test_start_runs_full_cycle_and_exits(self):
-        manager = await make_manager()
+        manager = make_manager()
         manager.retrain_model = False
 
         await manager.start()
@@ -176,7 +167,7 @@ class TestStartFlow:
 class TestShutdownSafety:
     @pytest.mark.asyncio
     async def test_close_and_stop_are_safe(self):
-        manager = await make_manager()
+        manager = make_manager()
         await manager.close()
         await manager.stop()
 
@@ -187,7 +178,7 @@ class TestShutdownSafety:
 class TestDelFilesBehavior:
     @pytest.mark.asyncio
     async def test_del_files_records_multiple_deletions(self):
-        manager = await make_manager()
+        manager = make_manager()
         sims = ["sim_0", "sim_1", "sim_2"]
         for sim in sims:
             await manager.del_files(sim)
@@ -202,7 +193,7 @@ class TestDelFilesBehavior:
 class TestSimulationQueueEdgeCases:
     @pytest.mark.asyncio
     async def test_submit_sims_with_empty_queue(self):
-        manager = await make_manager()
+        manager = make_manager()
         manager.sim_batch_size = 2
 
         submit_task = asyncio.create_task(manager.submit_sims())
@@ -215,7 +206,7 @@ class TestSimulationQueueEdgeCases:
 
     @pytest.mark.asyncio
     async def test_submit_sims_with_partial_queue(self):
-        manager = await make_manager()
+        manager = make_manager()
         await manager.collect_sim_inputs(n=1)
         manager.sim_batch_size = 3
 
@@ -230,7 +221,7 @@ class TestSimulationQueueEdgeCases:
 
     @pytest.mark.asyncio
     async def test_submit_sims_with_batch_larger_than_queue(self):
-        manager = await make_manager()
+        manager = make_manager()
         await manager.collect_sim_inputs(n=2)
         manager.sim_batch_size = 5
 

@@ -35,7 +35,7 @@ def concatenate_last_n_h5(cfg: BasicAggegation) -> None:  # noqa
     fout = h5py.File(cfg.output_path, "w", libver="latest")
 
     # Initialize data buffers
-    data: Dict[str, List["npt.ArrayLike"]] = {x: [] for x in fields}
+    data: Dict[str, List[npt.ArrayLike]] = {x: [] for x in fields}
 
     for in_file in files:
         if cfg.verbose:
@@ -46,7 +46,7 @@ def concatenate_last_n_h5(cfg: BasicAggegation) -> None:  # noqa
                 data[field].append(fin[field][...])
 
     # Concatenate data
-    concat_data: Dict[str, "npt.ArrayLike"] = {
+    concat_data: Dict[str, npt.ArrayLike] = {
         field: np.concatenate(data[field])
         for field in data  # type: ignore[no-untyped-call]
     }

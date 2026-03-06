@@ -1,10 +1,10 @@
+import argparse
 import asyncio
 import random
 from pathlib import Path
-import numpy as np
-import pickle
-import argparse
 from typing import Union
+
+import numpy as np
 
 # Global datasets
 UNLABELED_DATA = []
@@ -54,8 +54,8 @@ def load_unlabeled_data(train_dir: str):
     for file in train_dir.iterdir():
         if file.is_file() and file.suffix == ".npz":
             data = np.load(file)
-            X = data["X"]
-            UNLABELED_DATA.extend([x for x in X])
+            x = data["x"]
+            UNLABELED_DATA.extend([x for x in x])
     print(f"Loaded {len(UNLABELED_DATA)} unlabeled samples from {train_dir}")
 
 
@@ -67,7 +67,8 @@ def move_labeled_to_train_al(
 
     Args:
         train_al_dir: directory to store labeled data
-        sample_indices: indices of the newly labeled samples in the original UNLABELED_DATA snapshot
+        sample_indices: indices of the newly labeled samples in the original 
+        UNLABELED_DATA snapshot
         unlabeled_data_snapshot: the UNLABELED_DATA list at the start of iteration
         labels_snapshot: dictionary of labels for the newly labeled samples
     """
@@ -76,9 +77,9 @@ def move_labeled_to_train_al(
 
     for idx in sample_indices:
         sample_file = train_al_dir / f"sample_{idx}.npz"
-        X = unlabeled_data_snapshot[idx]
+        x = unlabeled_data_snapshot[idx]
         y = labels_snapshot[idx]
-        np.savez(sample_file, X=X, y=y)
+        np.savez(sample_file, x=x, y=y)
     print(f"Moved {len(sample_indices)} labeled samples to {train_al_dir}")
 
 

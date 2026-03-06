@@ -1,5 +1,4 @@
-ROSE @ git+https://github.com/radical-cybertools/ROSE.git
-pyyaml
-numpy
-aiofiles
 scikit-learn
+pyyaml
+aiofiles
+ROSE @ git+https://github.com/radical-cybertools/ROSE.git

@@ -13,12 +13,11 @@ import numpy as np
 import pandas as pd
 import simtk.openmm as omm
 import simtk.unit as u
-from mdtools.openmm.sim import configure_simulation
-
 from deepdrivemd.sim.openmm.run_openmm import SimulationContext
 from deepdrivemd.sim.openmm_stream.config import OpenMMConfig
 from deepdrivemd.sim.openmm_stream.openmm_reporter import ContactMapReporter
 from deepdrivemd.utils import Timer, parse_args
+from mdtools.openmm.sim import configure_simulation
 
 
 def configure_reporters(
@@ -356,7 +355,7 @@ def adios_configuration(cfg: OpenMMConfig):
     cfg.adios_cfg = cfg.output_path / "adios.xml"
     shutil.copy(cfg.adios_xml_sim, cfg.adios_cfg)
     taskdir = os.path.basename(cfg.output_path)
-    with open(cfg.adios_cfg, "r") as f:
+    with open(cfg.adios_cfg) as f:
         textxml = f.read()
     textxml = textxml.replace("SimulationOutput", taskdir)
     with open(cfg.adios_cfg, "w") as f:

@@ -1,10 +1,11 @@
 # check_accuracy_async.py
-import pickle
-from pathlib import Path
 import argparse
-import numpy as np
-import random
 import asyncio
+import pickle
+import random
+from pathlib import Path
+
+import numpy as np
 
 
 def dummy_mse():
@@ -20,8 +21,7 @@ async def load_model(model_filename):
 
             async with aiofiles.open(model_filename, "rb") as f:
                 data = await f.read()
-        except:
-
+        except Exception:
             def _read_file(path):
                 with open(path, "rb") as f:
                     return f.read()
@@ -29,8 +29,7 @@ async def load_model(model_filename):
             data = await asyncio.to_thread(_read_file, model_filename)
         # pickle.load is CPU-bound, run in a thread
         return await asyncio.to_thread(pickle.loads, data)
-    except (OSError, pickle.UnpicklingError) as e:
-        # print(f"Warning: Unable to load model from {model_filename} ({e}). Using dummy MSE.")
+    except (OSError, pickle.UnpicklingError):
         return None
 
 
@@ -38,8 +37,7 @@ async def load_single_npz(file):
     """Load one .npz file asynchronously."""
     try:
         return await asyncio.to_thread(np.load, file)
-    except Exception as e:
-        # print(f"Warning: Failed to load {file}: {e}")
+    except Exception:
         return None
 
 
@@ -51,30 +49,28 @@ async def load_validation_data(val_dir):
     # Load files concurrently
     datasets = await asyncio.gather(*(load_single_npz(f) for f in npz_files))
 
-    X_all, y_all = [], []
+    x_all, y_all = [], []
     for data in datasets:
         if data is not None:
-            X_all.append(data["X"])
+            x_all.append(data["x"])
             y_all.append(data["y"])
 
-    if not X_all:
+    if not x_all:
         return None, None
 
-    return np.concatenate(X_all, axis=0), np.concatenate(y_all, axis=0)
+    return np.concatenate(x_all, axis=0), np.concatenate(y_all, axis=0)
 
 
 async def check(model_filename="model.pkl", val_dir="val"):
-    # try:
-    model = await load_model(model_filename)
-    ##except:
-    #    pass
-    X_eval, y_eval = await load_validation_data(val_dir)
 
-    if X_eval is None or y_eval is None or len(y_eval) == 0:
+    await load_model(model_filename)
+    x_eval, y_eval = await load_validation_data(val_dir)
+
+    if x_eval is None or y_eval is None or len(y_eval) == 0:
         mse_eval = dummy_mse()
     else:
         # Real model evaluation would go here:
-        # y_pred_eval = await asyncio.to_thread(model.predict, X_eval)
+        # y_pred_eval = await asyncio.to_thread(model.predict, x_eval)
         # mse_eval = mean_squared_error(y_eval, y_pred_eval)
         mse_eval = dummy_mse()
 

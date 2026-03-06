@@ -8,17 +8,16 @@ from typing import List, Tuple
 
 import numpy as np
 import torch
-from mdlearn.data.utils import train_valid_split
-from mdlearn.nn.models.aae.point_3d_aae import AAE3d
-from mdlearn.utils import get_torch_optimizer, log_checkpoint
-from torchsummary import summary
-from tqdm import tqdm
-
 from deepdrivemd.data.stream.aggregator_reader import Streams, StreamVariable
 from deepdrivemd.data.stream.enumerations import DataStructure
 from deepdrivemd.models.aae_stream.config import Point3dAAEConfig
 from deepdrivemd.models.aae_stream.utils import PointCloudDatasetInMemory
 from deepdrivemd.utils import Timer, parse_args, timer
+from mdlearn.data.utils import train_valid_split
+from mdlearn.nn.models.aae.point_3d_aae import AAE3d
+from mdlearn.utils import get_torch_optimizer, log_checkpoint
+from torchsummary import summary
+from tqdm import tqdm
 
 
 def wait_for_input(cfg: Point3dAAEConfig) -> List[str]:
@@ -238,9 +237,7 @@ def train_model(
         )
 
         print(
-            "====> Epoch: {} Train:\tAvg Disc loss: {:.4f}\tAvg AE loss: {:.4f}\tTime: {:.4f}".format(
-                epoch, avg_train_disc_loss, avg_train_ae_loss, time.time() - train_start
-            )
+            f"====> Epoch: {epoch} Train:\tAvg Disc loss: {avg_train_disc_loss:.4f}\tAvg AE loss: {avg_train_ae_loss:.4f}\tTime: {time.time() - train_start:.4f}"
         )
 
         valid_start = time.time()
@@ -250,9 +247,7 @@ def train_model(
             avg_valid_recon_loss, _, _ = validate(valid_loader, model, device, cfg)
 
         print(
-            "====> Epoch: {} Valid:\tAvg recon loss: {:.4f}\tTime: {:.4f}\n".format(
-                epoch, avg_valid_recon_loss, time.time() - valid_start
-            )
+            f"====> Epoch: {epoch} Valid:\tAvg recon loss: {avg_valid_recon_loss:.4f}\tTime: {time.time() - valid_start:.4f}\n"
         )
 
         # Log checkpoint
@@ -268,7 +263,7 @@ def train_model(
                 f"Logging checkpoint at epoch {epoch} with validation loss {best_valid_loss}"
             )
 
-        print("Total time: {:.4f}".format(time.time() - train_start))
+        print(f"Total time: {time.time() - train_start:.4f}")
 
 
 def main(cfg: Point3dAAEConfig):

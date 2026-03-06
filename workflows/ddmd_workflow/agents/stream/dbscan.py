@@ -17,13 +17,6 @@ import pandas as pd
 import tensorflow.keras.backend as K
 import torch
 from cuml import DBSCAN as DBSCAN
-from mdlearn.nn.models.aae.point_3d_aae import AAE3d
-from numba import cuda
-from pathos.multiprocessing import ProcessingPool as Pool
-from simtk.openmm.app.pdbfile import PDBFile
-from sklearn.neighbors import LocalOutlierFactor
-from torchsummary import summary
-
 from deepdrivemd.agents.stream.config import OutlierDetectionConfig
 from deepdrivemd.data.stream.aggregator_reader import (
     StreamContactMapVariable,
@@ -35,6 +28,12 @@ from deepdrivemd.data.stream.enumerations import DataStructure
 from deepdrivemd.data.stream.OutlierDB import OutlierDB
 from deepdrivemd.models.keras_cvae.model import CVAE
 from deepdrivemd.utils import Timer, timer
+from mdlearn.nn.models.aae.point_3d_aae import AAE3d
+from numba import cuda
+from pathos.multiprocessing import ProcessingPool as Pool
+from simtk.openmm.app.pdbfile import PDBFile
+from sklearn.neighbors import LocalOutlierFactor
+from torchsummary import summary
 
 pool = Pool(39)
 

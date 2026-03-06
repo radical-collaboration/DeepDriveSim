@@ -1,4 +1,4 @@
-"""Unit tests for pipelines.ddmd_pipeline.data.api module."""
+"""Unit tests for workflows.ddmd_workflow.data.api module."""
 
 import json
 from pathlib import Path
@@ -7,7 +7,7 @@ import pytest
 
 MDAnalysis = pytest.importorskip("MDAnalysis", reason="MDAnalysis not installed")
 
-from pipelines.ddmd_pipeline.data.api import DeepDriveMD_API, Stage_API  # noqa: E402
+from workflows.ddmd_workflow.data.api import DeepDriveMD_API, Stage_API  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,6 @@ import time
 from typing import List, Tuple
 
 import numpy as np
-
 from deepdrivemd.data.stream.aggregator_reader import StreamContactMapVariable, Streams
 from deepdrivemd.data.stream.enumerations import DataStructure
 from deepdrivemd.models.keras_cvae.model import CVAE

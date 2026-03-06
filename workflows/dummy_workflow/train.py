@@ -77,12 +77,12 @@ async def train(
 
     try:
         model = await to_thread(pickle.load, open(model_filename, "rb"))
-    except:
+    except Exception:
         try:
             from sklearn.linear_model import LinearRegression
 
             model = LinearRegression()
-        except:
+        except Exception:
             return "No model could be created"
 
     X_all, y_all = [], []
@@ -97,7 +97,7 @@ async def train(
             print(f"Using data from {file} for training")
             try:
                 data = await to_thread(np.load, file)
-                X_labeled = data["X"]
+                X_labeled = data["x"]
                 y_labeled = data["y"]
                 X_all.append(X_labeled)
                 y_all.append(y_labeled)
@@ -112,7 +112,7 @@ async def train(
                 await to_thread(model.fit, X_combined, y_combined)
                 await to_thread(pickle.dump, model, open(model_filename, "wb"))
                 print(f"Model saved to {model_filename}")
-            except:
+            except Exception:
                 pass
 
     # Run this to extend execution time

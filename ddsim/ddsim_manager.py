@@ -5,7 +5,7 @@
 
 import asyncio
 from collections import OrderedDict
-from typing import Optional, Any
+from typing import Any, Optional
 
 from ddsim.logger import Logger
 
@@ -22,7 +22,7 @@ class DDSimManager:
         - stop_simulation (returns True if sim should be canceled)
         - add_sims_to_queue (re-queue paused sims)
         - post_process_sim (per-simulation cleanup)
-        - run_inference (collect prediction scores)
+        - evaluate_simulations (collect prediction scores)
         - close
     Optional:
         - free_resources_for_train (default False)
@@ -39,8 +39,12 @@ class DDSimManager:
         self.sleep_time = 20  # Delay between prediction/start train checks
         self.debug = False
 
+        # Workflow flags — set these in your workflow subclass to control behavior:
+        self.call_finalize_results = False
+        self.call_evaluate_simulations = False
         self.run_workflow = True
         self.free_resources_for_train = False
+        self.call_cancel_simulations = False
 
         # ---- resource manager ----------------------------------------
         self._rm = resource_manager
@@ -82,7 +86,9 @@ class DDSimManager:
         asyncio.CancelledError
             If the slot is preempted before being granted.
         """
-        assert self._rm is not None, "_wait_for_resource called without a ResourceManager"
+        assert self._rm is not None, (
+            "_wait_for_resource called without a ResourceManager"
+        )
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[None] = loop.create_future()
 
@@ -110,29 +116,31 @@ class DDSimManager:
                     # Mark before cancelling so _on_sim_done skips release().
                     self._rm_preempted_ids.add(task_id)
                     cancel_handle[0].cancel()
+
             loop.call_soon_threadsafe(_handle)
 
         cfg = self.tasks_config[task_type]
-        priority         = int(cfg.get("priority", 10))
-        task_cpus        = int(cfg.get("cores_per_rank",     1))
-        task_gpus        = float(cfg.get("gpus_per_rank",   0.0))
+        priority = int(cfg.get("priority", 10))
+        task_cpus = int(cfg.get("cores_per_rank", 1))
+        task_gpus = float(cfg.get("gpus_per_rank", 0.0))
 
         if self.debug:
             self.logger.debug(
                 f"[Sim {task_id}] Requesting resource slot, "
-                f"workflow_id={self.workflow_id}, task_type={task_type}, priority={priority}, "
+                f"workflow_id={self.workflow_id}, task_type={task_type}, "
+                f"priority={priority}, "
                 f"cpus={task_cpus}, gpus={task_gpus}"
             )
 
         self._rm.request(
-            task_id      = task_id,
-            workflow_id  = self.workflow_id,
-            task_type    = task_type,
-            priority     = priority,
-            cpus         = task_cpus,
-            gpus         = task_gpus,
-            on_granted   = on_granted,
-            on_preempted = on_preempted,
+            task_id=task_id,
+            workflow_id=self.workflow_id,
+            task_type=task_type,
+            priority=priority,
+            cpus=task_cpus,
+            gpus=task_gpus,
+            on_granted=on_granted,
+            on_preempted=on_preempted,
         )
         await fut
 
@@ -149,13 +157,6 @@ class DDSimManager:
         Specify any post process required after each sim completed
         """
         raise NotImplementedError("post_process_sim must be implemented")
-
-    # --------------------------------------------------------------------------
-    def post_process(self, *args, **kwargs):
-        """
-        Specify any post process required after each Inference iteration
-        """
-        raise NotImplementedError("post_process must be implemented")
 
     # --------------------------------------------------------------------------
     def stop_simulation(self, *args, **kwargs):
@@ -191,13 +192,6 @@ class DDSimManager:
 
         If only ``self.train_models`` is used, this method can be left
         as the default no-op.
-        """
-        pass
-
-    # --------------------------------------------------------------------------
-    async def run_inference(self):
-        """Collect prediction scores for all running simulations.
-        Override this with actual logic in workflow subclass.
         """
         pass
 
@@ -244,9 +238,6 @@ class DDSimManager:
             if sim_idx in self._perm_cancelled:
                 # Prediction-based kill — already in completed_sims, just clean up.
                 self._perm_cancelled.discard(sim_idx)
-                self.logger.task_killed(
-                    f"Sim {sim_idx} permanently killed", component="simulation"
-                )
             else:
                 # Resource-freeing cancel — re-queue for later re-execution.
                 self.logger.info(
@@ -257,7 +248,9 @@ class DDSimManager:
         else:
             exc = task.exception()
             if exc:
-                self.logger.error(f"Sim {sim_idx} failed: {exc}", component="simulation")
+                self.logger.error(
+                    f"Sim {sim_idx} failed: {exc}", component="simulation"
+                )
             else:
                 self.completed_sims.append(sim_idx)
                 self.logger.task_completed(f"Sim {sim_idx}", component="simulation")
@@ -267,8 +260,6 @@ class DDSimManager:
     async def submit_sims(self):
         """Submit simulations from the queue and register them."""
         while not self.shutting_down.is_set():
-
-            await self.monitor_sims()  # yield so pending done-callbacks can fire
 
             if self.sim_batch_size <= 0:
                 await asyncio.sleep(1)
@@ -288,8 +279,9 @@ class DDSimManager:
                 sim_idx = sim_inputs["sim_idx"]
                 cancel_handle = []
                 if self._rm is not None:
-                    await self._wait_for_resource(sim_idx, 'simulation',
-                                                  cancel_handle=cancel_handle)
+                    await self._wait_for_resource(
+                        sim_idx, "simulation", cancel_handle=cancel_handle
+                    )
 
                 simul = self.simulation(sim_inputs=sim_inputs)
 
@@ -300,10 +292,7 @@ class DDSimManager:
                     cancel_handle.append(simul)
 
                 # _on_sim_done handles RM release + unregistration when the
-                # task finishes.  Using a done_callback (rather than awaiting
-                # inside monitor_sims) prevents a deadlock where submit_sims
-                # is blocked waiting for the next resource slot while completed
-                # sims are never cleaned up.
+                # task finishes.
                 simul.add_done_callback(
                     lambda t, sid=sim_idx: self._on_sim_done(t, sid)
                 )
@@ -316,11 +305,6 @@ class DDSimManager:
 
             self.sim_batch_size -= num_to_submit
             await asyncio.sleep(0.1)
-
-    # --------------------------------------------------------------------------
-    async def monitor_sims(self):
-        """Yield to let pending sim done-callbacks fire."""
-        await asyncio.sleep(0)
 
     # --------------------------------------------------------------------------
     async def monitor_training_data(self):
@@ -338,14 +322,41 @@ class DDSimManager:
         self.logger.info("Training data ready.")
 
     # --------------------------------------------------------------------------
+    async def _free_resources_no_rm(self) -> None:
+        """
+        Cancel up to ``training_cores`` running simulations to free compute
+        resources for training when no ResourceManager is available.
+
+        The cancelled sims are NOT permanently killed — ``_on_sim_done`` will
+        re-queue them via ``add_sims_to_queue`` so they resume after training.
+        """
+        n_to_cancel = getattr(self, "training_cores", 0)
+        sims_to_cancel = list(self.registered_sims.keys())[:n_to_cancel]
+        for sim_idx in sims_to_cancel:
+            task = self.registered_sims.get(sim_idx)
+            if task is not None and not task.done():
+                self.logger.info(
+                    f"Cancelling sim {sim_idx} to free resources for training",
+                    component="simulation",
+                )
+                task.cancel()
+        self.sim_batch_size -= n_to_cancel
+
+    # --------------------------------------------------------------------------
     async def cancel_sims(self):
-        """Cancel sims based on prediction score — permanent kill, counted as completed."""
+        """
+        Cancel sims based on prediction score — permanent kill,
+        counted as completed.
+        """
+        cancelled = False
         for sim_idx, pred in self.sim_predictions.items():
             if sim_idx not in self.registered_sims:
                 continue
 
             if self.debug:
-                self.logger.info(f"Sim {sim_idx} prediction: {pred}", component="prediction")
+                self.logger.info(
+                    f"Sim {sim_idx} prediction: {pred}", component="prediction"
+                )
 
             if self.stop_simulation(prediction=pred):
                 # Mark as permanently killed before cancelling so _on_sim_done
@@ -357,6 +368,7 @@ class DDSimManager:
                     f"Sim {sim_idx} permanently killed (prediction score {pred})",
                     component="simulation",
                 )
+                cancelled = True
 
     # --------------------------------------------------------------------------
     async def start(self):
@@ -382,6 +394,8 @@ class DDSimManager:
                 # Skip waiting for training data if it is available at start
                 if self.free_resources_for_train:
                     await self.monitor_training_data()  # blocks until training starts
+                    if self._rm is None:
+                        await self._free_resources_no_rm()
                 else:
                     while True:
                         start_training = await self.check_train_status()
@@ -393,49 +407,59 @@ class DDSimManager:
 
                 # Wait for a resource slot before submitting the request
                 if self._rm is not None:
-                    train_task = 'train_task'
-                    await self._wait_for_resource(train_task, 'train_model')
+                    train_task = "train_task"
+                    await self._wait_for_resource(train_task, "train_model")
 
+                self.logger.task_started("Model Training", component="training")
                 tasks = [self.train_model()]
                 tasks.extend(t() for t in self.train_models)
                 await asyncio.gather(*tasks)
-                
+                self.logger.task_completed("Model Training", component="training")
+
                 if self._rm is not None:
                     self._rm.release(train_task)
 
             else:
                 await asyncio.sleep(self.sleep_time)
 
-            self.logger.task_started("Model Inference", component="inference")
+            if self.call_evaluate_simulations:
+                self.logger.task_started("Sim evaluation", component="evaluate")
 
-            # Wait for a resource slot before submitting the request
-            if self._rm is not None:
-                inf_task = 'inf_task'
-                await self._wait_for_resource(inf_task, 'inference')
-
-            # Collect prediction scores for all simulations
-            await self.run_inference()
-            self.logger.task_completed("Model Inference", component="inference")
-            if self._rm is not None:
-                self._rm.release(inf_task)
-
-            cancel_task = asyncio.create_task(self.cancel_sims())
-
-            # Wait for a resource slot before submitting the request
-            if self._rm is not None:
-                post_task = 'post_task'
-                await self._wait_for_resource(post_task, 'post_process')
-
-            post_process_task = asyncio.create_task(self.post_process())
-
-            if self.sim_task_queue.empty():
-                await self.monitor_sims()
-
-            if post_process_task:
-                await post_process_task
+                # Wait for a resource slot before submitting the request
                 if self._rm is not None:
-                    self._rm.release(post_task)
-            await cancel_task
+                    inf_task = "inf_task"
+                    await self._wait_for_resource(inf_task, "inference")
+
+                # Collect prediction scores for all simulations
+                await self.evaluate_simulations()
+                self.logger.task_completed("Sim evaluation", component="evaluate")
+                if self._rm is not None:
+                    self._rm.release(inf_task)
+
+            if self.call_cancel_simulations:
+                self.logger.task_started("Sim cancelation", component="cancelation")
+                cancel_task = asyncio.create_task(self.cancel_sims())
+                self.logger.task_completed("Sim cancelation", component="cancelation")
+            else:
+                cancel_task = None
+
+            if self.call_finalize_results:
+                # Wait for a resource slot before submitting the request
+                if self._rm is not None:
+                    fin_task = "finalize_task"
+                    await self._wait_for_resource(fin_task, "finalize_results")
+
+                self.logger.task_started("Finalize Results", component="finalization")
+                finalize_results_task = asyncio.create_task(self.finalize_results())
+
+                if finalize_results_task:
+                    await finalize_results_task
+                    if self._rm is not None:
+                        self._rm.release(fin_task)
+                self.logger.task_completed("Finalize Results", component="finalization")
+
+            if cancel_task is not None:
+                await cancel_task
 
             await asyncio.sleep(1)
 

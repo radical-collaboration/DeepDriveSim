@@ -10,7 +10,6 @@ from typing import Dict, List, Tuple
 
 import adios2
 import numpy as np
-
 from deepdrivemd.aggregation.stream.config import StreamAggregation
 from deepdrivemd.data.stream.adios_utils import AdiosStreamStepRW
 from deepdrivemd.data.stream.enumerations import DataStructure

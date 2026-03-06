@@ -1,10 +1,7 @@
 import asyncio
-import json
 import os
-import random
 import shutil
 import sys
-from datetime import datetime
 from pathlib import Path
 
 try:
@@ -18,7 +15,9 @@ from rose.metrics import MODEL_ACCURACY
 
 from ddsim.ddsim_manager import DDSimManager
 
-task_description = {"shell": True, }  #"process_template": {}}
+task_description = {
+    "shell": True,
+}  # "process_template": {}}
 
 
 class DummyWorkflow(DDSimManager):
@@ -66,19 +65,20 @@ class DummyWorkflow(DDSimManager):
         self.free_resources_for_train = bool(
             kwargs.get("free_resources_for_train", True)
         )
-        self.run_post_process = True
+
+        # By default, do not call cancel_sims() after inference
+        self.call_cancel_simulations = True
+        self.call_finalize_results = True
+        self.call_evaluate_simulations = True
 
         self.iteration = 0
         self.retrain_model = self.training_epochs > 0
 
-        #python_path = '/ocean/projects/dmr170002p/goliyad/conda_env/dragon_workflow/bin/python'
-
         # Paths for executables and model
         self.src_dir = kwargs.get("src_dir", os.getenv("WORK_DIR", os.getcwd()))
         self.code_path = kwargs.get("code_path", f"{sys.executable} {self.src_dir}")
-        #self.code_path = kwargs.get("code_path", f" {self.src_dir}")
+        # self.code_path = kwargs.get("code_path", f" {self.src_dir}")
 
-        print(f"Code path: {self.code_path}")
         self.model_filename = home_dir / "model.pkl"
         self.prediction_file = home_dir / "predictions.yml"  # fixed typo ("predicions")
 
@@ -89,30 +89,30 @@ class DummyWorkflow(DDSimManager):
         self.sim_inputs = {}
         self._generate_sim_inputs(self.sim_inputs_dir, num_files=self.num_files)
 
-        self.tasks_config = {  
+        self.tasks_config = {
             "simulation": {
-                "priority":       8,
-                "ranks":          1,
+                "priority": 8,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0.5
+                "gpus_per_rank": 0.5,
             },
             "train_model": {
-                "priority":       10,
-                "ranks":          1,
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  1
+                "gpus_per_rank": 1,
             },
             "inference": {
-                "priority":       10,
-                "ranks":          1,
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0
+                "gpus_per_rank": 0,
             },
-            "post_process": {
-                "priority":       10,
-                "ranks":          1,
+            "finalize_results": {
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0
+                "gpus_per_rank": 0,
             },
         }
 
@@ -149,13 +149,14 @@ class DummyWorkflow(DDSimManager):
         """Register learner tasks: simulation, training, active learning, prediction."""
 
         @self.learner.simulation_task()
-        #@self.flow.executable_task
         async def simulation(task_description=task_description, **kwargs):
             sim_idx = kwargs["sim_inputs"]["sim_idx"]
             filename = self.sim_inputs[sim_idx]
-            args = f"--output_dir {self.sim_output_dir} --sim_tag {sim_idx} --filename {filename}"
+            args = (
+                f"--output_dir {self.sim_output_dir} --sim_tag {sim_idx} "
+                f"--filename {filename}"
+            )
             return f"{self.code_path}/simulation.py {args}"
-            #return f"torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 {self.code_path} "
 
         self.simulation = simulation
 
@@ -207,7 +208,7 @@ class DummyWorkflow(DDSimManager):
         return kwargs["prediction"] < self.prediction_threshold
 
     # --------------------------------------------------------------------------
-    async def run_inference(self) -> dict:
+    async def evaluate_simulations(self) -> dict:
         await self.prediction()
         with open(self.prediction_file) as f:
             predictions = yaml.safe_load(f)
@@ -289,7 +290,7 @@ class DummyWorkflow(DDSimManager):
                 f"Iteration {self.iteration} / Epoch {epoch + 1}", component="training"
             )
 
-            train_task = await self.training()
+            await self.training()
             self.logger.task_started("Model Training", component="training")
 
             should_stop, metric_val = await self.check_accuracy()
@@ -301,6 +302,7 @@ class DummyWorkflow(DDSimManager):
                     f"Accuracy ({metric_val}) reached threshold → stopping training"
                 )
                 self.retrain_model = False
+                self.sim_batch_size += self.training_cores
                 self.training_cores = 0
                 break
             self.logger.task_completed("Check Accuracy", component="training")
@@ -310,7 +312,8 @@ class DummyWorkflow(DDSimManager):
             self.logger.task_completed("Active Learning", component="training")
 
     # --------------------------------------------------------------------------
-    async def post_process(self):
+    async def finalize_results(self):
+        print(len(self.completed_sims) , self.num_files)
         if len(self.completed_sims) >= self.num_files:
             self.shutting_down.set()
             self.run_workflow = False

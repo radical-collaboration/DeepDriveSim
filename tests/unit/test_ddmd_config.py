@@ -1,11 +1,11 @@
-"""Unit tests for pipelines.ddmd_pipeline.config module."""
+"""Unit tests for workflows.ddmd_workflow.config module."""
 
 from pathlib import Path
 
 import pytest
 import yaml
 
-from pipelines.ddmd_pipeline.config import (
+from workflows.ddmd_workflow.config import (
     AgentStageConfig,
     AgentTaskConfig,
     AggregationStageConfig,

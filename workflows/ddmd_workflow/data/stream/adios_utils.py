@@ -4,7 +4,6 @@ from typing import Dict, Tuple
 
 import adios2
 import numpy as np
-
 from deepdrivemd.data.stream.enumerations import DataStructure
 
 

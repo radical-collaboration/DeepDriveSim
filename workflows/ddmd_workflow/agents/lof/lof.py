@@ -191,7 +191,9 @@ def generate_outliers(
     # Collect outlier metadata used to create PDB files down stream
     outliers = []
     for outlier_ind, intrinsic_score, extrinsic_score in zip(
-        outlier_inds, intrinsic_scores, extrinsic_scores  # type: ignore[arg-type, misc]
+        outlier_inds,
+        intrinsic_scores,
+        extrinsic_scores,  # type: ignore[arg-type, misc]
     ):
         # divmod returns a tuple of quotient and remainder
         sampled_index, frame = divmod(outlier_ind, cfg.n_traj_frames)  # type: ignore[operator]
@@ -219,7 +221,6 @@ def main(cfg: OutlierDetectionConfig, encoder_gpu: int, distributed: bool) -> No
     comm_size, comm_rank = setup_mpi(comm)
 
     if comm_rank == 0:
-
         # Collect training data
         api = DeepDriveMD_API(cfg.experiment_directory)
 
@@ -266,7 +267,6 @@ def main(cfg: OutlierDetectionConfig, encoder_gpu: int, distributed: bool) -> No
         )
 
     if comm_rank == 0:
-
         with Timer("agent_get_intrinsic_score"):
             intrinsic_scores, intrinsic_inds = get_intrinsic_score(embeddings, cfg)
 

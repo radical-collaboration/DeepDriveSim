@@ -20,6 +20,7 @@ cd $DDSim_DIR
 pip install -e .
 cd $WORK_DIR
 pip install -r "requirements.txt"
+conda deactivate
 
 
 ##############################################
@@ -28,7 +29,9 @@ pip install -r "requirements.txt"
 conda create -y -p $CONDA_ENV/dragon_workflow python=3.10
 conda activate $CONDA_ENV/dragon_workflow
 pip install --upgrade pip setuptools wheel
-cd $DDSim_DIR
-pip install -e ".[dragon]"
 cd $WORK_DIR
 pip install -r "requirements.txt"
+cd $DDSim_DIR
+pip install -e ".[dragon]"
+conda deactivate
+cd $WORK_DIR

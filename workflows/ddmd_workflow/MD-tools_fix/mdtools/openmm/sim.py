@@ -1,10 +1,10 @@
 import random
 from pathlib import Path
 from typing import Optional, Tuple, Union
+
 import openmm
-import openmm.unit as u
 import openmm.app as app
-import sys
+import openmm.unit as u
 
 PathLike = Union[str, Path]
 

@@ -1,8 +1,9 @@
 # sim_async.py
 import argparse
-from pathlib import Path
-import numpy as np
 import asyncio
+from pathlib import Path
+
+import numpy as np
 
 
 def complicated_function(x: np.ndarray) -> np.ndarray:
@@ -18,19 +19,19 @@ def complicated_function(x: np.ndarray) -> np.ndarray:
 
 async def simulate_one(output_file: Path):
     """Run a single simulation iteration asynchronously."""
-    X = np.random.uniform(low=0.0, high=1.0, size=(500, 1))
+    x = np.random.uniform(low=0.0, high=1.0, size=(500, 1))
 
     # Run CPU-heavy loop in a thread to avoid blocking event loop
     def run_math():
         y = 0
         for _ in range(100):
-            y += complicated_function(X)
+            y += complicated_function(x)
         return y
 
     y = await asyncio.to_thread(run_math)
 
     # Save results asynchronously
-    np_bytes = await asyncio.to_thread(np.savez_compressed, output_file, X=X, y=y)
+    await asyncio.to_thread(np.savez_compressed, output_file, x=x, y=y)
 
     # print(f"Saved simulation to {output_file}")
 
@@ -57,7 +58,6 @@ async def run_simulation(output_dir: str, sim_tag: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Run a simulation (async)")
-    # parser.add_argument('--input_dir', type=str, required=True, help='Path to input file')
     parser.add_argument(
         "--output_dir",
         type=str,

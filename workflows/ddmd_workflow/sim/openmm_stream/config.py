@@ -2,9 +2,8 @@ from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
-from pydantic import root_validator
-
 from deepdrivemd.config import MolecularDynamicsTaskConfig
+from pydantic import root_validator
 
 
 class OpenMMConfig(MolecularDynamicsTaskConfig):

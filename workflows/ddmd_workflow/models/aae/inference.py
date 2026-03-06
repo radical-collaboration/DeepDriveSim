@@ -6,13 +6,16 @@ if TYPE_CHECKING:
 
 import numpy as np
 import torch  # type: ignore[import]
-from molecules.ml.datasets import PointCloudDataset  # type: ignore[import]
-from molecules.ml.unsupervised.point_autoencoder import AAE3dHyperparams  # type: ignore[import]
-from molecules.ml.unsupervised.point_autoencoder.aae import Encoder  # type: ignore[import]
-from torch.utils.data import DataLoader, Dataset, Subset  # type: ignore[import]
-
 from deepdrivemd.models.aae.config import AAEModelConfig
 from deepdrivemd.utils import PathLike, setup_mpi
+from molecules.ml.datasets import PointCloudDataset  # type: ignore[import]
+from molecules.ml.unsupervised.point_autoencoder import (
+    AAE3dHyperparams,  # type: ignore[import]
+)
+from molecules.ml.unsupervised.point_autoencoder.aae import (
+    Encoder,  # type: ignore[import]
+)
+from torch.utils.data import DataLoader, Dataset, Subset  # type: ignore[import]
 
 
 def shard_dataset(dataset: Dataset, comm_size: int, comm_rank: int) -> Dataset:

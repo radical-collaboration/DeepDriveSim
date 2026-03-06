@@ -49,12 +49,13 @@ class Logger:
 
         self.component_colors = {
             "task": Colors.BRIGHT_GREEN,
-            "manager": Colors.BRIGHT_RED,
-            "workflow": Colors.BRIGHT_GREEN,
+            "cancelation": Colors.BRIGHT_RED,
+            "workflow": Colors.MAGENTA,
             "simulation": Colors.BLUE,
             "training": Colors.BRIGHT_YELLOW,
-            "prediction": Colors.GREEN,
-            "inference": Colors.BRIGHT_MAGENTA,
+            "manager": Colors.GREEN,
+            "evaluate": Colors.BRIGHT_MAGENTA,
+            "finalization": Colors.BRIGHT_BLUE,
         }
 
     def _colorize(self, text, color):

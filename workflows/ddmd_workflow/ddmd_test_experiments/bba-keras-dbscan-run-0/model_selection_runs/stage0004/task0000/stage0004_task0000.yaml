@@ -1,8 +1,0 @@
-experiment_directory: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/ddmd_test_experiments/bba-keras-dbscan-run-0
-stage_idx: 4
-task_idx: 0
-output_path: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/ddmd_test_experiments/bba-keras-dbscan-run-0/model_selection_runs/stage0004/task0000
-node_local_path: /tmp
-retrain_freq: 1
-checkpoint_dir: checkpoint
-checkpoint_suffix: .h5

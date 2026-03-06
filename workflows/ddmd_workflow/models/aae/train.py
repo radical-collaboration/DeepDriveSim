@@ -8,6 +8,10 @@ from typing import List, Optional, Tuple
 import torch  # type: ignore[import]
 import torch.distributed as dist  # type: ignore[import]
 import wandb  # type: ignore[import]
+from deepdrivemd.data.api import DeepDriveMD_API
+from deepdrivemd.data.utils import get_virtual_h5_file
+from deepdrivemd.models.aae.config import AAEModelConfig
+from deepdrivemd.selection.latest.select_model import get_model_path
 from molecules.ml.callbacks import (  # type: ignore[import]
     CheckpointCallback,
     LossCallback,
@@ -17,14 +21,12 @@ from molecules.ml.callbacks import (  # type: ignore[import]
 
 # molecules stuff
 from molecules.ml.hyperparams import OptimizerHyperparams  # type: ignore[import]
-from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams  # type: ignore[import]
+from molecules.ml.unsupervised.point_autoencoder import (  # type: ignore[import]
+    AAE3d,
+    AAE3dHyperparams,
+)
 from torch.nn.parallel import DistributedDataParallel as DDP  # type: ignore[import]
 from torch.utils.data import DataLoader, Subset  # type: ignore[import]
-
-from deepdrivemd.data.api import DeepDriveMD_API
-from deepdrivemd.data.utils import get_virtual_h5_file
-from deepdrivemd.models.aae.config import AAEModelConfig
-from deepdrivemd.selection.latest.select_model import get_model_path
 
 
 def setup_wandb(

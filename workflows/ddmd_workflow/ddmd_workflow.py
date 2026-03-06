@@ -22,11 +22,9 @@ class DDMdWorkflow(DDSimManager):
         # Asyncflow engine for registering and dispatching tasks
         self.flow = kwargs.get("asyncflow", None)
         if self.flow is None:
-            raise ValueError('Unable to initiate DDMdWorkflow w/o asyncflow')
+            raise ValueError("Unable to initiate DDMdWorkflow w/o asyncflow")
 
         config = kwargs.get("config")
-
-        
 
         # Load and validate experiment configuration from YAML
         self.experiment_config = ExperimentConfig.from_yaml(config)
@@ -35,48 +33,48 @@ class DDMdWorkflow(DDSimManager):
         self.skip_aggregation = agg_stage.skip_aggregation
         self.api = DeepDriveMD_API(self.experiment_config.experiment_directory)
 
-        self.tasks_config = {  
+        self.tasks_config = {
             "simulation": {
-                "priority":       10,
-                "ranks":          1,
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0.5
+                "gpus_per_rank": 0.5,
             },
             "train_model": {
-                "priority":       10,
-                "ranks":          1,
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  1
+                "gpus_per_rank": 1,
             },
             "selection": {
-                "priority":       10,
-                "ranks":          1,
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0,
-                "on_completion":  "inference"
+                "gpus_per_rank": 0,
+                "on_completion": "inference",
             },
             "aggregation": {
-                "priority":       10,
-                "ranks":          1,
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0,
-                "on_completion":  "inference"
+                "gpus_per_rank": 0,
+                "on_completion": "inference",
             },
             "inference": {
-                "priority":       10,
-                "ranks":          1,
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0
+                "gpus_per_rank": 0,
             },
-            "post_process": {
-                "priority":       10,
-                "ranks":          1,
+            "finalize_results": {
+                "priority": 10,
+                "ranks": 1,
                 "cores_per_rank": 1,
-                "gpus_per_rank":  0
+                "gpus_per_rank": 0,
             },
         }
 
-        self.workflow_id = 'ddsim_workflow'
+        self.workflow_id = "ddsim_workflow"
         # Stage index tracks the current DeepDriveMD iteration (0-based)
         self.stage_idx = 0
 
@@ -96,6 +94,10 @@ class DDMdWorkflow(DDSimManager):
 
         # No resource freeing needed: sims and training don't share resources
         self.free_resources_for_train = False
+        # By default, do not call cancel_sims() after inference
+        self.call_cancel_simulations = True
+        self.call_finalize_results = True
+        self.call_evaluate_simulations = True
 
         # Number of cores to free for training (used by monitor_training_data)
         self.training_cores = 1
@@ -112,8 +114,6 @@ class DDMdWorkflow(DDSimManager):
         self.sim_inputs = {}
         self.train_models = []
 
-        print('fin init of DDMdWorkflow')
-
     # --------------------------------------------------------------------------
     def _generate_stage_config(self):
         """Initialize each stage's task_config with shared experiment settings.
@@ -125,23 +125,23 @@ class DDMdWorkflow(DDSimManager):
 
         cfg = self.experiment_config.molecular_dynamics_stage
         self._init_update_config(cfg)
-        stage_config['molecular_dynamics_stage'] = cfg
+        stage_config["molecular_dynamics_stage"] = cfg
 
         cfg = self.experiment_config.machine_learning_stage
         self._init_update_config(cfg)
-        stage_config['machine_learning_stage'] = cfg
+        stage_config["machine_learning_stage"] = cfg
 
         cfg = self.experiment_config.aggregation_stage
         self._init_update_config(cfg)
-        stage_config['aggregation_stage'] = cfg
+        stage_config["aggregation_stage"] = cfg
 
         cfg = self.experiment_config.agent_stage
         self._init_update_config(cfg)
-        stage_config['agent_stage'] = cfg
+        stage_config["agent_stage"] = cfg
 
         cfg = self.experiment_config.model_selection_stage
         self._init_update_config(cfg)
-        stage_config['model_selection_stage'] = cfg
+        stage_config["model_selection_stage"] = cfg
 
         return stage_config
 
@@ -153,21 +153,21 @@ class DDMdWorkflow(DDSimManager):
         ranks, cores, GPUs, and pre-exec commands for that stage.
         """
         task_descriptions = {}
-        task_descriptions['molecular_dynamics_stage'] = self._generate_task_description(
-                self.experiment_config.molecular_dynamics_stage
-            )
-        task_descriptions['machine_learning_stage'] = self._generate_task_description(
-                self.experiment_config.machine_learning_stage
-            )
-        task_descriptions['aggregation_stage'] = self._generate_task_description(
-                self.experiment_config.aggregation_stage
-            )
-        task_descriptions['agent_stage'] = self._generate_task_description(
-                self.experiment_config.agent_stage
-            )
-        task_descriptions['model_selection_stage'] = self._generate_task_description(
-                self.experiment_config.model_selection_stage
-            )
+        task_descriptions["molecular_dynamics_stage"] = self._generate_task_description(
+            self.experiment_config.molecular_dynamics_stage
+        )
+        task_descriptions["machine_learning_stage"] = self._generate_task_description(
+            self.experiment_config.machine_learning_stage
+        )
+        task_descriptions["aggregation_stage"] = self._generate_task_description(
+            self.experiment_config.aggregation_stage
+        )
+        task_descriptions["agent_stage"] = self._generate_task_description(
+            self.experiment_config.agent_stage
+        )
+        task_descriptions["model_selection_stage"] = self._generate_task_description(
+            self.experiment_config.model_selection_stage
+        )
         return task_descriptions
 
     # --------------------------------------------------------------------------
@@ -184,12 +184,12 @@ class DDMdWorkflow(DDSimManager):
     def _generate_task_description(self, config):
         """Build a single task resource description from a stage config."""
         task_description = {
-                "ranks": 1,
-                "cores_per_rank": config.cpu_reqs,
-                "gpus_per_rank": config.gpu_reqs,
-                "pre_exec": config.pre_exec,
-                "shell": True,
-            }
+            "ranks": 1,
+            "cores_per_rank": config.cpu_reqs,
+            "gpus_per_rank": config.gpu_reqs,
+            "pre_exec": config.pre_exec,
+            "shell": True,
+        }
         return task_description
 
     # --------------------------------------------------------------------------
@@ -225,7 +225,7 @@ class DDMdWorkflow(DDSimManager):
         return False
 
     # --------------------------------------------------------------------------
-    async def post_process(self):
+    async def finalize_results(self):
         """Advance to next iteration or signal shutdown if max reached.
 
         Increments stage_idx and queues the next batch of simulation
@@ -241,7 +241,6 @@ class DDMdWorkflow(DDSimManager):
         for sim_idx in range(self.num_sims):
             await self.sim_task_queue.put({"sim_idx": sim_idx})
             self.sim_inputs[sim_idx] = None
-
 
     # --------------------------------------------------------------------------
     async def check_train_status(self):
@@ -284,7 +283,7 @@ class DDMdWorkflow(DDSimManager):
             cfg_path = stage_api.config_path(self.stage_idx, task_idx)
             assert cfg_path is not None
             cfg.task_config.dump_yaml(cfg_path)
-            str_argument = ' '.join(str(argument) for argument in cfg.arguments)
+            str_argument = " ".join(str(argument) for argument in cfg.arguments)
             cmd = f"{cfg.executable} {str_argument} -c {cfg_path.as_posix()} "
             return output_path, cmd
 
@@ -292,24 +291,27 @@ class DDMdWorkflow(DDSimManager):
         api = self.api
 
         # --- Simulation task: runs MD for each input PDB ---
-        task_description = self.task_descriptions['molecular_dynamics_stage']
+        task_description = self.task_descriptions["molecular_dynamics_stage"]
+
         @self.flow.executable_task
         async def simulation(task_description=task_description, **kwargs):
-            cfg = stage_config['molecular_dynamics_stage']
+            cfg = stage_config["molecular_dynamics_stage"]
             # Extract sim index and PDB file from the queued sim_idx
             sim_idx = kwargs["sim_inputs"]["sim_idx"]
             cfg.task_config.pdb_file = self.sim_inputs[sim_idx]
             stage_api = api.molecular_dynamics_stage
             _, cmd = _update_stage_config(stage_api, cfg, sim_idx)
             return cmd
+
         self.simulation = simulation
 
         # --- Aggregation task: combines MD outputs (optional) ---
         if not self.skip_aggregation:
-            task_description = self.task_descriptions['aggregation_stage']
+            task_description = self.task_descriptions["aggregation_stage"]
+
             @self.flow.executable_task
             async def aggregation(task_description=task_description):
-                cfg = stage_config['aggregation_stage']
+                cfg = stage_config["aggregation_stage"]
                 stage_api = api.aggregation_stage
                 _, cmd = _update_stage_config(stage_api, cfg, task_idx=0)
                 return cmd
@@ -319,10 +321,11 @@ class DDMdWorkflow(DDSimManager):
             self.aggregation = None
 
         # --- Training task: trains ML model on aggregated data ---
-        task_description = self.task_descriptions['machine_learning_stage']
+        task_description = self.task_descriptions["machine_learning_stage"]
+
         @self.flow.executable_task
         async def training(task_description=task_description):
-            cfg = stage_config['machine_learning_stage']
+            cfg = stage_config["machine_learning_stage"]
             stage_api = api.machine_learning_stage
             output_path, cmd = _update_stage_config(stage_api, cfg, task_idx=0)
             cfg.task_config.model_tag = stage_api.unique_name(output_path)
@@ -334,21 +337,23 @@ class DDMdWorkflow(DDSimManager):
         self.training = training
 
         # --- Agent task: runs inference/active learning ---
-        task_description = self.task_descriptions['agent_stage']
+        task_description = self.task_descriptions["agent_stage"]
+
         @self.flow.executable_task
         async def agent_stage(task_description=task_description):
-            cfg = stage_config['agent_stage']
+            cfg = stage_config["agent_stage"]
             stage_api = api.agent_stage
             _, cmd = _update_stage_config(stage_api, cfg, task_idx=0)
             return cmd
 
-        self.run_inference = agent_stage
+        self.evaluate_simulations = agent_stage
 
         # --- Model selection task: picks best model checkpoint ---
-        task_description = self.task_descriptions['model_selection_stage']
+        task_description = self.task_descriptions["model_selection_stage"]
+
         @self.flow.executable_task
         async def selection(task_description=task_description):
-            cfg = stage_config['model_selection_stage']
+            cfg = stage_config["model_selection_stage"]
             stage_api = api.model_selection_stage
             _, cmd = _update_stage_config(stage_api, cfg, task_idx=0)
             return cmd

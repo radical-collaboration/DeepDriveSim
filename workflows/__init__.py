@@ -1,13 +1,14 @@
 """
-DeepDriveSim is a Python package that provides a framework 
-for orchestrating AI-steered ensemble simulations. 
-It includes components for managing simulations, defining workflows, 
-and integrating with various simulation tools and machine learning models. 
-The package is designed to facilitate the development and execution of complex 
-simulation pipelines, enabling researchers to efficiently explore and analyze 
+DeepDriveSim is a Python package that provides a framework
+for orchestrating AI-steered ensemble simulations.
+It includes components for managing simulations, defining workflows,
+and integrating with various simulation tools and machine learning models.
+The package is designed to facilitate the development and execution of complex
+simulation workflows, enabling researchers to efficiently explore and analyze
 large parameter spaces in scientific computing domains.
 
 """
+
 
 def _optional_import(path, name):
     try:
@@ -17,14 +18,12 @@ def _optional_import(path, name):
         return None
 
 
-DDMdWorkflow = _optional_import(
-    "pipelines.ddmd_pipeline.ddmd_pipeline", "DDMdWorkflow"
-)
+DDMdWorkflow = _optional_import("workflows.ddmd_workflow.ddmd_workflow", "DDMdWorkflow")
 DummyWorkflow = _optional_import(
-    "pipelines.dummy_pipeline.dummy_pipeline", "DummyWorkflow"
+    "workflows.dummy_workflow.dummy_workflow", "DummyWorkflow"
 )
 MiniAppsWorkflow = _optional_import(
-    "pipelines.miniapps_pipeline.miniapps_pipeline", "MiniAppsWorkflow"
+    "workflows.miniapps_workflow.miniapps_workflow", "MiniAppsWorkflow"
 )
 
 __version__ = "0.1.0"

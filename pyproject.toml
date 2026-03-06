@@ -57,6 +57,8 @@ dev = [
     "pytest-asyncio",
     "pytest-cov",
     "pydantic-settings",
+    "numpy",
+    "pyyaml",
     "ruff",
     "tox"
 ]

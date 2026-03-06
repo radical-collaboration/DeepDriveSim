@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
-import os, sys, socket
-import time
 import argparse
+import os
+import socket
+import time
+
 import wfMiniAPI.kernel as wf
 
 
@@ -12,7 +14,7 @@ def parse_args():
         "--phase",
         type=int,
         default=0,
-        help="the current phase of workflow, in miniapp all phases do the same thing except rng",
+        help="the current phase of workflow, all phases do the same thing except rng",
     )
     parser.add_argument(
         "--mat_size",
@@ -52,16 +54,14 @@ def parse_args():
 def main():
 
     print(
-        "Temp for Darshan, sim, PID = {}, hostname = {}".format(
-            os.getpid(), socket.gethostname()
-        )
+        f"Temp for Darshan, sim, PID = {os.getpid()}, hostname = {socket.gethostname()}"
     )
     start_time = time.time()
 
     args = parse_args()
     print(args)
 
-    root_path = args.data_root_dir + "/phase{}".format(args.phase) + "/"
+    root_path = args.data_root_dir + f"/phase{args.phase}" + "/"
     print("root_path for data = ", root_path)
     os.makedirs(root_path, exist_ok=True)
 
@@ -69,7 +69,6 @@ def main():
 
     try:
         import cupy
-
         device = "gpu"
     except ImportError:
         device = "cpu"
@@ -78,9 +77,9 @@ def main():
     wf.generateRandomNumber(device, msz)
     wf.generateRandomNumber(device, msz)
 
-    print("Running time of step 1 is {} seconds".format(time.time() - start_time))
+    print(f"Running time of step 1 is {time.time() - start_time} seconds")
     for mi in range(args.num_step):
-        print("Simulation step {}/{}".format(mi + 1, args.num_step))
+        print(f"Simulation step {mi + 1}/{args.num_step}")
         elap = time.time()
         wf.axpy(device, msz)
         wf.axpy(device, msz)
@@ -88,22 +87,21 @@ def main():
         wf.inplaceCompute(device, msz * msz, 1, "square")
         wf.matMulGeneral(device, [msz, msz], [msz], ([1], [0]))
         print(
-            "Elapsed time for step {}/{}: {} seconds".format(
-                mi + 1, args.num_step, time.time() - elap
-            )
+            f"Elapsed time for step {mi + 1}/{args.num_step}: "
+            f"{time.time() - elap} seconds"
         )
-    print("Running time of step 2 is {} seconds".format(time.time() - start_time))
+    print(f"Running time of step 2 is {time.time() - start_time} seconds")
 
     if device == "gpu":
         wf.dataCopyD2H(msz)
         wf.dataCopyD2H(msz)
-    print("Running time of step 3 is {} seconds".format(time.time() - start_time))
+    print(f"Running time of step 3 is {time.time() - start_time} seconds")
 
     wf.writeNonMPI(args.write_size, root_path, args.instance_index)
     wf.readNonMPI(args.read_size, root_path, args.instance_index)
 
     end_time = time.time()
-    print("Total simulation time is {} seconds".format(end_time - start_time))
+    print(f"Total simulation time is {end_time - start_time} seconds")
 
 
 if __name__ == "__main__":

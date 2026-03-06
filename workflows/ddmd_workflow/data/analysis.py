@@ -1,5 +1,6 @@
+from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
     import numpy.typing as npt

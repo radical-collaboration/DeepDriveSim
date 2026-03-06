@@ -1,6 +1,7 @@
+from typing import List, Optional
+
 import h5py
 import numpy as np
-from typing import List, Optional
 
 AMINO_ACID_MAP = {
     "ALA": 1,

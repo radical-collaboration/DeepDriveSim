@@ -1,12 +1,14 @@
-import yaml
 import subprocess
+
+import yaml
 
 SLURM_YML_PATH = "slurm.yaml"
 # safer pkill patterns
 COMMAND_TO_RUN = "pkill -9 -f dragon; pkill -9 -f python3"
 
+
 def read_hostnames(yml_path):
-    with open(yml_path, "r") as f:
+    with open(yml_path) as f:
         data = yaml.safe_load(f)
     hosts = []
     for node_data in data.values():
@@ -15,22 +17,30 @@ def read_hostnames(yml_path):
             hosts.append(host)
     return hosts
 
+
 def ssh_and_kill(host):
-    ssh_cmd = f"ssh -o BatchMode=yes -o StrictHostKeyChecking=no {host} '{COMMAND_TO_RUN}'"
+    ssh_cmd = (
+        f"ssh -o BatchMode=yes -o StrictHostKeyChecking=no {host} '{COMMAND_TO_RUN}'"
+    )
     print(f"[INFO] Killing on {host}...")
     try:
         result = subprocess.run(
-            ssh_cmd, shell=True, check=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            ssh_cmd,
+            shell=True,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         print(f"[SUCCESS] {host}: {result.stdout.decode().strip()}")
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] {host}: {e.stderr.decode().strip()}")
 
+
 def main():
     hosts = read_hostnames(SLURM_YML_PATH)
     for host in hosts:
         ssh_and_kill(host)
+
 
 if __name__ == "__main__":
     main()

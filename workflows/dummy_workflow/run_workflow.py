@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-import asyncio
 import argparse
+import asyncio
+
 from radical.asyncflow import WorkflowEngine
+
 from workflows.dummy_workflow.dummy_workflow import DummyWorkflow
 
 SIM_CORES = 3  # For Testing only we set 3 CPUs for simulations
@@ -13,13 +15,15 @@ async def run_ddmd(config_file, use_dragon):
     if use_dragon:
         try:
             from rhapsody.backends import DragonExecutionBackendV3
-        except:
+        except ImportError as e:
+            print(f"Dragon backend requested but not available: {e}")
             use_dragon = False
 
     if use_dragon:
         engine = await DragonExecutionBackendV3()
     else:
         from rhapsody.backends import ConcurrentExecutionBackend
+
         engine = await ConcurrentExecutionBackend()
 
     # Create the async workflow engine
@@ -29,14 +33,14 @@ async def run_ddmd(config_file, use_dragon):
         asyncflow=asyncflow, training_cores=TRAIN_CORE, max_sim_batch=SIM_CORES
     )
 
-    #try:
+    try:
         # Run the workflow
-    await workflow.start()
-    #except Exception as e:
-    #    print(f"An error occurred during teaching: {e}")
-    #finally:
+        await workflow.start()
+    except Exception as e:
+       print(f"An error occurred during teaching: {e}")
+    finally:
         # Ensure cleanup regardless of errors
-    await workflow.close()
+        await workflow.close()
 
 
 if __name__ == "__main__":

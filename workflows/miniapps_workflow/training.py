@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
-import io, os, sys, socket
-import time
 import argparse
+import os
+import socket
+import time
+
 import wfMiniAPI.kernel as wf
 
 
@@ -52,7 +54,7 @@ def parse_args():
         "--mat_size",
         type=int,
         default=5000,
-        help="the matrix with have size of mat_size * mat_size, should be the same as it is in simulation",
+        help="the matrix size is mat_size * mat_size, the same as it is in simulation",
     )
     parser.add_argument(
         "--preprocess_time", type=float, default=20.0, help="time for doing preprocess"
@@ -81,27 +83,20 @@ def parse_args():
 def main():
 
     print(
-        "Temp for Darshan, ml, PID = {}, hostname = {}".format(
-            os.getpid(), socket.gethostname()
-        )
+        f"Temp for Darshan, ml, PID = {os.getpid()}, hostname = {socket.gethostname()}"
     )
     start_time = time.time()
 
     args = parse_args()
     print(args)
 
-    root_path = args.data_root_dir + "/phase{}".format(args.phase) + "/"
+    root_path = args.data_root_dir + f"/phase{args.phase}" + "/"
     print("root_path for data = ", root_path)
 
     device = args.device
 
-    # FIXME: Commented out since it can not load cupy... Weird!
-    #    if device == 'gpu':
-    #        print("gpu id is {}".format(cupy.cuda.runtime.getDeviceProperties(0)['uuid']))
-
     try:
         import cupy
-
         device = "gpu"
     except ImportError:
         device = "cpu"
@@ -118,12 +113,10 @@ def main():
         if device == "gpu":
             wf.dataCopyH2D(args.num_sample * args.dense_dim_in)
         print(
-            "epoch is {}, data movementi (CPU->GPU) takes {}".format(
-                epoch, time.time() - tt
-            )
+            f"epoch is {epoch}, data movementi (CPU->GPU) takes {time.time() - tt}"
         )
         tt = time.time()
-        for ii in range(args.num_mult):
+        for _ in range(args.num_mult):
             wf.matMulGeneral(
                 device,
                 [args.num_sample, args.dense_dim_in],
@@ -131,7 +124,7 @@ def main():
                 ([1], [0]),
             )
             wf.axpy(device, args.dense_dim_in * args.dense_dim_out)
-        print("epoch is {}, mult takes {}".format(epoch, time.time() - tt))
+        print(f"epoch is {epoch}, mult takes {time.time() - tt}")
         tt = time.time()
 
     if device == "gpu":
@@ -139,7 +132,7 @@ def main():
     wf.writeNonMPI(args.write_size, root_path, args.instance_index)
 
     end_time = time.time()
-    print("Total training time is {} seconds".format(end_time - start_time))
+    print(f"Total training time is {end_time - start_time} seconds")
 
 
 if __name__ == "__main__":
