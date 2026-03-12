@@ -1,0 +1,26 @@
+# Adaptive multi-type simulation workflow config
+# Loaded via ExchangeWorkflow.from_yaml(path)
+
+num_init_sims: 10
+experiment_dir: ${EXPERIMENT_DIR}
+
+tasks:
+  MD:
+    cpu_reqs: 4
+    gpu_reqs: 0.0
+    pre_exec:
+      - module load anaconda3
+      - conda activate ${CONDA_ENV}/conda-openmm
+    executable: ${CONDA_ENV}/conda-openmm/bin/python
+    arguments:
+      - ${WORK_DIR}/run_md.py
+
+  EXCHANGE:
+    cpu_reqs: 4
+    gpu_reqs: 1.0
+    pre_exec:
+      - module load anaconda3
+      - conda activate ${CONDA_ENV}/conda-openmm
+    executable: ${CONDA_ENV}/conda-openmm/bin/python
+    arguments:
+      - ${WORK_DIR}/exchange.py
