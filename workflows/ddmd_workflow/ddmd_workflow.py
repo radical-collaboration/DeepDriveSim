@@ -1,3 +1,4 @@
+import asyncio
 import itertools
 import shutil
 
@@ -16,8 +17,12 @@ class DDMdWorkflow(DDSimManager):
 
     def __init__(self, *args, **kwargs):
         # Initialize parent class (sets up logger, queues, event flags, etc.)
-        resource_manager = kwargs.get("resource_manager", None)
-        super().__init__(resource_manager=resource_manager)
+        super().__init__(name=kwargs.get("name", "ddsim"))
+
+        # on_ready: async callable injected by AsyncCampaignManager so that
+        # _signal_ready() can unblock dependent workflow groups (e.g. inference).
+        self._on_ready = kwargs.get("on_ready", None)
+        self._data_ready_signaled = False
 
         # Asyncflow engine for registering and dispatching tasks
         self.flow = kwargs.get("asyncflow", None)
@@ -32,47 +37,6 @@ class DDMdWorkflow(DDSimManager):
         agg_stage = self.experiment_config.aggregation_stage
         self.skip_aggregation = agg_stage.skip_aggregation
         self.api = DeepDriveMD_API(self.experiment_config.experiment_directory)
-
-        self.tasks_config = {
-            "simulation": {
-                "priority": 10,
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0.5,
-            },
-            "train_model": {
-                "priority": 10,
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "gpus_per_rank": 1,
-            },
-            "selection": {
-                "priority": 10,
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0,
-                "on_completion": "inference",
-            },
-            "aggregation": {
-                "priority": 10,
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0,
-                "on_completion": "inference",
-            },
-            "inference": {
-                "priority": 10,
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0,
-            },
-            "finalize_results": {
-                "priority": 10,
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0,
-            },
-        }
 
         self.workflow_id = "ddsim_workflow"
         # Stage index tracks the current DeepDriveMD iteration (0-based)
@@ -113,6 +77,14 @@ class DDMdWorkflow(DDSimManager):
         # Dict to store inputs for simulation
         self.sim_inputs = {}
         self.train_models = []
+
+    # --------------------------------------------------------------------------
+    async def _signal_ready(self) -> None:
+        """Signal the CM that this workflow has produced enough data."""
+        if self._on_ready is not None:
+            result = self._on_ready()
+            if asyncio.iscoroutine(result):
+                await result
 
     # --------------------------------------------------------------------------
     def _generate_stage_config(self):
@@ -233,6 +205,18 @@ class DDMdWorkflow(DDSimManager):
         restart PDBs from the previous iteration's predictions).
         """
         self.stage_idx += 1
+
+        # Signal dependent workflows (e.g. inference) once after the first
+        # complete iteration — enough data exists for downstream processing.
+        if not self._data_ready_signaled:
+            self._data_ready_signaled = True
+            self.logger.info(
+                f"Iteration {self.stage_idx} complete — "
+                "signaling ready for downstream workflows",
+                component=self.name,
+            )
+            await self._signal_ready()
+
         if self.stage_idx == self.experiment_config.max_iteration:
             self.shutting_down.set()
             self.run_workflow = False
@@ -368,14 +352,14 @@ class DDMdWorkflow(DDSimManager):
         Called by the parent's start() loop after check_train_status() is True.
         """
         self.iteration += 1
-        self.logger.task_started(f"Iteration {self.iteration}", component="training")
-        self.logger.info(f"{len(self.registered_sims)} simulation(s) running....")
+        self.logger.task_started(f"Iteration {self.iteration}", component=self.name)
+        self.logger.info(f"{len(self.registered_sims)} simulation(s) running....", component=self.name)
 
         if self.aggregation:
             await self.aggregation()
 
         await self.training()
-        self.logger.task_completed(f"Iteration {self.iteration}", component="training")
+        self.logger.task_completed(f"Iteration {self.iteration}", component=self.name)
 
         await self.selection()
 

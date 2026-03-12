@@ -71,6 +71,13 @@ async def train(
         data_ready = await check_sim_dir(sim_output_dir)
         if data_ready:
             break
+        # If sim_output_dir is empty but train_dir or val_dir already has data
+        # from a previous training iteration, proceed rather than waiting forever
+        # for new simulation outputs that may never arrive.
+        existing_train = await to_thread(list, train_dir.glob("*.npz"))
+        existing_val = await to_thread(list, val_dir.glob("*.npz"))
+        if existing_train or existing_val:
+            break
         await asyncio.sleep(1)
 
     await data_loading(sim_output_dir, train_dir, val_dir)

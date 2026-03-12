@@ -14,7 +14,7 @@ def _optional_import(path, name):
     try:
         module = __import__(path, fromlist=[name])
         return getattr(module, name)
-    except ModuleNotFoundError:
+    except Exception:
         return None
 
 

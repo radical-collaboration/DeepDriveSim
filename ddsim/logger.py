@@ -66,7 +66,7 @@ class Logger:
             datetime.now().strftime("%H:%M:%S.%f")[:-3], Colors.DIM
         )
         colored_level = self._colorize(
-            f"[{level.value}]", self.level_colors.get(level, Colors.WHITE)
+            f"[{self.name}-{level.value}]", self.level_colors.get(level, Colors.WHITE)
         )
 
         # Handle task-specific components

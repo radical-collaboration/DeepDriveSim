@@ -23,7 +23,7 @@ class MiniAppsWorkflow(DDSimManager):
 
     def __init__(self, **kwargs):
         # Initialize parent class (sets up logger, queues, etc.)
-        super().__init__()
+        super().__init__(name=kwargs.get("name", "ddsim"))
 
         self.flow = kwargs.get("asyncflow", None)
         self.learner = Learner(self.flow)
@@ -86,32 +86,6 @@ class MiniAppsWorkflow(DDSimManager):
         # To store input files
         self.sim_inputs = {}
 
-        self.tasks_config = {
-            "simulation": {
-                "priority": 8,
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0.5,
-            },
-            "train_model": {
-                "priority": 10,
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "gpus_per_rank": 1,
-            },
-            "inference": {
-                "priority": 10,
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0,
-            },
-            "finalize_results": {
-                "priority": 10,
-                "ranks": 1,
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0,
-            },
-        }
 
     # --------------------------------------------------------------------------
     @staticmethod
@@ -158,7 +132,7 @@ class MiniAppsWorkflow(DDSimManager):
     async def add_sims_to_queue(self, resubmitted_sims):
         for sim_idx in resubmitted_sims:
             await self.sim_task_queue.put({"sim_idx": sim_idx})
-            self.logger.info(f"Re-added Sim {sim_idx} back the queue")
+            self.logger.info(f"Re-added Sim {sim_idx} back the queue", component=self.name)
             if sim_idx not in self.sim_inputs:
                 raise ValueError(f"Unable to add  sim {sim_idx} to queue ")
 
@@ -179,7 +153,7 @@ class MiniAppsWorkflow(DDSimManager):
             Path(root_path, f"data_{rank}_{self.iteration}.h5") for rank in range(ranks)
         ]
 
-        self.logger.info(f"Waiting for {len(filenames)} file to start training... ")
+        self.logger.info(f"Waiting for {len(filenames)} file to start training... ", component=self.name)
         start_trainig = False
         while True:
             if start_trainig:
@@ -189,12 +163,12 @@ class MiniAppsWorkflow(DDSimManager):
             for filename in filenames:
                 if not filename.exists():
                     if self.debug:
-                        self.logger.info(f"File {filename} not found yet, wait...")
+                        self.logger.info(f"File {filename} not found yet, wait...", component=self.name)
                     start_trainig = False
                     await asyncio.sleep(1)
                     break
 
-        self.logger.info("All required files are available. Starting training...")
+        self.logger.info("All required files are available. Starting training...", component=self.name)
         return True
 
     # --------------------------------------------------------------------------
@@ -260,18 +234,18 @@ class MiniAppsWorkflow(DDSimManager):
     async def train_model(self):
         """Train until accuracy threshold is met or epochs are exhausted."""
         self.iteration += 1
-        self.logger.info(f"\nTraining Iteration {self.iteration}")
-        self.logger.info(f"{len(self.registered_sims)} simulation(s) running....")
+        self.logger.info(f"\nTraining Iteration {self.iteration}", component=self.name)
+        self.logger.info(f"{len(self.registered_sims)} simulation(s) running....", component=self.name)
 
         await self.training()
-        self.logger.task_completed("Training Completed")
+        self.logger.task_completed("Training Completed", component=self.name)
 
     # --------------------------------------------------------------------------
     async def finalize_results(self):
         if len(self.completed_sims) >= self.total_num_sim:
             self.shutting_down.set()
             self.run_workflow = False
-            self.logger.info("All sim have completed...")
+            self.logger.info("All sim have completed...", component=self.name)
 
     async def post_process_sim(self, sim_idx):
         pass
