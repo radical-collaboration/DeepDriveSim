@@ -3,13 +3,13 @@ import argparse
 import asyncio
 import os
 import random
+import zipfile
 from asyncio import to_thread
 from pathlib import Path
 from typing import Union
 
 import numpy as np
 import yaml
-import zipfile
 
 # Control how many files to load in parallel (tune for HPC)
 MAX_CONCURRENT_FILE_LOADS = 50
@@ -36,10 +36,9 @@ async def evaluate_npz_file(file: Path, model) -> float:
     """Evaluate a single .npz file and return its MSE."""
     try:
         data = await asyncio.to_thread(np.load, file)
-        x_eval = data["x"]
         y_eval = data["y"]
-    except (OSError, KeyError, EOFError, zipfile.BadZipFile) as e:
-        #print(f" Skipping corrupt file {file}: {e}")
+    except (OSError, KeyError, EOFError, zipfile.BadZipFile):
+        # print(f" Skipping corrupt file {file}: {e}")
         return None
 
     if len(y_eval) == 0:
@@ -54,15 +53,15 @@ async def evaluate_npz_file(file: Path, model) -> float:
 
 async def evaluate_simulation(sim_dir: Path, model) -> float:
     """Evaluate a single simulation directory asynchronously."""
-    #tasks = []
+    # tasks = []
     mses = []
     for file in sim_dir.iterdir():
         if file.is_file() and file.suffix == ".npz":
-            #tasks.append(evaluate_npz_file(file, model, sem))
+            # tasks.append(evaluate_npz_file(file, model, sem))
             mse = await evaluate_npz_file(file, model)
             mses.append(mse)
 
-    #mses = await asyncio.gather(*tasks)
+    # mses = await asyncio.gather(*tasks)
     mses = [m for m in mses if m is not None]
     return float(np.mean(mses)) if mses else 0
 
@@ -74,10 +73,10 @@ async def predict(model_filename: str, sim_output_dir: str, output_file: str) ->
     sim_output_dir = Path(sim_output_dir)
     results: dict[str, float] = {}
 
-    #sem = None  #asyncio.Semaphore(MAX_CONCURRENT_FILE_LOADS)  # limit concurrency
+    # sem = None  #asyncio.Semaphore(MAX_CONCURRENT_FILE_LOADS)  # limit concurrency
 
-    #tasks = []
-    #eval_results = []
+    # tasks = []
+    # eval_results = []
     for sim_dir in await async_iterdir(sim_output_dir):
         if not sim_dir.is_dir():
             continue
@@ -88,12 +87,12 @@ async def predict(model_filename: str, sim_output_dir: str, output_file: str) ->
         sim_tag = sim_dir.name
         sim_dir = sim_output_dir / sim_tag
         if sim_dir.is_dir():
-            #tasks.append((sim_tag, evaluate_simulation(sim_dir, model, sem)))
+            # tasks.append((sim_tag, evaluate_simulation(sim_dir, model, sem)))
             eval = await evaluate_simulation(sim_dir, model)
             results[sim_tag] = eval
-    #         
+    #
     #         eval_results.append(eval)
- 
+
     # eval_results = [e for e in eval_results if e is not None]
     # # Run simulations concurrently
     # #eval_results = await asyncio.gather(*(task for _, task in tasks))
@@ -102,13 +101,13 @@ async def predict(model_filename: str, sim_output_dir: str, output_file: str) ->
 
     print(f"\nPrediction completed. Saving results to {output_file}")
 
-    #def _write():
+    # def _write():
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, "w") as f:
         yaml.dump(results, f, sort_keys=True)
 
-    #await asyncio.to_thread(_write)
-    #await asyncio.sleep(10)
+    # await asyncio.to_thread(_write)
+    # await asyncio.sleep(10)
     # print("\nExiting Prediction ...")
     # return
 

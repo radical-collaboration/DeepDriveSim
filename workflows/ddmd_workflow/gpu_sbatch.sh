@@ -26,7 +26,9 @@ rm -rf $EXPRMNT_DIR
 
 unset SLURM_EXPORT_ENV
 module load anaconda3
-module load anaconda
+module load cuda/12.6.1
+module load cudnn/8.0.4
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 source activate base
 conda activate   $CONDA_ENV/deepdrivesim
 
@@ -35,4 +37,7 @@ sed -i "s|\${EXPRMNT_DIR}|$EXPRMNT_DIR|g" $INPUT_DIR/new_lassen-keras-dbscan.yam
 sed -i "s|\${CONDA_ENV}|$CONDA_ENV|g" $INPUT_DIR/new_lassen-keras-dbscan.yaml
 sed -i "s|\${WORK_DIR}|$WORK_DIR|g" $INPUT_DIR/new_lassen-keras-dbscan.yaml
 
-python -m run_workflow -c $INPUT_DIR/new_lassen-keras-dbscan.yaml
+rm *telemetry*/*
+
+dragon -s run_camp.py
+#python -m run_workflow -c $INPUT_DIR/new_lassen-keras-dbscan.yaml

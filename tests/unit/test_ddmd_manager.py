@@ -50,6 +50,7 @@ class TestSimulationLifecycle:
         await manager.collect_sim_inputs(n=2)
         manager.sim_batch_size = 2
 
+        manager.debug = True
         submit_task = asyncio.create_task(manager.submit_sims())
 
         await wait_until(lambda: len(manager.registered_sims) >= 2)
@@ -74,12 +75,13 @@ class TestSimulationLifecycle:
         manager.registered_sims["sim_0"] = done
         manager.registered_sims["sim_1"] = running
 
+        manager.debug = True
         await asyncio.sleep(0)  # Turn 1: done task completes, callback scheduled
         await asyncio.sleep(0)  # Turn 2: callback fires, _on_sim_done removes sim_0
 
         assert "sim_0" not in manager.registered_sims
         assert "sim_1" in manager.registered_sims
-        assert manager.sim_batch_size == 3  # max_sim_batch + training_cores + 1
+        assert manager.sim_batch_size == 1  # capped at max_sim_batch=1
         manager.logger.task_completed.assert_called()
 
     @pytest.mark.asyncio
@@ -101,7 +103,7 @@ class TestSimulationLifecycle:
 
         assert "sim_fail" not in manager.registered_sims
         assert "sim_ok" not in manager.registered_sims
-        assert manager.sim_batch_size == 4  # max_sim_batch + training_cores + 2
+        assert manager.sim_batch_size == 1  # capped at max_sim_batch=1
         manager.logger.error.assert_called()
 
 
@@ -132,7 +134,9 @@ class TestCancelSimsBehavior:
         manager.clean_unregistered_sims = clean_flag
 
         await manager.cancel_sims()
-        await asyncio.sleep(0)  # Turn 1: cancelled task's __step runs, callback scheduled
+        await asyncio.sleep(
+            0
+        )  # Turn 1: cancelled task's __step runs, callback scheduled
         await asyncio.sleep(0)  # Turn 2: done callback fires, _on_sim_done removes sim
 
         for sim in expected_deleted:

@@ -1,12 +1,13 @@
 # train_async.py
-import asyncio
-from pathlib import Path
-import pickle
 import argparse
-import numpy as np
+import asyncio
+import pickle
 import random
 import shutil
 from asyncio import to_thread
+from pathlib import Path
+
+import numpy as np
 
 VAL_SPLIT = 0.5
 MIN_TRAIN_SIZE = 1

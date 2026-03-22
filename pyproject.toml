@@ -55,18 +55,20 @@ lint = ["ruff"]
 dev = [
     "pytest",
     "pytest-asyncio",
+    "pytest-timeout",
     "pytest-cov",
     "pydantic-settings",
     "numpy",
     "pyyaml",
     "ruff",
-    "tox"
+    "tox<5",
+    "packaging>=23"
 ]
 
 # Dragon/RADICAL support
 dragon = [
     "dragonhpc",
-    "nvidia-ml-py"
+    "nvidia-ml-py",
 ]
 
 doc = [
@@ -99,6 +101,7 @@ minversion = "6.0"
 
 testpaths = ["tests"]
 asyncio_mode = "auto"
+timeout = 30
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",

@@ -1,16 +1,30 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
+from pathlib import Path
 
+import os
+
+import yaml
 from radical.asyncflow import WorkflowEngine
 
 from workflows.dummy_workflow.dummy_workflow import DummyWorkflow
 
-SIM_CORES = 3  # For Testing only we set 3 CPUs for simulations
-TRAIN_CORE = 1  # For Testing only we set 1 CPUs for training
+_DEFAULT_CONFIG = Path(__file__).parent / "config.yaml"
 
 
-async def run_ddmd(config_file, use_dragon):
+def _load_config(config_file: str) -> dict:
+    path = Path(config_file)
+    if path.exists():
+        with open(path) as f:
+            raw = yaml.safe_load(f) or {}
+        return {k: os.path.expandvars(v) if isinstance(v, str) else v for k, v in raw.items()}
+    return {}
+
+
+async def run_ddmd(config_file):
+    cfg = _load_config(config_file)
+    use_dragon = cfg.get("engine", "concurrent") == "dragon"
 
     if use_dragon:
         try:
@@ -28,19 +42,23 @@ async def run_ddmd(config_file, use_dragon):
 
     # Create the async workflow engine
     asyncflow = await WorkflowEngine.create(engine)
+
+    home_dir = Path(cfg.get("home_dir", Path.home() / "DDSim")).expanduser()
+
     # Initialize the workflow
     workflow = DummyWorkflow(
-        asyncflow=asyncflow, training_cores=TRAIN_CORE, max_sim_batch=SIM_CORES
+        config=cfg,
+        asyncflow=asyncflow,
+        home_dir=home_dir,
     )
 
     try:
-        # Run the workflow
         await workflow.start()
     except Exception as e:
-       print(f"An error occurred during teaching: {e}")
+        print(f"An error occurred during workflow execution: {e}")
     finally:
-        # Ensure cleanup regardless of errors
         await workflow.close()
+        await asyncflow.shutdown()
 
 
 if __name__ == "__main__":
@@ -51,12 +69,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_file",
         type=str,
-        default="config.yaml",
-        help="Path to workflow configuration file",
+        default=str(_DEFAULT_CONFIG),
+        help="Path to workflow configuration file (default: config.yaml next to this script)",
     )
-
-    parser.add_argument("--use_dragon", action="store_true", help="Use Dragon backend")
 
     args = parser.parse_args()
 
-    asyncio.run(run_ddmd(args.config_file, args.use_dragon))
+    asyncio.run(run_ddmd(args.config_file))

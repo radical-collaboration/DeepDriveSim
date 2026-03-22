@@ -1,4 +1,5 @@
 #!/bin/bash
+export PROJECT=/ocean/projects/dmr170002p/goliyad
 export BASE_DIR="${PROJECT}"
 export DDSim_DIR="${BASE_DIR}/DeepDriveSim"
 export WORK_DIR="${DDSim_DIR}/workflows/dummy_workflow"
@@ -26,8 +27,8 @@ conda deactivate
 ##############################################
 # 2. Dragon - Dummy workflow  env
 ##############################################
-conda create -y -p $CONDA_ENV/dragon_workflow python=3.10
-conda activate $CONDA_ENV/dragon_workflow
+conda create -y -p $CONDA_ENV/dummy_dragon_workflow python=3.10
+conda activate $CONDA_ENV/dummy_dragon_workflow
 pip install --upgrade pip setuptools wheel
 cd $WORK_DIR
 pip install -r "requirements.txt"

@@ -40,20 +40,20 @@ class DDSimManager:
         self.workflow_id = name
         self.logger = Logger(name=name, use_colors=True)
         self.registered_sims = OrderedDict()  # running:  {sim_idx: asyncio.Task}
-        self.sim_task_queue  = asyncio.Queue() # pending sim inputs
-        self.completed_sims  = []              # finished sim indices
+        self.sim_task_queue = asyncio.Queue()  # pending sim inputs
+        self.completed_sims = []  # finished sim indices
         self.sim_predictions = {}
-        self.train_models    = []
+        self.train_models = []
 
         self.sleep_time = 20
-        self.debug      = False
+        self.debug = False
 
         # Workflow flags — set in subclass:
-        self.call_finalize_results      = False
-        self.call_evaluate_simulations  = False
-        self.run_workflow               = True
-        self.free_resources_for_train   = False
-        self.call_cancel_simulations    = False
+        self.call_finalize_results = False
+        self.call_evaluate_simulations = False
+        self.run_workflow = True
+        self.free_resources_for_train = False
+        self.call_cancel_simulations = False
 
         # Sims permanently killed by cancel_sims (prediction-based).
         # _on_sim_done uses this to distinguish a permanent kill (no re-queue)
@@ -61,7 +61,7 @@ class DDSimManager:
         self._perm_cancelled: set = set()
 
         self.shutting_down = asyncio.Event()
-        self.logger.info("DDSim Manager initialized...", component=self.name)
+        self.logger.separator(f"{self.name} MANAGER STARTING")
 
     # --------------------------------------------------------------------------
     def add_sims_to_queue(self, *args, **kwargs):
@@ -118,7 +118,9 @@ class DDSimManager:
         else:
             exc = task.exception()
             if exc:
-                self.logger.error(f"Sim {sim_idx} failed: {exc}", component="simulation")
+                self.logger.error(
+                    f"Sim {sim_idx} failed: {exc}", component="simulation"
+                )
             else:
                 self.completed_sims.append(sim_idx)
                 if self.debug:
@@ -145,8 +147,10 @@ class DDSimManager:
                     break
 
                 sim_idx = sim_inputs["sim_idx"]
-                simul   = self.simulation(sim_inputs=sim_inputs)
-                simul.add_done_callback(lambda t, sid=sim_idx: self._on_sim_done(t, sid))
+                simul = self.simulation(sim_inputs=sim_inputs)
+                simul.add_done_callback(
+                    lambda t, sid=sim_idx: self._on_sim_done(t, sid)
+                )
 
                 if self.debug:
                     self.logger.task_started(f"Sim {sim_idx}", component="simulation")
@@ -168,7 +172,7 @@ class DDSimManager:
         Cancel up to training_cores running sims to free resources for training.
         Cancelled sims are re-queued by _on_sim_done and run again afterwards.
         """
-        n_to_cancel    = getattr(self, "training_cores", 0)
+        n_to_cancel = getattr(self, "training_cores", 0)
         sims_to_cancel = list(self.registered_sims.keys())[:n_to_cancel]
         for sim_idx in sims_to_cancel:
             task = self.registered_sims.get(sim_idx)
@@ -199,7 +203,9 @@ class DDSimManager:
                 self.logger.info(
                     f"Sim {sim_idx} prediction: {pred}", component="prediction"
                 )
-            if sim_idx in self.registered_sims and self.stop_simulation(prediction=pred):
+            if sim_idx in self.registered_sims and self.stop_simulation(
+                prediction=pred
+            ):
                 self._perm_cancelled.add(sim_idx)
                 self.completed_sims.append(sim_idx)
                 self.registered_sims[sim_idx].cancel()
@@ -213,7 +219,6 @@ class DDSimManager:
         """
         Main loop: submit sims, train, evaluate, cancel, finalize — until all done.
         """
-        self.logger.separator("DDSim MANAGER STARTING")
         await self.init_sim_queue()
         submit_task = asyncio.create_task(self.submit_sims())
 
@@ -240,7 +245,9 @@ class DDSimManager:
                         self.train_model(), *(t() for t in self.train_models)
                     )
                     if self.debug:
-                        self.logger.task_completed("Model Training", component="training")
+                        self.logger.task_completed(
+                            "Model Training", component="training"
+                        )
                 else:
                     await asyncio.sleep(self.sleep_time)
 
@@ -249,21 +256,31 @@ class DDSimManager:
                         self.logger.task_started("Sim evaluation", component="evaluate")
                     await self.evaluate_simulations()
                     if self.debug:
-                        self.logger.task_completed("Sim evaluation", component="evaluate")
+                        self.logger.task_completed(
+                            "Sim evaluation", component="evaluate"
+                        )
 
                 if self.call_cancel_simulations:
                     if self.debug:
-                        self.logger.task_started("Sim cancelation", component="cancel_sims")
+                        self.logger.task_started(
+                            "Sim cancelation", component="cancel_sims"
+                        )
                     await self.cancel_sims()
                     if self.debug:
-                        self.logger.task_completed("Sim cancelation", component="cancel_sims")
+                        self.logger.task_completed(
+                            "Sim cancelation", component="cancel_sims"
+                        )
 
                 if self.call_finalize_results:
                     if self.debug:
-                        self.logger.task_started("Finalize Results", component="finalization")
+                        self.logger.task_started(
+                            "Finalize Results", component="finalization"
+                        )
                     await self.finalize_results()
                     if self.debug:
-                        self.logger.task_completed("Finalize Results", component="finalization")
+                        self.logger.task_completed(
+                            "Finalize Results", component="finalization"
+                        )
 
                 await asyncio.sleep(1)
 
@@ -277,7 +294,9 @@ class DDSimManager:
             if self.registered_sims:
                 for task in list(self.registered_sims.values()):
                     task.cancel()
-                await asyncio.gather(*self.registered_sims.values(), return_exceptions=True)
+                await asyncio.gather(
+                    *self.registered_sims.values(), return_exceptions=True
+                )
 
         self.logger.manager_exiting()
-        self.logger.separator("DDSim MANAGER FINISHED")
+        self.logger.separator(f"{self.name} MANAGER FINISHED")

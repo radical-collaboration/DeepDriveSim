@@ -5,12 +5,15 @@ Initializes the execution backend (Dragon or concurrent), creates the
 asyncflow workflow engine, and runs the DDMdWorkflow workflow.
 """
 
+import argparse
 import asyncio
+from pathlib import Path
 
 from radical.asyncflow import WorkflowEngine
 
 from workflows.ddmd_workflow.ddmd_workflow import DDMdWorkflow
-from workflows.ddmd_workflow.utils import parse_args
+
+_DEFAULT_CONFIG = Path(__file__).parent / "config.yaml"
 
 
 async def run_ddmd(config, use_dragon=False):
@@ -39,5 +42,15 @@ async def run_ddmd(config, use_dragon=False):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    asyncio.run(run_ddmd(args.config))
+    parser = argparse.ArgumentParser(description="DeepDriveMD workflow entry point")
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        default=str(_DEFAULT_CONFIG),
+        help="Path to YAML config file (default: config.yaml next to this script)",
+    )
+    parser.add_argument("--use_dragon", action="store_true", help="Use Dragon backend")
+
+    args = parser.parse_args()
+    asyncio.run(run_ddmd(args.config, args.use_dragon))

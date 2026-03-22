@@ -12,6 +12,7 @@
 #SBATCH --mail-type=ALL      # When to send emails (BEGIN, END, FAIL, ALL)
 
 
+export PROJECT=/ocean/projects/dmr170002p/goliyad
 export BASE_DIR="${PROJECT}"
 export WORK_DIR="${BASE_DIR}/DeepDriveSim/workflows/dummy_workflow"
 export CONDA_ENV="${BASE_DIR}/conda_env"
@@ -21,4 +22,5 @@ conda activate $CONDA_ENV/dummy_workflow
 
 cd $WORK_DIR
 
-python run_workflow.py
+dragon -s  run_workflow.py
+#python run_workflow.py

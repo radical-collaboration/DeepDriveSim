@@ -18,10 +18,13 @@ conda create -y -p $CONDA_ENV/miniapps_workflow python=3.10
 conda activate $CONDA_ENV/miniapps_workflow
 pip install --upgrade pip setuptools wheel
 cd $DDSim_DIR
-pip install -e .
+pip install -e ".[dev,dragon]"
 cd $BASE_DIR
-git clone -b Tutorial_reprod https://github.com/radical-cybertools/workflow-mini-apps.git
+if [ ! -d "$BASE_DIR/workflow-mini-apps" ]; then
+    git clone -b Tutorial_reprod https://github.com/radical-cybertools/workflow-mini-apps.git
+fi
 pip install -e workflow-mini-apps/wfMiniAPI
 cd $WORK_DIR
 python -m pip install -r "requirements.txt"
+conda install -p $CONDA_ENV/miniapps_workflow -c conda-forge mpi4py --no-update-deps
 conda deactivate

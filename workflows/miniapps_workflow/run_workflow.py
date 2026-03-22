@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
+from pathlib import Path
 
+import yaml
 from radical.asyncflow import WorkflowEngine
 
 from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
 
-SIM_CORES = 3  # For Testing only we set 3 CPUs for simulations
-TRAIN_CORE = 1  # For Testing only we set 1 CPUs for training
+
+def _load_config(config_file: str) -> dict:
+    path = Path(config_file)
+    if path.exists():
+        with open(path) as f:
+            return yaml.safe_load(f) or {}
+    return {}
 
 
 async def run_miniapps(config_file, use_dragon):
+    cfg = _load_config(config_file)
 
     if use_dragon:
         try:
@@ -28,9 +36,13 @@ async def run_miniapps(config_file, use_dragon):
     # Create the async workflow engine
     asyncflow = await WorkflowEngine.create(engine)
 
+    home_dir = Path(cfg.get("home_dir", Path.home() / "MiniApps")).expanduser()
+
     # Initialize the workflow
     workflow = MiniAppsWorkflow(
-        asyncflow=asyncflow, training_cores=TRAIN_CORE, max_sim_batch=SIM_CORES
+        config=cfg,
+        asyncflow=asyncflow,
+        home_dir=home_dir,
     )
 
     try:

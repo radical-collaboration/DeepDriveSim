@@ -66,7 +66,7 @@ class TestDummyWorkflowInit:
         """Test that simulation input files are generated."""
         num_files = 5
         workflow = DummyWorkflow(
-            asyncflow=mock_asyncflow, home_dir=temp_home, num_files=num_files
+            asyncflow=mock_asyncflow, home_dir=temp_home, num_inputs=num_files
         )
         input_files = list(workflow.sim_inputs_dir.glob("*.npz"))
         assert len(input_files) == num_files
@@ -108,7 +108,7 @@ class TestDummyWorkflowStaticMethods:
         """Test _generate_sim_inputs creates correct number of .npz files."""
         with tempfile.TemporaryDirectory() as temp_dir:
             num_files = 3
-            DummyWorkflow._generate_sim_inputs(temp_dir, num_files=num_files)
+            DummyWorkflow._generate_sim_inputs(temp_dir, num_inputs=num_files)
 
             files = list(Path(temp_dir).glob("*.npz"))
             assert len(files) == num_files
@@ -165,7 +165,7 @@ class TestDummyWorkflowAsync:
                 start_training_threshold=2,
                 training_cores=1,
                 max_sim_batch=3,
-                num_files=1,
+                num_inputs=1,
             )
             yield workflow
 
@@ -179,27 +179,27 @@ class TestDummyWorkflowAsync:
 
     @pytest.mark.asyncio
     async def test_check_train_data_insufficient(self, workflow):
-        """Test check_train_data returns False when insufficient data."""
-        # No output files yet
-        result = await workflow.check_train_data()
+        """Test check_train_status returns False when insufficient data."""
+        # sim_inputs_dir has 1 .npz from __init__; start_training_threshold=2
+        result = await workflow.check_train_status()
         assert result is False
 
     @pytest.mark.asyncio
     async def test_check_train_data_sufficient(self, workflow):
-        """Test check_train_data returns True when sufficient data."""
-        # Create enough output files
-        sim_dir = workflow.sim_inputs_dir
-        sim_dir.mkdir(parents=True, exist_ok=True)
-        for i in range(2):
-            (sim_dir / f"output_{i}.txt").write_text("data")
+        """Test check_train_status returns True when sufficient data."""
+        # Create one more file so count reaches start_training_threshold=2
+        (workflow.sim_inputs_dir / "extra.txt").write_text("data")
 
-        result = await workflow.check_train_data()
+        result = await workflow.check_train_status()
         assert result is True
 
     @pytest.mark.asyncio
     async def test_clean_sim_data_removes_files(self, workflow):
-        """Test clean_sim_data removes simulation files."""
+        """Test post_process_sim removes simulation directory and train files."""
         sim_ind = "test_sim"
+
+        # Register the sim so post_process_sim can del it from sim_inputs
+        workflow.sim_inputs[sim_ind] = None
 
         # Create test files
         sim_dir = workflow.sim_output_dir / sim_ind
@@ -210,7 +210,7 @@ class TestDummyWorkflowAsync:
         train_file.write_text("train data")
 
         # Clean the simulation data
-        await workflow.clean_sim_data(sim_ind)
+        await workflow.post_process_sim(sim_ind)
 
         # Verify cleanup
         assert not sim_dir.exists()
@@ -218,7 +218,7 @@ class TestDummyWorkflowAsync:
 
 
 class TestDummyWorkflowCollectPredictions:
-    """Test prediction collection."""
+    """Test prediction collection via evaluate_simulations."""
 
     @pytest.fixture
     def workflow(self):
@@ -230,20 +230,24 @@ class TestDummyWorkflowCollectPredictions:
 
     @pytest.mark.asyncio
     async def test_collect_predictions_reads_yaml(self, workflow):
-        """Test that collect_predictions reads YAML file correctly."""
-        # Create prediction file
-        predictions = {"sim_0": 0.8, "sim_1": 0.3}
+        """Test that evaluate_simulations reads the prediction YAML file."""
+        from unittest.mock import AsyncMock
+
         import yaml
 
+        predictions = {"sim_0": 0.8, "sim_1": 0.3}
         with open(workflow.prediction_file, "w") as f:
             yaml.dump(predictions, f)
 
-        result = await workflow.collect_predictions()
-        assert result == predictions
+        # Mock the underlying prediction task so we don't need a real learner
+        workflow.prediction = AsyncMock()
+
+        await workflow.evaluate_simulations()
+        assert workflow.sim_predictions == predictions
 
 
 class TestDummyWorkflowFinalize:
-    """Test finalize_workflow method."""
+    """Test finalize_results method."""
 
     @pytest.fixture
     def workflow(self):
@@ -254,39 +258,17 @@ class TestDummyWorkflowFinalize:
             yield workflow
 
     @pytest.mark.asyncio
-    async def test_finalize_workflow_exports_stats(self, workflow):
-        """Test finalize_workflow exports cancel_stats to JSON."""
-        import json
-
-        workflow.cancel_stats = {
-            "total": 2,
-            "timestamps": [
-                {"simulation": "sim_0", "score": 0.3, "timestamp": "10:30"},
-                {"simulation": "sim_1", "score": 0.2, "timestamp": "10:35"},
-            ],
-        }
-
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            output_path = f.name
-
-        await workflow.finalize_workflow(path=output_path)
-
-        # Verify file was created and contains correct data
-        with open(output_path) as f:
-            saved_data = json.load(f)
-
-        assert saved_data["total"] == 2
-        assert len(saved_data["timestamps"]) == 2
-
-        # Cleanup
-        Path(output_path).unlink()
+    async def test_finalize_results_stops_when_all_sims_done(self, workflow):
+        """finalize_results stops the workflow once all sims are complete."""
+        workflow.completed_sims = list(range(workflow.num_inputs))
+        await workflow.finalize_results()
+        assert workflow.run_workflow is False
+        assert workflow.shutting_down.is_set()
 
     @pytest.mark.asyncio
-    async def test_finalize_workflow_raises_without_stats(self, workflow):
-        """Test finalize_workflow raises error if cancel_stats doesn't exist."""
-        # Remove cancel_stats if it exists
-        if hasattr(workflow, "cancel_stats"):
-            delattr(workflow, "cancel_stats")
-
-        with pytest.raises(AttributeError):
-            await workflow.finalize_workflow()
+    async def test_finalize_results_does_not_stop_when_incomplete(self, workflow):
+        """finalize_results keeps workflow running while sims are still pending."""
+        workflow.completed_sims = [0, 1]
+        workflow.run_workflow = True
+        await workflow.finalize_results()
+        assert workflow.run_workflow is True

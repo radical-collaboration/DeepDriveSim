@@ -40,44 +40,55 @@ class DummyWorkflow(DDSimManager):
         # on_ready: async callable injected by AsyncCampaignManager so that
         # _signal_ready() can unblock dependent workflow groups (e.g. inference).
         self._on_ready = kwargs.get("on_ready", None)
-
-        super().__init__(name=kwargs.get("name", "ddsim"))
-
         self.debug = config.get("debug", False)
+
+        super().__init__(name=kwargs.get("name", "ddmd"))
+
+        self.debug = cfg.get("debug", False)
         self.flow = kwargs.get("asyncflow", None)
         if self.flow is None:
             raise ValueError("Unable to initiate DummyWorkflow w/o asyncflow")
         self.learner = Learner(self.flow)
 
-        home_dir = Path(kwargs.get("home_dir", Path.home() / "DDSim"))
+        self.home_dir = Path(kwargs.get("home_dir", Path.home() / "DDSim"))
+        home_dir = self.home_dir
         self._clean_dir(home_dir)  # ❗Careful: deletes everything in home_dir!
 
         # Create workflow directories
         self.sim_output_dir = self._ensure_dir(home_dir / "sim_output")
         self.sim_inputs_dir = self._ensure_dir(home_dir / "sim_input")
-        self.train_dir      = self._ensure_dir(home_dir / "train")
-        self.train_al_dir   = self._ensure_dir(home_dir / "train_al")
-        self.val_dir        = self._ensure_dir(home_dir / "val")
+        self.train_dir = self._ensure_dir(home_dir / "train")
+        self.train_al_dir = self._ensure_dir(home_dir / "train_al")
+        self.val_dir = self._ensure_dir(home_dir / "val")
 
         # ── Simulation / training parameters ──────────────────────────────────
-        self.num_inputs             = int(cfg.get("num_inputs", 25))
-        self.max_sim_batch          = int(cfg.get("max_sim_batch", 24))
-        self.training_cores         = int(cfg.get("training_cores", 1))
-        self.sim_batch_size         = self.max_sim_batch + self.training_cores
-        self.training_threshold     = float(cfg.get("training_threshold", 0.5))
-        self.prediction_threshold   = float(cfg.get("prediction_threshold", 0.5))
-        self.start_training_threshold = int(cfg.get("start_training_threshold", 1))
-        self.training_epochs        = int(cfg.get("training_epochs", 1))
-        self.free_resources_for_train = bool(cfg.get("free_resources_for_train", True))
+        # kwargs take precedence over config dict (useful for tests/overrides).
+        def _get(key, default, alias=None):
+            if key in kwargs:
+                return kwargs[key]
+            if alias and alias in kwargs:
+                return kwargs[alias]
+            return cfg.get(key, cfg.get(alias, default) if alias else default)
+
+        self.num_inputs = int(_get("num_inputs", 5, alias="num_files"))
+        self.max_sim_batch = int(_get("max_sim_batch", 4))
+        self.training_cores = int(_get("training_cores", 1))
+        self.sim_batch_size = self.max_sim_batch + self.training_cores
+        self.training_threshold = float(_get("training_threshold", 0.5))
+        self.prediction_threshold = float(_get("prediction_threshold", 0.5))
+        self.start_training_threshold = int(_get("start_training_threshold", 1))
+        self.training_epochs = int(_get("training_epochs", 1))
+        self.free_resources_for_train = bool(_get("free_resources_for_train", True))
+        self.force_start_training = bool(_get("force_start_training", False))
         # Must exceed simulation.py's asyncio.sleep so evaluation doesn't
         # always preempt the last running sim before it can finish.
-        self.sleep_time             = float(cfg.get("sleep_time", 30))
+        self.sleep_time = float(cfg.get("sleep_time", 30))
 
-        self.call_cancel_simulations  = True
-        self.call_finalize_results    = True
+        self.call_cancel_simulations = True
+        self.call_finalize_results = True
         self.call_evaluate_simulations = True
 
-        self.iteration    = 0
+        self.iteration = 0
         self.retrain_model = self.training_epochs > 0
 
         # ── Dependent workflow trigger ─────────────────────────────────────────────────
@@ -85,19 +96,34 @@ class DummyWorkflow(DDSimManager):
         # produced for dependent workflows (e.g. inference) to start.
         # Defaults to num_inputs (i.e. signal only when all sims finish) so that
         # dep_threshold remains the fallback strategy when not explicitly set.
-        self.ddsim_data_ready = int(
-            cfg.get("ddsim_data_ready", self.num_inputs)
-        )
+        self.ddsim_data_ready = int(cfg.get("ddsim_data_ready", self.num_inputs))
         self._data_ready_signaled = False  # fire the signal at most once
 
         # ── Executable paths ──────────────────────────────────────────────────
         # Default src_dir to the directory that contains dummy_workflow.py so
         # simulation.py, train.py, etc. are found regardless of WORK_DIR or cwd.
         _default_src = str(Path(__file__).parent)
-        self.src_dir   = cfg.get("src_dir", os.getenv("WORK_DIR", _default_src))
-        self.code_path = cfg.get("code_path", f"{sys.executable} {self.src_dir}")
+        self.src_dir = cfg.get("src_dir", os.getenv("WORK_DIR", _default_src))
 
-        self.model_filename  = home_dir / "model.pkl"
+        # Per-task python executables — each can point to a different conda env.
+        # Falls back to the current interpreter if not set.
+        _default_exe = sys.executable
+        self.sim_executable = cfg.get("sim_executable") or _default_exe
+        self.train_executable = cfg.get("train_executable") or _default_exe
+        self.active_learn_executable = cfg.get("active_learn_executable") or _default_exe
+        self.predict_executable = cfg.get("predict_executable") or _default_exe
+        self.check_accuracy_executable = cfg.get("check_accuracy_executable") or _default_exe
+
+        # Dragon Policy for GPU/CPU affinity (injected by AsyncCampaignManager).
+        # CM passes a list (`policies`); we use the first entry for this single-GPU
+        # workflow.  A bare `policy` kwarg is also accepted for standalone use.
+        policies = kwargs.get("policies", None)
+        if policies is not None:
+            self.policy = policies[0] if policies else None
+        else:
+            self.policy = kwargs.get("policy", None)
+
+        self.model_filename = home_dir / "model.pkl"
         self.prediction_file = home_dir / "predictions.yml"
 
         # Register learner tasks then generate dummy input files
@@ -144,60 +170,72 @@ class DummyWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     def register_tasks(self):
         """Register learner tasks: simulation, training, active learning, prediction."""
+        _task_desc = dict(task_description)
+        if self.policy is not None:
+            _task_desc["process_template"] = {"policy": self.policy}
+            self.logger.info(
+                f"Task policy: host={self.policy.host_name} "
+                f"gpu_affinity={self.policy.gpu_affinity}",
+                component=self.name,
+            )
+        else:
+            self.logger.info("Task policy: none (no GPU affinity)", component=self.name)
 
-        #@self.learner.simulation_task()
+        log = self.home_dir / "tasks.log"
+
+        # @self.learner.simulation_task()
         @self.flow.executable_task
-        async def simulation(task_description=task_description, **kwargs):
+        async def simulation(task_description=_task_desc, **kwargs):
             sim_idx = kwargs["sim_inputs"]["sim_idx"]
             filename = self.sim_inputs[sim_idx]
             args = (
                 f"--output_dir {self.sim_output_dir} --sim_tag {sim_idx} "
                 f"--filename {filename}"
             )
-            return f"{self.code_path}/simulation.py {args}"
+            return f'bash -c "{self.sim_executable} {self.src_dir}/simulation.py {args} >> {log} 2>&1"'
 
         self.simulation = simulation
 
         @self.learner.training_task()
-        async def training(task_description=task_description, **kwargs):
+        async def training(task_description=_task_desc, **kwargs):
             args = (
                 f"--model_filename {self.model_filename} "
                 f"--sim_output_dir {self.sim_output_dir} "
                 f"--train_dir {self.train_al_dir} --val_dir {self.val_dir}"
             )
-            return f"{self.code_path}/train.py {args}"
+            return f'bash -c "{self.train_executable} {self.src_dir}/train.py {args} >> {log} 2>&1"'
 
         self.training = training
 
         @self.learner.active_learn_task()
-        async def active_learn(task_description=task_description, **kwargs):
+        async def active_learn(task_description=_task_desc, **kwargs):
             args = (
                 f"--model_filename {self.model_filename} "
                 f"--train_dir {self.train_dir} "
                 f"--train_al_dir {self.train_al_dir}"
             )
-            return f"{self.code_path}/active_learn.py {args}"
+            return f'bash -c "{self.active_learn_executable} {self.src_dir}/active_learn.py {args} >> {log} 2>&1"'
 
         self.active_learn = active_learn
 
-        #@self.learner.prediction_task(as_executable=True)
+        # @self.learner.prediction_task(as_executable=True)
         @self.flow.executable_task
-        async def prediction(task_description=task_description, **kwargs):
+        async def prediction(task_description=_task_desc, **kwargs):
             args = (
                 f"--model_filename {self.model_filename} "
                 f"--sim_output_dir {self.sim_output_dir} "
                 f"--output_file {self.prediction_file}"
             )
-            return f"{self.code_path}/predict.py {args}"
+            return f'bash -c "{self.predict_executable} {self.src_dir}/predict.py {args} >> {log} 2>&1"'
 
         self.prediction = prediction
 
         @self.learner.as_stop_criterion(
             metric_name=MODEL_ACCURACY, threshold=self.training_threshold
         )
-        async def check_accuracy(task_description=task_description, **kwargs):
+        async def check_accuracy(task_description=_task_desc, **kwargs):
             args = f"--model_filename {self.model_filename} --val_dir {self.val_dir}"
-            return f"{self.code_path}/check_accuracy.py {args}"
+            return f'bash -c "{self.check_accuracy_executable} {self.src_dir}/check_accuracy.py {args} 2>> {log}"'
 
         self.check_accuracy = check_accuracy
 
@@ -205,16 +243,18 @@ class DummyWorkflow(DDSimManager):
     def stop_simulation(self, *args, **kwargs) -> bool:
         """Return True if prediction < threshold (cancel simulation)."""
         if self.debug:
-            self.logger.info(f"Prediction is { kwargs['prediction']}", component=self.name)
+            self.logger.info(
+                f"Prediction is {kwargs['prediction']}", component=self.name
+            )
         return kwargs["prediction"] < self.prediction_threshold
 
     # --------------------------------------------------------------------------
     async def evaluate_simulations(self) -> dict:
         if self.debug:
-            self.logger.task_started(f"Model Prediction", component="prediction")
+            self.logger.task_started("Model Prediction", component="prediction")
         await self.prediction()
         if self.debug:
-            self.logger.task_completed(f"Model Prediction", component="prediction")
+            self.logger.task_completed("Model Prediction", component="prediction")
         with open(self.prediction_file) as f:
             predictions = yaml.safe_load(f)
 
@@ -238,7 +278,9 @@ class DummyWorkflow(DDSimManager):
             if sim_idx not in self.sim_inputs:
                 raise ValueError(f"Unable to add sim {sim_idx} to queue")
             await self.sim_task_queue.put({"sim_idx": sim_idx})
-            self.logger.info(f"Re-added Sim {sim_idx} back to queue", component=self.name)
+            self.logger.info(
+                f"Re-added Sim {sim_idx} back to queue", component=self.name
+            )
 
     # --------------------------------------------------------------------------
     async def check_train_status(self) -> bool:
@@ -258,9 +300,13 @@ class DummyWorkflow(DDSimManager):
             try:
                 await asyncio.to_thread(os.remove, file_path)
             except FileNotFoundError:
-                self.logger.warning(f"File already removed: {file_path}", component=self.name)
+                self.logger.warning(
+                    f"File already removed: {file_path}", component=self.name
+                )
             except Exception as e:
-                self.logger.error(f"Error deleting {file_path}: {e}", component=self.name)
+                self.logger.error(
+                    f"Error deleting {file_path}: {e}", component=self.name
+                )
 
         # Collect all deletion tasks (parallel file cleanup)
         tasks = []
@@ -284,13 +330,17 @@ class DummyWorkflow(DDSimManager):
             else:
                 if self.debug:
                     self.logger.warning(
-                        f"Simulation directory already removed: {sim_dir}", component=self.name
+                        f"Simulation directory already removed: {sim_dir}",
+                        component=self.name,
                     )
         except Exception as e:
-            self.logger.error(f"Error deleting directory {sim_dir}: {e}", component=self.name)
+            self.logger.error(
+                f"Error deleting directory {sim_dir}: {e}", component=self.name
+            )
         if self.debug:
             self.logger.info(
-                f"Removed all files related to simulation {sim_idx}", component=self.name
+                f"Removed all files related to simulation {sim_idx}",
+                component=self.name,
             )
 
     # --------------------------------------------------------------------------
@@ -311,7 +361,8 @@ class DummyWorkflow(DDSimManager):
         for epoch in range(self.training_epochs):
             if self.debug:
                 self.logger.info(
-                    f"Iteration {self.iteration} / Epoch {epoch + 1}", component=self.name
+                    f"Iteration {self.iteration} / Epoch {epoch + 1}",
+                    component=self.name,
                 )
 
             if self.debug:
@@ -361,7 +412,10 @@ class DummyWorkflow(DDSimManager):
 
         if n_done >= self.num_inputs:
             if self.registered_sims:
-                self.logger.warning(f"All sim have completed BUT there are still registered sims {self.registered_sims.keys()}", component=self.name)
+                self.logger.warning(
+                    f"All sim have completed BUT there are still registered sims {self.registered_sims.keys()}",
+                    component=self.name,
+                )
             else:
                 self.shutting_down.set()
                 self.run_workflow = False
@@ -369,7 +423,8 @@ class DummyWorkflow(DDSimManager):
         else:
             if self.debug:
                 self.logger.warning(
-                    f" {n_done} sim have completed out of {self.num_inputs}", component=self.name
+                    f" {n_done} sim have completed out of {self.num_inputs}",
+                    component=self.name,
                 )
 
     # --------------------------------------------------------------------------

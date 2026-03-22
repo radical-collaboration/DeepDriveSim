@@ -1,6 +1,8 @@
 import asyncio
 import itertools
+import os
 import shutil
+from pathlib import Path
 
 from ddsim.ddsim_manager import DDSimManager
 from workflows.ddmd_workflow.config import ExperimentConfig
@@ -29,10 +31,34 @@ class DDMdWorkflow(DDSimManager):
         if self.flow is None:
             raise ValueError("Unable to initiate DDMdWorkflow w/o asyncflow")
 
+        # One Dragon Policy per assigned GPU (injected by AsyncCampaignManager).
+        # The CM passes a single compound policy with gpu_affinity=[gpu0, gpu1, ...].
+        # Expand it here into per-GPU policies so tasks can cycle round-robin;
+        # a standalone caller may already pass N per-GPU policies, which we keep as-is.
+        _raw_policies = kwargs.get("policies", []) or []
+        if (len(_raw_policies) == 1
+                and len(getattr(_raw_policies[0], "gpu_affinity", [])) > 1):
+            try:
+                from dragon.infrastructure.policy import Policy as _Policy
+                _p = _raw_policies[0]
+                self.policies = [
+                    _Policy(
+                        placement=_p.placement,
+                        host_name=_p.host_name,
+                        gpu_affinity=[gid],
+                    )
+                    for gid in _p.gpu_affinity
+                ]
+            except Exception:
+                self.policies = _raw_policies
+        else:
+            self.policies = _raw_policies
+
         config = kwargs.get("config")
 
         # Load and validate experiment configuration from YAML
         self.experiment_config = ExperimentConfig.from_yaml(config)
+        self.debug = getattr(self.experiment_config, "debug", False)
 
         agg_stage = self.experiment_config.aggregation_stage
         self.skip_aggregation = agg_stage.skip_aggregation
@@ -125,21 +151,21 @@ class DDMdWorkflow(DDSimManager):
         ranks, cores, GPUs, and pre-exec commands for that stage.
         """
         task_descriptions = {}
-        task_descriptions["molecular_dynamics_stage"] = self._generate_task_description(
-            self.experiment_config.molecular_dynamics_stage
-        )
-        task_descriptions["machine_learning_stage"] = self._generate_task_description(
-            self.experiment_config.machine_learning_stage
-        )
-        task_descriptions["aggregation_stage"] = self._generate_task_description(
-            self.experiment_config.aggregation_stage
-        )
-        task_descriptions["agent_stage"] = self._generate_task_description(
-            self.experiment_config.agent_stage
-        )
-        task_descriptions["model_selection_stage"] = self._generate_task_description(
-            self.experiment_config.model_selection_stage
-        )
+        stages = [
+            (
+                "molecular_dynamics_stage",
+                self.experiment_config.molecular_dynamics_stage,
+            ),
+            ("machine_learning_stage", self.experiment_config.machine_learning_stage),
+            ("aggregation_stage", self.experiment_config.aggregation_stage),
+            ("agent_stage", self.experiment_config.agent_stage),
+            ("model_selection_stage", self.experiment_config.model_selection_stage),
+        ]
+        for idx, (name, cfg) in enumerate(stages):
+
+            task_descriptions[name] = self._generate_task_description(
+                cfg, stage_idx=idx
+            )
         return task_descriptions
 
     # --------------------------------------------------------------------------
@@ -153,15 +179,28 @@ class DDMdWorkflow(DDSimManager):
         self.api.agent_stage.runs_dir.mkdir(parents=True, exist_ok=True)
 
     # --------------------------------------------------------------------------
-    def _generate_task_description(self, config):
+    def _generate_task_description(self, config, stage_idx: int = 0):
         """Build a single task resource description from a stage config."""
+        # Apply a Dragon policies (and set gpus_per_rank=0) only for stages that
+        # actually require GPU.  Applying a policies to CPU-only stages (training,
+        # selection) pins them to a GPU-pinned Dragon worker, which can freeze
+        # Dragon's IPC when the stage is long-running (e.g. CPU Keras training).
+        stage_needs_gpu = config.gpu_reqs.processes > 0
+        pre_exec = list(config.pre_exec)
+        if not stage_needs_gpu:
+            pass  # pre_exec is ignored by DragonExecutionBackendV3; env setup via tf_gpu_wrapper.sh
         task_description = {
             "ranks": 1,
-            "cores_per_rank": config.cpu_reqs,
-            "gpus_per_rank": config.gpu_reqs,
-            "pre_exec": config.pre_exec,
+            "cores_per_rank": config.cpu_reqs.processes,
+            "gpus_per_rank": 0
+            if (self.policies and stage_needs_gpu)
+            else config.gpu_reqs.processes,
+            "pre_exec": pre_exec,
             "shell": True,
         }
+        if self.policies and stage_needs_gpu:
+            policy = self.policies[stage_idx % len(self.policies)]
+            task_description["process_template"] = {"policy": policy}
         return task_description
 
     # --------------------------------------------------------------------------
@@ -275,17 +314,56 @@ class DDMdWorkflow(DDSimManager):
         api = self.api
 
         # --- Simulation task: runs MD for each input PDB ---
-        task_description = self.task_descriptions["molecular_dynamics_stage"]
+        # If GPU policy are assigned, register one task function per GPU and
+        # cycle by sim_idx so that the 8 simulation tasks spread across all
+        # assigned GPUs, rather than all landing on the same GPU worker.
+        _md_base = {
+            k: v
+            for k, v in self.task_descriptions["molecular_dynamics_stage"].items()
+            if k != "process_template"
+        }  # strip the single pre-baked policy
 
-        @self.flow.executable_task
-        async def simulation(task_description=task_description, **kwargs):
-            cfg = stage_config["molecular_dynamics_stage"]
-            # Extract sim index and PDB file from the queued sim_idx
-            sim_idx = kwargs["sim_inputs"]["sim_idx"]
-            cfg.task_config.pdb_file = self.sim_inputs[sim_idx]
-            stage_api = api.molecular_dynamics_stage
-            _, cmd = _update_stage_config(stage_api, cfg, sim_idx)
-            return cmd
+        if self.policies:
+            _sim_fns = []
+            for _gpu_idx, _policy in enumerate(self.policies):
+                _td = {**_md_base, "process_template": {"policy": _policy}}
+                self.logger.info(
+                    f"Registering sim func [{_gpu_idx}] "
+                    f"gpu_affinity={_policy.gpu_affinity}",
+                    component=self.name,
+                )
+
+                @self.flow.executable_task
+                async def _sim_gpu(task_description=_td, **kwargs):
+                    cfg = stage_config["molecular_dynamics_stage"]
+                    sim_idx = kwargs["sim_inputs"]["sim_idx"]
+                    cfg.task_config.pdb_file = self.sim_inputs[sim_idx]
+                    stage_api = api.molecular_dynamics_stage
+                    _, cmd = _update_stage_config(stage_api, cfg, sim_idx)
+                    return cmd
+
+                _sim_fns.append(_sim_gpu)
+
+            _n_gpus = len(_sim_fns)
+
+            def simulation(**kwargs):
+                sim_idx = kwargs["sim_inputs"]["sim_idx"]
+                return _sim_fns[sim_idx % _n_gpus](**kwargs)
+
+        else:
+            self.logger.info(
+                f"Using task_description {_md_base} for sim (no GPU policy)",
+                component=self.name,
+            )
+
+            @self.flow.executable_task
+            async def simulation(task_description=_md_base, **kwargs):
+                cfg = stage_config["molecular_dynamics_stage"]
+                sim_idx = kwargs["sim_inputs"]["sim_idx"]
+                cfg.task_config.pdb_file = self.sim_inputs[sim_idx]
+                stage_api = api.molecular_dynamics_stage
+                _, cmd = _update_stage_config(stage_api, cfg, sim_idx)
+                return cmd
 
         self.simulation = simulation
 
@@ -307,28 +385,62 @@ class DDMdWorkflow(DDSimManager):
         # --- Training task: trains ML model on aggregated data ---
         task_description = self.task_descriptions["machine_learning_stage"]
 
-        @self.flow.executable_task
-        async def training(task_description=task_description):
+        _TF_GPU_WRAPPER = str(Path(__file__).parent / "tf_gpu_wrapper.sh")
+
+        # Training runs via asyncio subprocess directly (not Dragon executable_task).
+        # Dragon worker subprocesses hang during TF's CUDA initialization even with
+        # CUDA_VISIBLE_DEVICES=-1; the Dragon head process does not have this issue.
+        async def training():
             cfg = stage_config["machine_learning_stage"]
             stage_api = api.machine_learning_stage
             output_path, cmd = _update_stage_config(stage_api, cfg, task_idx=0)
             cfg.task_config.model_tag = stage_api.unique_name(output_path)
             if self.stage_idx > 0:
-                # After first iteration, use model selection instead of init weights
                 cfg.task_config.init_weights_path = None
-            return cmd
+            full_cmd = f"{_TF_GPU_WRAPPER} {cmd}"
+            #self.logger.info(f"cmd= {full_cmd}", component=self.name)
+            proc = await asyncio.create_subprocess_shell(
+                full_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout, _ = await proc.communicate()
+            if stdout:
+                print(stdout.decode(), end="", flush=True)
+            if proc.returncode != 0:
+                self.logger.error(
+                    f"Training failed with exit code {proc.returncode}",
+                    component=self.name,
+                )
 
         self.training = training
 
         # --- Agent task: runs inference/active learning ---
-        task_description = self.task_descriptions["agent_stage"]
+        # lof.py creates a CVAE model that hits the cuDNN 9.2.0/V100 status 5003
+        # bug on every conv op.  Like training, we bypass Dragon's executable_task
+        # entirely and run as a direct asyncio subprocess so Dragon's CUDA IPC does
+        # not interfere with TF initialisation.  tf_cpu_wrapper.sh sets
+        # CUDA_VISIBLE_DEVICES=-1 to force CPU execution.
+        _TF_CPU_WRAPPER = str(Path(__file__).parent / "tf_cpu_wrapper.sh")
 
-        @self.flow.executable_task
-        async def agent_stage(task_description=task_description):
+        async def agent_stage():
             cfg = stage_config["agent_stage"]
             stage_api = api.agent_stage
             _, cmd = _update_stage_config(stage_api, cfg, task_idx=0)
-            return cmd
+            full_cmd = f"{_TF_CPU_WRAPPER} {cmd}"
+            proc = await asyncio.create_subprocess_shell(
+                full_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout, _ = await proc.communicate()
+            if stdout:
+                print(stdout.decode(), end="", flush=True)
+            if proc.returncode != 0:
+                self.logger.error(
+                    f"Agent stage failed with exit code {proc.returncode}",
+                    component=self.name,
+                )
 
         self.evaluate_simulations = agent_stage
 
@@ -352,14 +464,19 @@ class DDMdWorkflow(DDSimManager):
         Called by the parent's start() loop after check_train_status() is True.
         """
         self.iteration += 1
-        self.logger.task_started(f"Iteration {self.iteration}", component=self.name)
-        self.logger.info(f"{len(self.registered_sims)} simulation(s) running....", component=self.name)
+        if self.debug:
+            self.logger.task_started(f"Iteration {self.iteration}", component=self.name)
+            self.logger.info(
+                f"{len(self.registered_sims)} simulation(s) running....",
+                component=self.name,
+            )
 
         if self.aggregation:
             await self.aggregation()
 
         await self.training()
-        self.logger.task_completed(f"Iteration {self.iteration}", component=self.name)
+        if self.debug:
+            self.logger.task_completed(f"Iteration {self.iteration}", component=self.name)
 
         await self.selection()
 
@@ -370,4 +487,4 @@ class DDMdWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     async def close(self):
         """Gracefully shut down the asyncflow engine."""
-        await self.flow.shutdown()
+        pass

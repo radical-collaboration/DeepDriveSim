@@ -1,0 +1,9 @@
+# =============================================================================
+# DDMd Workflow (real MD simulations) — workflow-specific parameters
+# =============================================================================
+
+engine:      dragon       # concurrent | dragon 
+num_workers: 64     # Dragon backend worker pool size (DragonExecutionBackendV3)
+debug:       true  
+ddsim_config: "$PROJECT/DeepDriveSim/workflows/ddmd_workflow/data/new_lassen-keras-dbscan.yaml"
+# ddsim_data_ready: 3    # signal inference-ready after this many sims complete

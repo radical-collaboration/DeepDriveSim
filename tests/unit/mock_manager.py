@@ -47,6 +47,9 @@ class MockLearner(DDSimManager):
         # Override timing for faster tests
         self.sleep_time = 0.01
 
+        # Enable finalize_results so start() has an exit path
+        self.call_finalize_results = True
+
         # Register simulation callable
         self._register_tasks()
         self.logger = DummyLogger()
@@ -101,7 +104,11 @@ class MockLearner(DDSimManager):
         pass
 
     # --------------------------------------------------------------------------
-    async def post_process(self):
+    async def finalize_results(self):
+        """
+        Stop the workflow after one iteration (keeps start()
+        from looping forever).
+        """
         self.run_workflow = False
         self.shutting_down.set()
 

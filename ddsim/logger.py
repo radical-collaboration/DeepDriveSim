@@ -56,6 +56,7 @@ class Logger:
             "manager": Colors.GREEN,
             "evaluate": Colors.BRIGHT_MAGENTA,
             "finalization": Colors.BRIGHT_BLUE,
+            "prediction": Colors.GREEN,
         }
 
     def _colorize(self, text, color):
@@ -66,7 +67,7 @@ class Logger:
             datetime.now().strftime("%H:%M:%S.%f")[:-3], Colors.DIM
         )
         colored_level = self._colorize(
-            f"[{self.name}-{level.value}]", self.level_colors.get(level, Colors.WHITE)
+            f"[{level.value}]", self.level_colors.get(level, Colors.WHITE)
         )
 
         # Handle task-specific components
@@ -88,25 +89,35 @@ class Logger:
         stream.write(message + "\n")
         stream.flush()
 
-    def debug(self, message, component="manager", task_name=None):
+    def debug(self, message, component=None, task_name=None):
+        if component is None:
+            component = self.name
         formatted = self._format_message(LogLevel.DEBUG, component, message, task_name)
         self._write_log(formatted)
 
-    def info(self, message, component="manager", task_name=None):
+    def info(self, message, component=None, task_name=None):
+        if component is None:
+            component = self.name
         formatted = self._format_message(LogLevel.INFO, component, message, task_name)
         self._write_log(formatted)
 
-    def warning(self, message, component="manager", task_name=None):
+    def warning(self, message, component=None, task_name=None):
+        if component is None:
+            component = self.name
         formatted = self._format_message(
             LogLevel.WARNING, component, message, task_name
         )
         self._write_log(formatted)
 
-    def error(self, message, component="manager", task_name=None):
+    def error(self, message, component=None, task_name=None):
+        if component is None:
+            component = self.name
         formatted = self._format_message(LogLevel.ERROR, component, message, task_name)
         self._write_log(formatted, to_stderr=True)
 
-    def critical(self, message, component="manager", task_name=None):
+    def critical(self, message, component=None, task_name=None):
+        if component is None:
+            component = self.name
         formatted = self._format_message(
             LogLevel.CRITICAL, component, message, task_name
         )

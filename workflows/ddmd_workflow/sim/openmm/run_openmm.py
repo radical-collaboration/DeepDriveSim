@@ -111,6 +111,7 @@ class SimulationContext:
 
     def move_results(self) -> None:
         if self.workdir != self.cfg.output_path:
+            self.cfg.output_path.mkdir(parents=True, exist_ok=True)
             for p in self.workdir.iterdir():
                 shutil.move(str(p), str(self.cfg.output_path.joinpath(p.name)))
 
@@ -182,6 +183,14 @@ def run_simulation(cfg: OpenMMConfig) -> None:
             temperature_kelvin=temperature_kelvin,
             heat_bath_friction_coef=cfg.heat_bath_friction_coef,
         )
+
+    # If addHydrogens() ran (implicit solvent, PDB path), the system may have
+    # more atoms than the original PDB on disk. Overwrite ctx.pdb_file with the
+    # H-augmented structure so downstream MDAnalysis reads match the DCD atom count.
+    if cfg.solvent_type == "implicit" and ctx.top_file is None:
+        state = sim.context.getState(getPositions=True)
+        with open(ctx.pdb_file, "w") as f:
+            app.PDBFile.writeFile(sim.topology, state.getPositions(), f)
 
     print("sim2")
     # Write all frames to a single HDF5 file
