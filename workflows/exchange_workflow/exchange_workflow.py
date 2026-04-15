@@ -41,7 +41,7 @@ class ExchangeWorkflow(DDSimManager):
         # If False, skip retraining (e.g. when model accuracy is sufficient)
         self.retrain_model = False
         self.call_finalize_results = True
-        self.call_post_process_sim = True
+        self.call_evaluate_simulations = True  # If True, call evaluate_simulations after each sim; else call post_process_sim
 
         # ── MD simulation parameters ──────────────────────────────────────────
         # Total number of MD steps per simulation run
@@ -259,17 +259,17 @@ class ExchangeWorkflow(DDSimManager):
         return bool(self.registered_sims) or completing_sim_idx is not None
 
     # --------------------------------------------------------------------------
-    async def post_process_sim(self, sim_idx):
+    async def evaluate_simulations(self, sim_idx):
         del self.sim_inputs[sim_idx]
 
         sim_type = sim_idx.split("_")[0]
-        print(f'[post_process_sim] {sim_idx} completed (type={sim_type})')
+        print(f'[evaluate_simulations] {sim_idx} completed (type={sim_type})')
 
         # Trigger exchange when all active simulations have reached the
         # current step threshold (a multiple of exchange_step_interval).
         if self._all_sims_reached_threshold(completing_sim_idx=sim_idx):
             print(
-                f'[post_process_sim] All sims reached step {self._next_exchange_threshold}'
+                f'[evaluate_simulations] All sims reached step {self._next_exchange_threshold}'
                 f' — triggering exchange'
             )
             await self.exchange()
