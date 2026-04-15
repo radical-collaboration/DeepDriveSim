@@ -45,12 +45,18 @@ class DDSimManager:
         self.sim_predictions = {}
         self.train_models    = []
 
+        # Subclasses must set these to meaningful values in their __init__.
+        # Defaults here prevent AttributeError in _on_sim_done if a subclass forgets.
+        self.sim_batch_size = 0
+        self.max_sim_batch  = 0
+
         self.sleep_time = 20
         self.debug      = False
 
         # Workflow flags — set in subclass:
         self.call_finalize_results      = False
         self.call_evaluate_simulations  = False
+        self.call_post_process_sim      = False
         self.run_workflow               = True
         self.free_resources_for_train   = False
         self.call_cancel_simulations    = False
@@ -123,7 +129,8 @@ class DDSimManager:
                 self.completed_sims.append(sim_idx)
                 if self.debug:
                     self.logger.task_completed(f"Sim {sim_idx}", component="simulation")
-                asyncio.ensure_future(self.post_process_sim(sim_idx))
+                if self.call_post_process_sim:
+                    asyncio.ensure_future(self.post_process_sim(sim_idx))
 
     # --------------------------------------------------------------------------
     async def submit_sims(self):

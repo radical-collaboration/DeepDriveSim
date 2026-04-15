@@ -1,26 +1,30 @@
-# Adaptive multi-type simulation workflow config
-# Loaded via ExchangeWorkflow.from_yaml(path)
+# Exchange workflow config
 
-num_init_sims: 10
-experiment_dir: ${EXPERIMENT_DIR}
+# ── Execution ─────────────────────────────────────────────────────────────────
+engine:          dragon # concurrent (asyncio) or dragon
+
+# Number of MD simulations to launch initially
+num_init_sims: 4
+
+# Total MD steps per simulation run
+num_steps: 500
+
+# Target temperature (K); simulation records when this is first reached
+target_temp: 300.0
+
+# Exchange fires once every exchange_step_interval steps (when all sims hit threshold)
+exchange_step_interval: 100
+
+# Output directory for experiment results
+experiment_dir: ./experiment_output
 
 tasks:
   MD:
-    cpu_reqs: 4
-    gpu_reqs: 0.0
-    pre_exec:
-      - module load anaconda3
-      - conda activate ${CONDA_ENV}/conda-openmm
-    executable: ${CONDA_ENV}/conda-openmm/bin/python
-    arguments:
-      - ${WORK_DIR}/run_md.py
+    cpu_reqs: 1
+    gpu_reqs: 0
+    pre_exec: []
 
   EXCHANGE:
-    cpu_reqs: 4
-    gpu_reqs: 1.0
-    pre_exec:
-      - module load anaconda3
-      - conda activate ${CONDA_ENV}/conda-openmm
-    executable: ${CONDA_ENV}/conda-openmm/bin/python
-    arguments:
-      - ${WORK_DIR}/exchange.py
+    cpu_reqs: 1
+    gpu_reqs: 0
+    pre_exec: []

@@ -1,21 +1,32 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
+from pathlib import Path
+
+import yaml
 
 from radical.asyncflow import WorkflowEngine
 
-from workflows.dummy_workflow.dummy_workflow import ExchangeWorkflow
+from workflows.exchange_workflow.exchange_workflow import ExchangeWorkflow
 
-async def run_ddmd(config_file, use_dragon):
 
-    if use_dragon:
+def load_config(path: str) -> dict:
+    with open(path) as f:
+        return yaml.safe_load(f) or {}
+
+
+async def run_ddmd(config_file):
+    config = load_config(config_file)
+    backend = config.get("engine", "concurrent")
+
+    if backend == "dragon":
         try:
             from rhapsody.backends import DragonExecutionBackendV3
         except ImportError as e:
             print(f"Dragon backend requested but not available: {e}")
-            use_dragon = False
+            backend = "concurrent"
 
-    if use_dragon:
+    if backend == "dragon":
         engine = await DragonExecutionBackendV3()
     else:
         from rhapsody.backends import ConcurrentExecutionBackend
@@ -26,7 +37,8 @@ async def run_ddmd(config_file, use_dragon):
     asyncflow = await WorkflowEngine.create(engine)
     # Initialize the workflow
     workflow = ExchangeWorkflow(
-                asyncflow=asyncflow
+                asyncflow=asyncflow,
+                config=config,
             )
 
     try:
@@ -51,8 +63,6 @@ if __name__ == "__main__":
         help="Path to workflow configuration file",
     )
 
-    parser.add_argument("--use_dragon", action="store_true", help="Use Dragon backend")
-
     args = parser.parse_args()
 
-    asyncio.run(run_ddmd(args.config_file, args.use_dragon))
+    asyncio.run(run_ddmd(args.config_file))

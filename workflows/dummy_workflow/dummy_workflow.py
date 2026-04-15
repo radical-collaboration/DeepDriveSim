@@ -6,12 +6,13 @@ from pathlib import Path
 
 try:
     from rose import Learner
+    from rose.metrics import MODEL_ACCURACY
 except ModuleNotFoundError:
     Learner = None
+    MODEL_ACCURACY = None
 
 import numpy as np
 import yaml
-from rose.metrics import MODEL_ACCURACY
 
 from ddsim.ddsim_manager import DDSimManager
 
@@ -47,7 +48,7 @@ class DummyWorkflow(DDSimManager):
         self.flow = kwargs.get("asyncflow", None)
         if self.flow is None:
             raise ValueError("Unable to initiate DummyWorkflow w/o asyncflow")
-        self.learner = Learner(self.flow)
+        self.learner = Learner(self.flow) if Learner is not None else None
 
         home_dir = Path(kwargs.get("home_dir", Path.home() / "DDSim"))
         self._clean_dir(home_dir)  # ❗Careful: deletes everything in home_dir!
@@ -158,7 +159,9 @@ class DummyWorkflow(DDSimManager):
 
         self.simulation = simulation
 
-        @self.learner.training_task()
+        _training_dec = self.learner.training_task() if self.learner else self.flow.executable_task
+
+        @_training_dec
         async def training(task_description=task_description, **kwargs):
             args = (
                 f"--model_filename {self.model_filename} "
@@ -169,7 +172,9 @@ class DummyWorkflow(DDSimManager):
 
         self.training = training
 
-        @self.learner.active_learn_task()
+        _active_learn_dec = self.learner.active_learn_task() if self.learner else self.flow.executable_task
+
+        @_active_learn_dec
         async def active_learn(task_description=task_description, **kwargs):
             args = (
                 f"--model_filename {self.model_filename} "
@@ -192,9 +197,12 @@ class DummyWorkflow(DDSimManager):
 
         self.prediction = prediction
 
-        @self.learner.as_stop_criterion(
-            metric_name=MODEL_ACCURACY, threshold=self.training_threshold
+        _accuracy_dec = (
+            self.learner.as_stop_criterion(metric_name=MODEL_ACCURACY, threshold=self.training_threshold)
+            if self.learner else self.flow.executable_task
         )
+
+        @_accuracy_dec
         async def check_accuracy(task_description=task_description, **kwargs):
             args = f"--model_filename {self.model_filename} --val_dir {self.val_dir}"
             return f"{self.code_path}/check_accuracy.py {args}"
