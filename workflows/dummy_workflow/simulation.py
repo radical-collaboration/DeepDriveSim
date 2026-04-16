@@ -50,7 +50,7 @@ async def run_simulation(output_dir: str, sim_tag: str) -> None:
 
     # Run up to N simulations concurrently
     await asyncio.gather(*tasks)
-    await asyncio.sleep(25)
+    await asyncio.sleep(2)
 
     print(f"Simulation completed. Results saved in {output_sim_dir}")
     return

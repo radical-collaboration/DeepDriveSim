@@ -54,6 +54,10 @@ class DDSimManager:
         self.run_workflow = True
         self.free_resources_for_train = False
         self.call_cancel_simulations = False
+        self.call_post_process_sim = False
+
+        self.sim_batch_size = 0
+        self.max_sim_batch = 0
 
         # Sims permanently killed by cancel_sims (prediction-based).
         # _on_sim_done uses this to distinguish a permanent kill (no re-queue)
@@ -125,7 +129,8 @@ class DDSimManager:
                 self.completed_sims.append(sim_idx)
                 if self.debug:
                     self.logger.task_completed(f"Sim {sim_idx}", component="simulation")
-                asyncio.ensure_future(self.post_process_sim(sim_idx))
+                if self.call_post_process_sim:
+                    asyncio.ensure_future(self.post_process_sim(sim_idx))
 
     # --------------------------------------------------------------------------
     async def submit_sims(self):

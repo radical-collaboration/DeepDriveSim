@@ -3,23 +3,22 @@
 # =============================================================================
 
 debug: true
-engine:   dragon       # concurrent | dragon
-home_dir: "~/MiniApps"
+engine:      dragon       # concurrent | dragon
+num_replicas: 4
+home_dir:    "MiniApps"
 
-total_num_sim:          10
-max_sim_batch:          4
-training_cores:         1
+total_num_sim:            10
+max_sim_batch:            4
+training_cores:           1
 free_resources_for_train: true
-miniapps_data_ready:    4     # signal inference-ready after this many sims complete
-phase:                  0
-num_step:               1000
-clean_unregistered_sims: false
+miniapps_data_ready:      4     # signal inference-ready after this many sims complete
+phase:                    0
+num_step:                 1000
+num_epochs:               1000
+clean_unregistered_sims:  false
 
-src_dir: ""   # leave empty to use the miniapps_workflow/ directory (default)
+src_dir: ""   # leave empty to use the miniapps/ directory (default)
 
-# Per-task conda python executables — set each to the python binary of the
-# target conda environment, or leave empty to inherit the current interpreter.
-sim_executable: "$PROJECT/conda_env/miniapps_workflow/bin/python"
-train_executable: "$PROJECT/conda_env/miniapps_workflow/bin/python"
-predict_executable: "$PROJECT/conda_env/miniapps_workflow/bin/python"
-selection_executable: "$PROJECT/conda_env/miniapps_workflow/bin/python"
+# Per-task python executable — set to the python binary of the target venv,
+# or leave empty to inherit the current interpreter.
+executable: "${VE_HOME}/miniapps/bin/python"

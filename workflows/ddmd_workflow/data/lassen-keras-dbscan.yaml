@@ -17,8 +17,8 @@ molecular_dynamics_stage:
     #- unset PYTHONPATH
     - module load anaconda3
     - source activate base
-    - conda activate ${CONDA_ENV}/conda-openmm
-    executable: ${CONDA_ENV}/conda-openmm/bin/python
+    - conda activate ${CONDA_ENV}/ddmd-openmm
+    executable: ${CONDA_ENV}/ddmd-openmm/bin/python
     arguments:
     - ${WORK_DIR}/sim/openmm/run_openmm.py
     cpu_reqs:
@@ -96,10 +96,10 @@ machine_learning_stage:
     - export XLA_FLAGS="--xla_gpu_strict_conv_algorithm_picker=false --xla_gpu_cuda_data_dir=/opt/packages/cuda/v12.6.1"
     - module load anaconda3
     - source /opt/packages/anaconda3-2024.10-1/etc/profile.d/conda.sh
-    - conda activate ${CONDA_ENV}/conda-keras
+    - conda activate ${CONDA_ENV}/ddmd-keras
     - unset CUDA_VISIBLE_DEVICES
     - export OMP_NUM_THREADS=4
-    executable: ${CONDA_ENV}/conda-keras/bin/python
+    executable: ${CONDA_ENV}/ddmd-keras/bin/python
     arguments:
     - ${WORK_DIR}/models/keras_cvae/train.py
     cpu_reqs:
@@ -173,8 +173,8 @@ model_selection_stage:
     #- unset PYTHONPATH
     - module load anaconda3
     - source activate base
-    - conda activate ${CONDA_ENV}/conda-keras
-    executable: ${CONDA_ENV}/conda-keras/bin/python
+    - conda activate ${CONDA_ENV}/ddmd-keras
+    executable: ${CONDA_ENV}/ddmd-keras/bin/python
     arguments:
     - ${WORK_DIR}/selection/latest/select_model.py
     cpu_reqs:
@@ -206,11 +206,11 @@ agent_stage:
     - export TF_FORCE_GPU_ALLOW_GROWTH=true
     - module load anaconda3
     - source /opt/packages/anaconda3-2024.10-1/etc/profile.d/conda.sh
-    - conda activate ${CONDA_ENV}/conda-keras
+    - conda activate ${CONDA_ENV}/ddmd-keras
     - export CUDA_HOME=/opt/packages/cuda/v12.6.1
     - export OMP_NUM_THREADS=4
     - export LD_LIBRARY_PATH=/opt/packages/cuda/v12.6.1/lib64:$LD_LIBRARY_PATH
-    executable: ${CONDA_ENV}/conda-keras/bin/python
+    executable: ${CONDA_ENV}/ddmd-keras/bin/python
     arguments:
     - ${WORK_DIR}/agents/lof/lof.py
     cpu_reqs:

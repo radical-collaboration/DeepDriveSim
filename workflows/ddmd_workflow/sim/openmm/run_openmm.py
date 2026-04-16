@@ -65,7 +65,7 @@ class SimulationContext:
     def _init_workdir(self) -> None:
         """Setup workdir and copy PDB/TOP files."""
 
-        self.workdir.mkdir(exist_ok=True)
+        self.workdir.mkdir(parents=True, exist_ok=True)
 
         self._pdb_file = self._get_pdb_file()
 

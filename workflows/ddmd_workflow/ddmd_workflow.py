@@ -4,9 +4,20 @@ import os
 import shutil
 from pathlib import Path
 
+import yaml
+
 from ddsim.ddsim_manager import DDSimManager
 from workflows.ddmd_workflow.config import ExperimentConfig
 from workflows.ddmd_workflow.data.api import DeepDriveMD_API
+
+
+def _load_camp_config(config_file) -> dict:
+    path = Path(config_file)
+    if path.exists():
+        with open(path) as f:
+            raw = yaml.safe_load(f) or {}
+        return {k: os.path.expandvars(v) if isinstance(v, str) else v for k, v in raw.items()}
+    return {}
 
 
 class DDMdWorkflow(DDSimManager):
@@ -54,11 +65,40 @@ class DDMdWorkflow(DDSimManager):
         else:
             self.policies = _raw_policies
 
-        config = kwargs.get("config")
+        # Load camp-level config (config.yaml) and extract workflow parameters.
+        # Falls back to direct kwargs for callers that don't use a camp config file.
+        camp_cfg = _load_camp_config(kwargs["camp_config"]) if "camp_config" in kwargs else {}
+        _here = Path(__file__).parent
+        config = camp_cfg.get("ddsim_config") or kwargs.get("config")
+        self.debug = camp_cfg.get("debug", kwargs.get("debug", False))
+        self.tf_gpu_wrapper = (
+            camp_cfg.get("tf_gpu_wrapper") or kwargs.get("tf_gpu_wrapper")
+            or str(_here / "tf_gpu_wrapper.sh")
+        )
+        self.tf_cpu_wrapper = (
+            camp_cfg.get("tf_cpu_wrapper") or kwargs.get("tf_cpu_wrapper")
+            or str(_here / "tf_cpu_wrapper.sh")
+        )
 
-        # Load and validate experiment configuration from YAML
-        self.experiment_config = ExperimentConfig.from_yaml(config)
-        self.debug = getattr(self.experiment_config, "debug", False)
+        # Load and validate experiment configuration from YAML.
+        # When running multiple replicas they all share the same ddsim_config YAML,
+        # so experiment_directory must be unique per replica to pass the validator
+        # (which rejects pre-existing directories) and avoid data collisions.
+        # We load the raw YAML, suffix experiment_directory with the replica name,
+        # then construct ExperimentConfig directly — same as from_yaml() but patched.
+        with open(config) as _fp:
+            _raw = yaml.safe_load(_fp)
+        for _k, _v in _raw.items():
+            if isinstance(_v, str):
+                _raw[_k] = os.path.expandvars(_v)
+        _exp_dir = Path(_raw["experiment_directory"])
+        _replica_name = kwargs.get("name", "ddsim")
+        _raw["experiment_directory"] = str(_exp_dir.parent / f"{_exp_dir.name}-{_replica_name}")
+        # Make node_local_path unique per replica so concurrent replicas don't
+        # collide when writing sim scratch files (workdir = node_local_path/stage_task).
+        if _raw.get("node_local_path"):
+            _raw["node_local_path"] = str(Path(_raw["node_local_path"]) / _replica_name)
+        self.experiment_config = ExperimentConfig(**_raw)
 
         agg_stage = self.experiment_config.aggregation_stage
         self.skip_aggregation = agg_stage.skip_aggregation
@@ -186,21 +226,23 @@ class DDMdWorkflow(DDSimManager):
         # selection) pins them to a GPU-pinned Dragon worker, which can freeze
         # Dragon's IPC when the stage is long-running (e.g. CPU Keras training).
         stage_needs_gpu = config.gpu_reqs.processes > 0
-        pre_exec = list(config.pre_exec)
-        if not stage_needs_gpu:
-            pass  # pre_exec is ignored by DragonExecutionBackendV3; env setup via tf_gpu_wrapper.sh
+        # pre_exec = list(config.pre_exec)
+        # if not stage_needs_gpu:
+        #     pass  # pre_exec is ignored by DragonExecutionBackendV3; env setup via tf_gpu_wrapper.sh
         task_description = {
-            "ranks": 1,
-            "cores_per_rank": config.cpu_reqs.processes,
-            "gpus_per_rank": 0
-            if (self.policies and stage_needs_gpu)
-            else config.gpu_reqs.processes,
-            "pre_exec": pre_exec,
-            "shell": True,
+            # "ranks": 1,
+            # "cores_per_rank": config.cpu_reqs.processes,
+            # "gpus_per_rank": 0
+            # if (self.policies and stage_needs_gpu)
+            # else config.gpu_reqs.processes,
+            # "pre_exec": pre_exec,
+            # "shell": True,
         }
+
         if self.policies and stage_needs_gpu:
             policy = self.policies[stage_idx % len(self.policies)]
             task_description["process_template"] = {"policy": policy}
+        
         return task_description
 
     # --------------------------------------------------------------------------
@@ -385,7 +427,7 @@ class DDMdWorkflow(DDSimManager):
         # --- Training task: trains ML model on aggregated data ---
         task_description = self.task_descriptions["machine_learning_stage"]
 
-        _TF_GPU_WRAPPER = str(Path(__file__).parent / "tf_gpu_wrapper.sh")
+        _TF_GPU_WRAPPER = self.tf_gpu_wrapper
 
         # Training runs via asyncio subprocess directly (not Dragon executable_task).
         # Dragon worker subprocesses hang during TF's CUDA initialization even with
@@ -421,7 +463,7 @@ class DDMdWorkflow(DDSimManager):
         # entirely and run as a direct asyncio subprocess so Dragon's CUDA IPC does
         # not interfere with TF initialisation.  tf_cpu_wrapper.sh sets
         # CUDA_VISIBLE_DEVICES=-1 to force CPU execution.
-        _TF_CPU_WRAPPER = str(Path(__file__).parent / "tf_cpu_wrapper.sh")
+        _TF_CPU_WRAPPER = self.tf_cpu_wrapper
 
         async def agent_stage():
             cfg = stage_config["agent_stage"]

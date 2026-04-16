@@ -30,7 +30,7 @@ module load cuda/12.6.1
 module load cudnn/8.0.4
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 source activate base
-conda activate   $CONDA_ENV/deepdrivesim
+conda activate   $CONDA_ENV/ddmd
 
 cp  $INPUT_DIR/lassen-keras-dbscan.yaml $INPUT_DIR/new_lassen-keras-dbscan.yaml
 sed -i "s|\${EXPRMNT_DIR}|$EXPRMNT_DIR|g" $INPUT_DIR/new_lassen-keras-dbscan.yaml 

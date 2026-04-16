@@ -58,10 +58,7 @@ class MiniAppsWorkflow(DDSimManager):
         # Per-task python executables — each can point to a different conda env.
         # Falls back to the current interpreter if not set.
         _default_exe = sys.executable
-        self.sim_executable = cfg.get("sim_executable") or _default_exe
-        self.train_executable = cfg.get("train_executable") or _default_exe
-        self.predict_executable = cfg.get("predict_executable") or _default_exe
-        self.selection_executable = cfg.get("selection_executable") or _default_exe
+        self.executable = cfg.get("executable") or _default_exe
 
         # Prediction (agent) is running as executable for
         # miniapps and writes all scores to file
@@ -238,7 +235,7 @@ class MiniAppsWorkflow(DDSimManager):
         # CPU and making each simulation ~16x slower.
         gpu_id = self.policy.gpu_affinity[0] if self.policy else None
         cuda_env = f"CUDA_VISIBLE_DEVICES={gpu_id} " if gpu_id is not None else ""
-        return f"env HDF5_USE_FILE_LOCKING=FALSE {cuda_env}{self.sim_executable} {self.src_dir}/simulation.py {args}"
+        return f"env HDF5_USE_FILE_LOCKING=FALSE {cuda_env}{self.executable} {self.src_dir}/simulation.py {args}"
 
     def _training_cmd(self) -> str:
         gpu_id = self.policy.gpu_affinity[0] if self.policy else None
@@ -249,7 +246,7 @@ class MiniAppsWorkflow(DDSimManager):
             f"--phase {self.phase} "
             f"--num_epochs {self.num_epochs}"
         )
-        return f"env HDF5_USE_FILE_LOCKING=FALSE {cuda_env}{self.train_executable} {self.src_dir}/training.py {args}"
+        return f"env HDF5_USE_FILE_LOCKING=FALSE {cuda_env}{self.executable} {self.src_dir}/training.py {args}"
 
     def _prediction_cmd(self) -> str:
         gpu_id = self.policy.gpu_affinity[0] if self.policy else None
@@ -263,7 +260,7 @@ class MiniAppsWorkflow(DDSimManager):
             f"--num_mult {self.num_mult} "
             f"--output_file {self.prediction_file}"
         )
-        return f"env HDF5_USE_FILE_LOCKING=FALSE {cuda_env}{self.predict_executable} {self.src_dir}/agent.py {args}"
+        return f"env HDF5_USE_FILE_LOCKING=FALSE {cuda_env}{self.executable} {self.src_dir}/agent.py {args}"
 
     def _selection_cmd(self) -> str:
         args = (
@@ -271,7 +268,7 @@ class MiniAppsWorkflow(DDSimManager):
             f"--instance_index {self.iteration} "
             f"--phase {self.phase}"
         )
-        return f"{self.selection_executable} {self.src_dir}/selection.py {args}"
+        return f"{self.executable} {self.src_dir}/selection.py {args}"
 
     # --------------------------------------------------------------------------
     def register_tasks(self):

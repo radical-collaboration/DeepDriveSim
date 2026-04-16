@@ -22,7 +22,7 @@ unset SLURM_EXPORT_ENV
 #module load anaconda
 module load anaconda3
 source activate base
-conda activate $CONDA_ENV/miniapps_workflow
+conda activate $CONDA_ENV/miniapps
 
 module load cuda/12.6.1
 module load cudnn/8.0.4
@@ -32,7 +32,5 @@ cd  $WORK_DIR
 rm telemetry-results/*
 rm nvml-telemetry/*
 
-# Pass --test_asyncflow to use MiniAppsWorkflowAsyncflow (@self.flow decorators)
-# for asyncflow developer testing.  Remove the flag to use the working version.
-dragon -s run_camp.py --test_asyncflow
+dragon -s run_camp.py
 #dragon -s run_camp.py
