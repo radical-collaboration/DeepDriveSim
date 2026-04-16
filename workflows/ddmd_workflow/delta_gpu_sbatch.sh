@@ -1,6 +1,6 @@
 #!/bin/sh -l
 
-#SBATCH -A bblj-delta-gpu
+#SBATCH -A ***-delta-gpu
 #SBATCH --partition=gpuA40x4
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -16,7 +16,7 @@ export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
 export TF_FORCE_GPU_ALLOW_GROWTH=true
 
-export HOME_DIR=/scratch/bblj/mgoliyad1
+export HOME_DIR=/scratch/bblj/${USER}
 export WORK_DIR=${HOME_DIR}/DeepDriveSim/workflows/ddmd_workflow
 export INPUT_DIR=${WORK_DIR}/data
 
@@ -30,11 +30,11 @@ rm ddict_*
 
 cp  ${INPUT_DIR}/lassen-keras-dbscan.yaml ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
 sed -i "s|\${EXPRMNT_DIR}|${EXPRMNT_DIR}|g" ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
-sed -i "s|\${CONDA_ENV}|/u/mgoliyad1/ve|g"  ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
+sed -i "s|\${CONDA_ENV}|/u/${USER}/ve|g"  ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
 sed -i "s|\${WORK_DIR}|${WORK_DIR}|g"       ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
 
 
-source /u/mgoliyad1/ve/ddmd/bin/activate
+source /u/${USER}/ve/ddmd/bin/activate
 dragon-config add --ofi-runtime-lib=/opt/cray/libfabric/1.22.0/lib64
 if [ "${SLURM_NNODES}" -gt 1 ]; then
     dragon -m run_workflow.py

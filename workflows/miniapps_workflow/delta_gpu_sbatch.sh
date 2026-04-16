@@ -1,6 +1,6 @@
 #!/bin/sh -l
 
-#SBATCH -A bblj-delta-gpu
+#SBATCH -A ***-delta-gpu
 #SBATCH --partition=gpuA40x4
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -19,7 +19,7 @@ export CUDA_HOME=/opt/nvidia/hpc_sdk/Linux_x86_64/25.3/cuda/12.8
 export MPI_LIB=/opt/cray/pe/mpich/8.1.32/ofi/gnu/11.2/lib
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:${VE_HOME}/miniapps/lib:$MPI_LIB:$LD_LIBRARY_PATH
 
-export DDSIM_DIR=/scratch/bblj/mgoliyad1/DeepDriveSim
+export DDSIM_DIR=/scratch/bblj/${USER}/DeepDriveSim
 export VE_HOME=~/ve
 export WORK_DIR=${DDSIM_DIR}/workflows/miniapps_workflow
 

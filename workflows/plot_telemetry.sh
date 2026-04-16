@@ -17,7 +17,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLOT_SCRIPT=/scratch/bblj/mgoliyad1/radical.asyncflow/examples/telemetry/plot_workflow_dashboard.py
+PLOT_SCRIPT=/scratch/bblj/${USER}/radical.asyncflow/examples/telemetry/plot_workflow_dashboard.py
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
 if [ $# -lt 1 ]; then

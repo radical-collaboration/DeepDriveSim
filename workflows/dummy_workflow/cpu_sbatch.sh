@@ -1,6 +1,6 @@
 #!/bin/sh -l
   
-#SBATCH -A bblj-delta-cpu 
+#SBATCH -A ***-delta-cpu 
 #SBATCH --partition=cpu
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=128
