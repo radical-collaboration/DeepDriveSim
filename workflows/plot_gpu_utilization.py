@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Parse a rhapsody telemetry JSONL file and plot GPU utilization per node and per GPU."""
+"""
+    Parse a rhapsody telemetry JSONL file and plot
+    GPU utilization per node and per GPU.
+"""
 
 import argparse
 import json
@@ -108,7 +111,8 @@ def plot_per_gpu(per_gpu, output_dir: Path):
             ax = axes[row][0]
             color = colors[row % len(colors)]
             ax.plot(t, gpu, alpha=0.25, color=color, linewidth=0.8)
-            ax.plot(t, smooth(gpu), color=color, linewidth=1.5, label=f"GPU {gpu_id} (smoothed)")
+            ax.plot(t, smooth(gpu), color=color, linewidth=1.5,
+                    label=f"GPU {gpu_id} (smoothed)")
             ax.set_ylabel("GPU Util (%)", fontsize=9)
             ax.set_ylim(0, 105)
             ax.legend(loc="upper right", fontsize=8)
@@ -126,7 +130,9 @@ def plot_per_gpu(per_gpu, output_dir: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Plot GPU utilization from telemetry JSONL")
+    parser = argparse.ArgumentParser(
+        description="Plot GPU utilization from telemetry JSONL"
+    )
     parser.add_argument("telemetry_file", help="Path to .telemetry.jsonl file")
     parser.add_argument(
         "--output_dir",
