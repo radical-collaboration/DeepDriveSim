@@ -284,8 +284,8 @@ class DummyWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     async def check_train_status(self) -> bool:
         """
-            Return True when enough simulation outputs have
-            accumulated to start training.
+        Return True when enough simulation outputs have
+        accumulated to start training.
         """
         outputs = list(self.sim_output_dir.iterdir())
         return len(outputs) >= self.start_training_threshold
