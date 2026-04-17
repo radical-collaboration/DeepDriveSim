@@ -1,0 +1,24 @@
+# =============================================================================
+# MiniApps Workflow — workflow-specific parameters
+# =============================================================================
+
+debug: true
+engine:      dragon       # concurrent | dragon
+num_replicas: 4
+home_dir:    "MiniApps"
+
+total_num_sim:            10
+max_sim_batch:            4
+training_cores:           1
+free_resources_for_train: true
+miniapps_data_ready:      4     # signal inference-ready after this many sims complete
+phase:                    0
+num_step:                 1000
+num_epochs:               1000
+clean_unregistered_sims:  false
+
+src_dir: ""   # leave empty to use the miniapps/ directory (default)
+
+# Per-task python executable — set to the python binary of the target venv,
+# or leave empty to inherit the current interpreter.
+executable: "${VE_HOME}/miniapps/bin/python"

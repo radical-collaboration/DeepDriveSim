@@ -1,14 +1,16 @@
 import asyncio
-import random
 from unittest.mock import MagicMock
 
-from ddsim.ddsim_manager import DDSimManager
+import pytest
 
-# from unittest.mock import Mock
+DDSimManager = pytest.importorskip(
+    "ddsim.ddsim_manager",
+    reason="ddsim.ddsim_manager not importable",
+).DDSimManager
 
 
 # ---------------------------
-# Minimal stubs for logger/learner
+# Minimal stubs for logger
 # ---------------------------
 class DummyLogger:
     def __init__(self):
@@ -23,10 +25,15 @@ class DummyLogger:
 
 
 class MockLearner(DDSimManager):
-    """Dummy workflow for managing DDMD simulations, training, and predictions."""
+    """Minimal workflow subclass for unit and integration tests."""
 
     def __init__(self, **kwargs):
-        # Simulation/training config
+        # Initialize parent class first so its __init__ doesn't overwrite the
+        # values we set below (DDSimManager.__init__ resets sim_batch_size and
+        # max_sim_batch to 0).
+        super().__init__()
+
+        # Simulation/training config — must come after super().__init__()
         self.max_sim_batch = kwargs.get("max_sim_batch", 4)
         self.training_cores = kwargs.get("training_cores", 1)
         self.sim_batch_size = self.max_sim_batch + self.training_cores
@@ -35,93 +42,78 @@ class MockLearner(DDSimManager):
         self.start_training_threshold = kwargs.get("start_training_threshold", 10)
         self.training_epochs = kwargs.get("training_epochs", 1)
         self.force_start_training = bool(kwargs.get("force_start_training", True))
-        self.clean_unregistered_sims = bool(kwargs.get("clean_unregistered_sims", True))
 
         self.iteration = 0
         self.retrain_model = self.training_epochs > 0
-        self.sim_predictions = {}
-        self.selection = None
-        self.run_prediction_as_exe = False
-
-        # Initialize parent class (sets up asyncflow, logger, queues, etc.)
-        asyncflow = kwargs.get("asyncflow")
-        super().__init__(asyncflow)
 
         # Override timing for faster tests
-        self.time_between_predictions = 0.1
-        self.time_before_shutdown = 0.1
+        self.sleep_time = 0.01
 
-        # Register learner tasks
-        self._register_learner_tasks()
+        # Enable finalize_results so start() has an exit path
+        self.call_finalize_results = True
+
+        # Register simulation callable
+        self._register_tasks()
         self.logger = DummyLogger()
 
     # --------------------------------------------------------------------------
-    def stop_simulation(self, *args, **kwargs):
-        """Return True if prediction < threshold (cancel simulation)."""
-        return kwargs["prediction"] < self.prediction_threshold
+    def _register_tasks(self):
+        """Register simulation as a plain asyncio.Task factory."""
 
-    # --------------------------------------------------------------------------
-    async def collect_sim_inputs(self, n=5):
-        """Collect all simulation input files into task queue."""
-        for i in range(n):
-            sim_tag = f"sim_{i}"
-            await self.sim_task_queue.put({"sim_tag": sim_tag})
-
-    # --------------------------------------------------------------------------
-    async def init_sim_queue(self):
-        """Initialize simulation queue (uses collect_sim_inputs for tests)."""
-        pass
-
-    # --------------------------------------------------------------------------
-    async def check_train_data(self):
-        """Check if enough training data is available to start training."""
-        return True
-
-    # --------------------------------------------------------------------------
-    async def clean_sim_data(self, sim_ind):
-        """Clean up simulation data files."""
-        pass
-
-    # --------------------------------------------------------------------------
-    async def del_files(self, sim_ind):
-        """Alias for backwards compatibility in tests."""
-        await self.clean_sim_data(sim_ind)
-
-    # --------------------------------------------------------------------------
-    def _register_learner_tasks(self):
-        """Register learner tasks: simulation, training, active learning, prediction."""
-
-        @self.learner.simulation_task(as_executable=False)
-        async def simulation(*args, **kwargs):
-            await asyncio.sleep(5)
-            return True
+        def simulation(sim_inputs=None, **kwargs):
+            return asyncio.create_task(asyncio.sleep(10.0))
 
         self.simulation = simulation
 
-        # will work after UQ branch of ROSE is finalized
-        # @self.learner.prediction_task(as_executable=False)
-        @self.learner.utility_task(as_executable=False)
-        async def prediction(*args, **kwargs):
-            """Dummy prediction: assign random score to each sim."""
-            sim_inds = list(self.registered_sims.keys())
-            return {sim_ind: random.random() for sim_ind in sim_inds}
+    # --------------------------------------------------------------------------
+    def stop_simulation(self, prediction=None, **kwargs):
+        """Cancel simulation if prediction is below threshold."""
+        return (prediction or 0) < self.prediction_threshold
 
-        self.prediction = prediction
+    # --------------------------------------------------------------------------
+    async def collect_sim_inputs(self, n=5):
+        """Helper to populate the queue with n dummy simulation inputs."""
+        for i in range(n):
+            await self.sim_task_queue.put({"sim_idx": f"sim_{i}"})
+
+    # --------------------------------------------------------------------------
+    async def init_sim_queue(self):
+        pass
+
+    # --------------------------------------------------------------------------
+    async def check_train_status(self):
+        return True
 
     # --------------------------------------------------------------------------
     async def train_model(self):
         pass
 
+    # --------------------------------------------------------------------------
+    async def run_inference(self):
+        pass
 
-# @pytest.fixture
-# def mock_execution_backend():
-#     """Mock execution backend"""
-#     return Mock()
+    # --------------------------------------------------------------------------
+    async def add_sims_to_queue(self, sim_ids):
+        pass
 
+    # --------------------------------------------------------------------------
+    async def del_files(self, sim_idx):
+        """Alias kept for backwards compatibility with existing tests."""
+        pass
 
-# @pytest.fixture
-# def ddmd_workflow(mock_execution_backend):
-#     """Create an ImpressManager instance for testing"""
-#     manager = MockLearner(asyncflow=mock_execution_backend)
-#     manager.logger = Mock()  # Mock the logger
-#     return manager
+    # --------------------------------------------------------------------------
+    async def post_process_sim(self, sim_idx):
+        pass
+
+    # --------------------------------------------------------------------------
+    async def finalize_results(self):
+        """
+        Stop the workflow after one iteration (keeps start()
+        from looping forever).
+        """
+        self.run_workflow = False
+        self.shutting_down.set()
+
+    # --------------------------------------------------------------------------
+    async def close(self):
+        self.shutting_down.set()

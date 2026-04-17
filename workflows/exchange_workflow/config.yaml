@@ -1,0 +1,29 @@
+# =============================================================================
+# Exchange Workflow — workflow-specific parameters
+# =============================================================================
+
+debug: true
+engine:      dragon       # concurrent | dragon
+num_replicas: 1
+
+# ── MD / Exchange simulation parameters ──────────────────────────────────────
+num_init_sims:        4      # number of concurrent MD replicas to launch
+num_steps:            1000   # MD steps per simulation run
+target_temp:          310.0  # target temperature (K)
+exchange_step_interval: 100  # trigger exchange every N steps across all replicas
+
+# experiment_dir: "exchange_output"   # leave unset to skip experiment dir creation
+
+# ── Per-task resource descriptions ───────────────────────────────────────────
+# cpu_reqs: cores per rank
+# gpu_reqs: GPUs per rank (0 = CPU only)
+# pre_exec:  list of shell commands run before the task (module loads, env vars, etc.)
+tasks:
+  MD:
+    cpu_reqs: 1
+    gpu_reqs: 1
+    pre_exec: []
+  EXCHANGE:
+    cpu_reqs: 1
+    gpu_reqs: 0
+    pre_exec: []

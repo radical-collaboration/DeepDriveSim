@@ -33,7 +33,7 @@ class TestLoggerInit:
 
     def test_default_initialization(self):
         logger = Logger()
-        assert logger.name == "DDMDManager"
+        assert logger.name == "DDSimManager"
         assert logger.use_colors is True
 
     def test_custom_name(self):

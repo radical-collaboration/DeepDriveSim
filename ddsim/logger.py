@@ -34,7 +34,7 @@ class LogLevel(Enum):
 
 
 class Logger:
-    def __init__(self, name="DDMDManager", use_colors=True, output_stream=None):
+    def __init__(self, name="DDSimManager", use_colors=True, output_stream=None):
         self.name = name
         self.use_colors = use_colors
         self.output_stream = output_stream or sys.stdout
@@ -49,18 +49,14 @@ class Logger:
 
         self.component_colors = {
             "task": Colors.BRIGHT_GREEN,
-            "manager": Colors.BRIGHT_RED,
-            "workflow": Colors.BRIGHT_GREEN,
-            # 'task': Colors.BRIGHT_YELLOW,
-            # 'error': Colors.RED,
-            # 'success': Colors.GREEN,
-            #'stage': Colors.BRIGHT_CYAN,
+            "cancelation": Colors.BRIGHT_RED,
+            "workflow": Colors.MAGENTA,
             "simulation": Colors.BLUE,
             "training": Colors.BRIGHT_YELLOW,
+            "manager": Colors.GREEN,
+            "evaluate": Colors.BRIGHT_MAGENTA,
+            "finalization": Colors.BRIGHT_BLUE,
             "prediction": Colors.GREEN,
-            #'validation': Colors.BRIGHT_MAGENTA,
-            #'checkpoint': Colors.BRIGHT_MAGENTA,
-            #'metric': Colors.BLACK
         }
 
     def _colorize(self, text, color):
@@ -93,25 +89,35 @@ class Logger:
         stream.write(message + "\n")
         stream.flush()
 
-    def debug(self, message, component="manager", task_name=None):
+    def debug(self, message, component=None, task_name=None):
+        if component is None:
+            component = self.name
         formatted = self._format_message(LogLevel.DEBUG, component, message, task_name)
         self._write_log(formatted)
 
-    def info(self, message, component="manager", task_name=None):
+    def info(self, message, component=None, task_name=None):
+        if component is None:
+            component = self.name
         formatted = self._format_message(LogLevel.INFO, component, message, task_name)
         self._write_log(formatted)
 
-    def warning(self, message, component="manager", task_name=None):
+    def warning(self, message, component=None, task_name=None):
+        if component is None:
+            component = self.name
         formatted = self._format_message(
             LogLevel.WARNING, component, message, task_name
         )
         self._write_log(formatted)
 
-    def error(self, message, component="manager", task_name=None):
+    def error(self, message, component=None, task_name=None):
+        if component is None:
+            component = self.name
         formatted = self._format_message(LogLevel.ERROR, component, message, task_name)
         self._write_log(formatted, to_stderr=True)
 
-    def critical(self, message, component="manager", task_name=None):
+    def critical(self, message, component=None, task_name=None):
+        if component is None:
+            component = self.name
         formatted = self._format_message(
             LogLevel.CRITICAL, component, message, task_name
         )
@@ -130,9 +136,11 @@ class Logger:
         self.warning(message, component)
 
     def manager_starting(self, task_count):
-        message = (f"Starting with "
-                f"{self._colorize(str(task_count), Colors.BRIGHT_WHITE)}"
-                f"initial tasks")
+        message = (
+            f"Starting with "
+            f"{self._colorize(str(task_count), Colors.BRIGHT_WHITE)} "
+            f"initial tasks"
+        )
         self.info(message, "manager")
 
     def manager_exiting(self):

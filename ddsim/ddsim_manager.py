@@ -1,350 +1,313 @@
 #!/usr/bin/env python3
 # ------------------------------------------------------------------------------
-# Async-friendly DDMD manager for orchestrating simulations
+# Async-friendly DDSim manager for orchestrating simulations
 # ------------------------------------------------------------------------------
 
 import asyncio
-import subprocess
-from abc import ABC
 from collections import OrderedDict
-
-from rose import Learner
 
 from ddsim.logger import Logger
 
 
-def gpu_available():
-    try:
-        subprocess.check_output(["nvidia-smi"], stderr=subprocess.STDOUT)
-        return True
-    except Exception:
-        return False
-
-
-class DDSimManager(ABC):
+class DDSimManager:
     """
     Orchestrates the scheduling, monitoring, and cancellation of simulations
     in an AI-steered ensemble simulation workflow.
+
+    Sim lifecycle
+    -------------
+    submitted  → registered_sims  (task is running)
+    completed  → completed_sims   (task finished successfully)
+    cancelled for resources       → re-queued via add_sims_to_queue
+    cancelled by prediction       → counted as completed (cancel_sims pre-adds
+                                    to completed_sims before cancelling the task)
+
+    Subclasses must define:
+        - sim_batch_size, max_sim_batch, training_cores
+        - retrain_model (flag to control training loop)
+        - init_sim_queue, check_train_status, train_model
+        - stop_simulation (returns True if sim should be canceled)
+        - add_sims_to_queue (re-queue paused sims)
+        - post_process_sim (per-simulation cleanup)
+        - evaluate_simulations (collect prediction scores)
+        - close
+    Optional:
+        - free_resources_for_train (default False)
     """
 
-    def __init__(self, asyncflow):
-        self.learner = Learner(asyncflow)
-        self.logger = Logger(use_colors=True)
-        self.registered_sims = OrderedDict()  # Active simulations: {tag: asyncio.Task}
-        self.sim_task_queue = asyncio.Queue()  # Queue of pending simulation inputs
-        self.completed_sims = set()  # To Store completed simulations
+    def __init__(self, name: str = "ddsim"):
+        self.name = name
+        self.workflow_id = name
+        self.logger = Logger(name=name, use_colors=True)
+        self.registered_sims = OrderedDict()  # running:  {sim_idx: asyncio.Task}
+        self.sim_task_queue = asyncio.Queue()  # pending sim inputs
+        self.completed_sims = []  # finished sim indices
+        self.sim_predictions = {}
+        self.train_models = []
 
-        # Tuning parameters (should be configurable)
-        self.time_between_predictions = 20  # Delay between prediction checks
-        self.time_before_shutdown = 5  # Grace period before shutdown
+        self.sleep_time = 20
         self.debug = False
 
-        if gpu_available():
-            self.device = "gpu"
-        else:
-            self.device = "cpu"
+        # Workflow flags — set in subclass:
+        self.call_finalize_results = False
+        self.call_evaluate_simulations = False
+        self.run_workflow = True
+        self.free_resources_for_train = False
+        self.call_cancel_simulations = False
+        self.call_post_process_sim = False
+
+        self.sim_batch_size = 0
+        self.max_sim_batch = 0
+
+        # Sims permanently killed by cancel_sims (prediction-based).
+        # _on_sim_done uses this to distinguish a permanent kill (no re-queue)
+        # from a resource-freeing cancel (re-queue).
+        self._perm_cancelled: set = set()
 
         self.shutting_down = asyncio.Event()
-        self.logger.info(f"DDSim Manager initialized on device: {self.device}")
-
-        """These attributes should be defined in pipeline subclass:
-        Make sure they are set correctly!
-            - self.sim_batch_size
-            - self.max_sim_batch
-            - self.retrain_model
-            - self.sim_batch_size
-            - self.clean_unregistered_sims
-            - self.selection: should be set to None if training task
-                returns pretrained model
-            _register_learner_tasks must be defined in subclass to register
-                all learner tasks: simulation, training, active
-                learning, prediction.
-        """
+        self.logger.separator(f"{self.name} MANAGER STARTING")
 
     # --------------------------------------------------------------------------
-    def stop_simulation(self, pred):
-        """
-        Decide whether a simulation should be canceled based on prediction.
-        Override this with actual logic in pipeline subclass.
-        """
+    def add_sims_to_queue(self, *args, **kwargs):
+        raise NotImplementedError("add_sims_to_queue must be implemented")
+
+    def post_process_sim(self, *args, **kwargs):
+        raise NotImplementedError("post_process_sim must be implemented")
+
+    def stop_simulation(self, *args, **kwargs):
         raise NotImplementedError("stop_simulation must be implemented")
 
-    # --------------------------------------------------------------------------
     async def init_sim_queue(self):
-        """
-        Collect all simulation input files into task queue (sim_task_queue).
-        Override this with actual logic in pipeline subclass.
-        """
         raise NotImplementedError("init_sim_queue must be implemented")
 
-    # --------------------------------------------------------------------------
-    async def check_train_data(self):
-        """
-        Check if enough training data is available to start training.
-        Override this with actual logic in pipeline subclass.
-        """
-        raise NotImplementedError("check_train_data must be implemented")
+    async def check_train_status(self):
+        raise NotImplementedError("check_train_status must be implemented")
 
-    # --------------------------------------------------------------------------
-    async def clean_sim_data(self, sim_ind):
-        """
-        Delete all files associated with a simulation index (sim_ind)
-        if clean_unregistered_sims is set to True in pipeline subclass.
-        Override this with actual logic if needed.
-        """
-        raise NotImplementedError("clean_sim_data must be implemented")
-
-    # --------------------------------------------------------------------------
     async def train_model(self):
-        """
-        Define all step required for model training.
-        Override this with actual logic in pipeline subclass.
-        """
-        raise NotImplementedError("train_model must be implemented")
+        """Primary training step. Override in subclass (default: no-op)."""
+        pass
 
-    # --------------------------------------------------------------------------
     async def close(self):
-        """Gracefully shutdown learner."""
-        try:
-            await self.learner.shutdown()
-        except Exception:
-            pass
+        raise NotImplementedError("close must be implemented")
 
     async def stop(self):
-        """Alias for close(), can be used for external termination."""
-        try:
-            await self.learner.shutdown()
-        except Exception:
-            pass
+        await self.close()
 
     # --------------------------------------------------------------------------
-    async def _unregister_sims(self, unregistered_sims, clean_unregistered_sims):
+    def _on_sim_done(self, task: asyncio.Task, sim_idx) -> None:
         """
-        Remove completed or canceled simulations from the registry,
-        and optionally clean up files from canceled simulations
-        to exclude them from the training batch.
-        """
-        for tag in unregistered_sims:
-            self.registered_sims.pop(tag, None)
-            self.completed_sims.add(tag)
-            if clean_unregistered_sims:
-                await self.clean_sim_data(tag)
+        Done-callback registered on every simulation task.
 
-        if unregistered_sims and not self.sim_task_queue.empty():
-            # Adjust next batch size (ensure it does not exceed max_sim_batch)
-            num_to_submit = min(self.sim_batch_size, self.sim_task_queue.qsize())
-            if num_to_submit > 0:
+        Unregisters the sim and frees its batch slot, then:
+          - task.cancelled() + in _perm_cancelled  → prediction kill; already
+            counted in completed_sims, just clean up.
+          - task.cancelled() + not in _perm_cancelled → resource-freeing cancel;
+            re-queue via add_sims_to_queue so the sim runs again after training.
+          - task completed normally → add to completed_sims, call post_process_sim.
+        """
+        self.registered_sims.pop(sim_idx, None)
+        self.sim_batch_size += 1
+        if self.max_sim_batch > 0:
+            self.sim_batch_size = min(self.sim_batch_size, self.max_sim_batch)
+
+        if task.cancelled():
+            if sim_idx in self._perm_cancelled:
+                self._perm_cancelled.discard(sim_idx)
+            else:
                 self.logger.info(
-                    f"{num_to_submit} simulations will start at next iteration"
+                    f"Sim {sim_idx} cancelled for resources — re-queuing",
+                    component=f"{self.name}-sim",
                 )
+                asyncio.ensure_future(self.add_sims_to_queue([sim_idx]))
+        else:
+            exc = task.exception()
+            if exc:
+                self.logger.error(
+                    f"Sim {sim_idx} failed: {exc}", component=f"{self.name}-sim"
+                )
+            else:
+                self.completed_sims.append(sim_idx)
+                if self.debug:
+                    self.logger.task_completed(
+                        f"Sim {sim_idx}", component=f"{self.name}-sim"
+                    )
+                if self.call_post_process_sim:
+                    asyncio.ensure_future(self.post_process_sim(sim_idx))
 
     # --------------------------------------------------------------------------
     async def submit_sims(self):
-        """Submit simulations from the queue and register them."""
+        """Pull inputs from sim_task_queue and register running tasks."""
         while not self.shutting_down.is_set():
-            await self.monitor_sims()  # Clean up completed/failed tasks
-
             if self.sim_batch_size <= 0:
                 await asyncio.sleep(1)
                 continue
 
-            # Don't submit more than sim_batch_size simulation
-            # to have enough resources for training task
             num_to_submit = min(self.sim_batch_size, self.sim_task_queue.qsize())
+            submitted = 0
             for _ in range(num_to_submit):
                 try:
                     sim_inputs = self.sim_task_queue.get_nowait()
                 except asyncio.QueueEmpty:
-                    self.logger.info("No more simulation inputs in queue.")
                     break
 
                 if sim_inputs is None:
                     break
 
+                sim_idx = sim_inputs["sim_idx"]
                 simul = self.simulation(sim_inputs=sim_inputs)
-                sim_tag = sim_inputs["sim_tag"]
-                self.logger.task_started(f"Sim {sim_tag}", component="simulation")
-                self.registered_sims[sim_tag] = simul
+                simul.add_done_callback(
+                    lambda t, sid=sim_idx: self._on_sim_done(t, sid)
+                )
 
-            if num_to_submit > 0:
-                self.logger.info(f"Submitted {num_to_submit} new simulation(s)")
+                if self.debug:
+                    self.logger.task_started(
+                        f"Sim {sim_idx}", component=f"{self.name}-sim"
+                    )
+                self.registered_sims[sim_idx] = simul
+                submitted += 1
 
-            # Update sim_batch_size (subtract submitted items)
-            self.sim_batch_size -= num_to_submit
+            if submitted > 0:
+                if self.debug:
+                    self.logger.info(
+                        f"Submitted {submitted} new simulation(s)", component=self.name
+                    )
+                self.sim_batch_size -= submitted
+
             await asyncio.sleep(0.1)
 
     # --------------------------------------------------------------------------
-    async def monitor_sims(self):
-        """Unregister completed/failed simulations and prepare next batch."""
-        unregistered_sims = []
-        for sim_tag, task in self.registered_sims.items():
-            if task.done():
-                unregistered_sims.append(sim_tag)
-                self.logger.task_completed(f"Sim {sim_tag}", component="simulation")
-                self.sim_batch_size += 1
-
-                if task.exception():
-                    self.logger.error(
-                        f"Sim {sim_tag} failed: {task.exception()}",
-                        component="simulation",
-                    )
-        await self._unregister_sims(unregistered_sims, self.clean_unregistered_sims)
+    async def _free_resources_for_training(self) -> None:
+        """
+        Cancel up to training_cores running sims to free resources for training.
+        Cancelled sims are re-queued by _on_sim_done and run again afterwards.
+        """
+        n_to_cancel = getattr(self, "training_cores", 0)
+        sims_to_cancel = list(self.registered_sims.keys())[:n_to_cancel]
+        for sim_idx in sims_to_cancel:
+            task = self.registered_sims.get(sim_idx)
+            if task is not None and not task.done():
+                self.logger.info(
+                    f"Cancelling sim {sim_idx} to free resources for training",
+                    component=f"{self.name}-sim",
+                )
+                task.cancel()
+        self.sim_batch_size -= n_to_cancel
+        self.free_resources_for_train = False
 
     # --------------------------------------------------------------------------
     async def monitor_training_data(self):
-        """
-        Cancel sims when enough training data is available and
-        free resources for model training.
-        """
-        while True:
-            try:
-                start_training = await self.check_train_data()
-            except Exception as e:
-                self.logger.error(f"Error while checking training data: {e}")
-                await asyncio.sleep(self.time_between_predictions)
-                continue
-
-            if start_training and self.registered_sims:
-                unregistered_sims = []
-                resubmitted_sims = []
-                count = 0
-
-                self.logger.info("Training can start now.")
-
-                # Suspend simulations to free up resources for training
-                for sim_tag, task in list(self.registered_sims.items()):
-                    if task.done():
-                        unregistered_sims.append(sim_tag)
-                    else:
-                        try:
-                            task.cancel()
-                            unregistered_sims.append(sim_tag)
-                            self.logger.task_killed(
-                                f"Cancelling Sim {sim_tag} to free training resources",
-                                #  f"(ROSE task ID {getattr(task, 'id', 'N/A')})"
-                                component="simulation",
-                            )
-                            resubmitted_sims.append(sim_tag)
-                        except Exception as e:
-                            self.logger.error(f"Error cancelling Sim {sim_tag}: {e}")
-                            continue
-
-                    count += 1
-                    if count >= self.training_cores:
-                        break
-
-                self.logger.info(
-                    f"Cancelled {count} simulations; Training will now start."
-                )
-
-                # Remove canceled sims from registry
-                await self._unregister_sims(unregistered_sims, False)
-
-                # Re-add canceled sims back to task queue for later rescheduling
-                for sim_tag in resubmitted_sims:
-                    await self.sim_task_queue.put({"sim_tag": sim_tag})
-                    self.logger.info(f"Re-added Sim {sim_tag} back the queue")
-
-                break  # Exit loop after canceling
-            else:
-                await asyncio.sleep(self.time_between_predictions)
+        """Poll until training data is ready."""
+        while not await self.check_train_status():
+            await asyncio.sleep(self.sleep_time)
+        self.logger.info("Training data ready.", component=self.name)
 
     # --------------------------------------------------------------------------
     async def cancel_sims(self):
-        """Cancel sims based on prediction score."""
-        unregister_sims = []
-
-        for sim_tag, pred in self.sim_predictions.items():
-            if sim_tag not in self.registered_sims.keys():
-                continue
-
+        """
+        Permanently cancel sims whose prediction score is below threshold.
+        Pre-adds to completed_sims so _on_sim_done skips re-queuing.
+        """
+        for sim_idx, pred in self.sim_predictions.items():
             if self.debug:
                 self.logger.info(
-                    f"Sim {sim_tag} prediction: {pred}", component="prediction"
+                    f"Sim {sim_idx} prediction: {pred}",
+                    component=f"{self.name}-predict",
                 )
-
-            if self.stop_simulation(prediction=pred):
-                task = self.registered_sims[sim_tag]
-                task.cancel()
-                unregister_sims.append(sim_tag)
+            if sim_idx in self.registered_sims and self.stop_simulation(
+                prediction=pred
+            ):
+                self._perm_cancelled.add(sim_idx)
+                self.completed_sims.append(sim_idx)
+                self.registered_sims[sim_idx].cancel()
                 self.logger.task_killed(
-                    f"Sim {sim_tag} canceled due to prediction score {pred} ",
-                    component="simulation",
-                    # f"(task ID {getattr(task, 'id', 'N/A')})"
+                    f"Sim {sim_idx} permanently killed (prediction score {pred})",
+                    component=f"{self.name}-sim",
                 )
-                self.sim_batch_size += 1
-
-        await self._unregister_sims(unregister_sims, self.clean_unregistered_sims)
 
     # --------------------------------------------------------------------------
     async def start(self):
         """
-        Main event loop:
-        - Collects input simulations
-        - Submits and monitors tasks
-        - Cancels based on predictions
-        - Waits until all sims finish or queue empties
+        Main loop: submit sims, train, evaluate, cancel, finalize — until all done.
         """
-
-        self.logger.separator("DDSim MANAGER STARTING")
         await self.init_sim_queue()
         submit_task = asyncio.create_task(self.submit_sims())
-        # Skip waiting for training data if it is available at start
-        if not self.force_start_training:
-            await self.monitor_training_data()  # blocks until training starts
 
-        while True:
-            self.logger.info(f"{len(self.registered_sims)} simulation(s) running...")
-            if self.debug:
-                self.logger.info(f"{list(self.registered_sims.keys())}")
-
-            # Train model if flag is set
-            train = None
-            if self.retrain_model:
-                train = await self.train_model()
-            else:
-                await asyncio.sleep(self.time_between_predictions)
-
-            # Perform model selection if selection function is provided
-            if self.selection:
-                selected_model = await self.selection(train)
-                # Perform prediction
-                self.logger.task_started("Model Prediction", component="prediction")
-            else:
-                selected_model = train
-
-            self.logger.task_started("Model Prediction", component="prediction")
-            # Collect prediction scores for all simulations
-            if self.run_prediction_as_exe:
-                await self.exe_prediction(selected_model)
-                predictions = await self.collect_predictions()
-            else:
-                predictions = await self.prediction(selected_model)
-
-            self.sim_predictions = predictions
-            self.logger.task_completed("Model Prediction", component="prediction")
-
-            if predictions:
-                await self.cancel_sims()
-
-            if self.sim_task_queue.empty():
-                await self.monitor_sims()
-
-            # Exit if no sims left
-            if self.sim_task_queue.empty() and len(self.registered_sims) == 0:
-                self.shutting_down.set()
-                break
-            else:
+        try:
+            while self.run_workflow:
                 if self.debug:
                     self.logger.info(
-                        f"Simulations in queue: {self.sim_task_queue.qsize()};"
-                        f"registered sims {len(self.registered_sims)}"
+                        f"{len(self.registered_sims)} simulation(s) running: "
+                        f"{list(self.registered_sims.keys())}",
+                        component=self.name,
                     )
+
+                if self.retrain_model:
+                    await self.monitor_training_data()
+                    if self.free_resources_for_train:
+                        await self._free_resources_for_training()
+
+                    if self.debug:
+                        self.logger.task_started(
+                            "Model Training", component=f"{self.name}-train"
+                        )
+                    await asyncio.gather(
+                        self.train_model(), *(t() for t in self.train_models)
+                    )
+                    if self.debug:
+                        self.logger.task_completed(
+                            "Model Training", component=f"{self.name}-train"
+                        )
                 else:
-                    pass
+                    await asyncio.sleep(self.sleep_time)
 
-            await asyncio.sleep(1)
+                if self.call_evaluate_simulations:
+                    if self.debug:
+                        self.logger.task_started(
+                            "Sim evaluation", component=f"{self.name}-eval"
+                        )
+                    await self.evaluate_simulations()
+                    if self.debug:
+                        self.logger.task_completed(
+                            "Sim evaluation", component=f"{self.name}-eval"
+                        )
 
-        await submit_task
+                if self.call_cancel_simulations:
+                    if self.debug:
+                        self.logger.task_started(
+                            "Sim cancelation", component=f"{self.name}-cancel"
+                        )
+                    await self.cancel_sims()
+                    if self.debug:
+                        self.logger.task_completed(
+                            "Sim cancelation", component=f"{self.name}-cancel"
+                        )
+
+                if self.call_finalize_results:
+                    if self.debug:
+                        self.logger.task_started(
+                            "Finalize Results", component=f"{self.name}-finalize"
+                        )
+                    await self.finalize_results()
+                    if self.debug:
+                        self.logger.task_completed(
+                            "Finalize Results", component=f"{self.name}-finalize"
+                        )
+
+                await asyncio.sleep(1)
+
+        finally:
+            if not self.shutting_down.is_set():
+                self.shutting_down.set()
+
+            submit_task.cancel()
+            await asyncio.gather(submit_task, return_exceptions=True)
+
+            if self.registered_sims:
+                for task in list(self.registered_sims.values()):
+                    task.cancel()
+                await asyncio.gather(
+                    *self.registered_sims.values(), return_exceptions=True
+                )
+
         self.logger.manager_exiting()
-        self.logger.separator("DDMD MANAGER FINISHED")
+        self.logger.separator(f"{self.name} MANAGER FINISHED")

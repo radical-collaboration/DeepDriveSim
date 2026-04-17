@@ -3,18 +3,15 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "DDMD"
+name = "DDSim"
 version = "0.2.0"
-description = "Toolkit for Deep learning-driven Adaptive Molecular Simulations for Protein Folding"
+description = "Toolkit for Deep learning-driven Adaptive Simulations"
 license = {text = "MIT"}
 keywords = [
-    "molecular-dynamics",
     "deep-learning",
-    "protein-folding",
     "adaptive-simulation",
     "hpc",
     "machine-learning",
-    "computational-biology"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -41,12 +38,15 @@ maintainers = [
 readme = "README.md"
 requires-python = ">=3.9"
 
-dependencies = ["radical-asyncflow", "pyyaml", "ROSE @ git+https://github.com/radical-cybertools/ROSE.git"]
+dependencies = ["rhapsody-py", "pyyaml", "radical.asyncflow>=0.3.0"]
+
+[tool.setuptools.packages.find]
+include = ["ddsim*", "workflows*"]
 
 [project.urls]
-Homepage = "https://github.com/radical-collaboration/DeepDriveMD"
-Issues = "https://github.com/radical-collaboration/DeepDriveMD/issues"
-Documentation = "https://deepdrivemd.github.io"
+Homepage = "https://github.com/radical-collaboration/DeepDriveSim"
+Issues = "https://github.com/radical-collaboration/DeepDriveSim/issues"
+Documentation = "https://radical-collaboration.github.io/DeepDriveSim/"
 
 [project.optional-dependencies]
 lint = ["ruff"]
@@ -55,7 +55,20 @@ lint = ["ruff"]
 dev = [
     "pytest",
     "pytest-asyncio",
-    "pytest-cov"
+    "pytest-timeout",
+    "pytest-cov",
+    "pydantic-settings",
+    "numpy",
+    "pyyaml",
+    "ruff",
+    "tox<5",
+    "packaging>=23"
+]
+
+# Dragon/RADICAL support
+dragon = [
+    "dragonhpc",
+    "nvidia-ml-py",
 ]
 
 doc = [
@@ -74,10 +87,34 @@ doc = [
 line-length = 88
 target-version = "py39"
 fix = true
+exclude = [
+    # Legacy ddmd subdirectories — not actively maintained
+    "workflows/ddmd_workflow/MD-tools_fix",
+    "workflows/ddmd_workflow/agents",
+    "workflows/ddmd_workflow/aggregation",
+    "workflows/ddmd_workflow/data",
+    "workflows/ddmd_workflow/models",
+    "workflows/ddmd_workflow/selection",
+    "workflows/ddmd_workflow/sim",
+    # Legacy plot/asyncflow variants
+    "workflows/ddmd_workflow/plot_utilization.py",
+    "workflows/miniapps_workflow/plot_utilization.py",
+    "workflows/miniapps_workflow/miniapps_workflow_asyncflow.py",
+    # Docs notebooks
+    "docs",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "I", "N", "UP"]
 ignore = ["UP007", "UP045"]
+
+[tool.ruff.lint.per-file-ignores]
+# Pydantic V1 @validator uses `cls` as first arg — N805 is a false positive here
+"workflows/ddmd_workflow/config.py" = ["N805"]
+# Scientific code uses uppercase variable names (matrices, arrays)
+"workflows/dummy_workflow/train.py" = ["N806"]
+# Legacy utility functions with uppercase scientific naming conventions
+"workflows/ddmd_workflow/utils.py" = ["N802", "N803", "N806"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -88,13 +125,14 @@ minversion = "6.0"
 
 testpaths = ["tests"]
 asyncio_mode = "auto"
+timeout = 30
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
 ]
 
 [tool.coverage.run]
-source = ["ddmd"]
+source = ["ddsim", "workflows"]
 omit = ["tests/*"]
 
 [tool.coverage.report]

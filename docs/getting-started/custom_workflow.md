@@ -3,49 +3,70 @@
 ## Extend `DDSimManager` to create your own workflow:
 
 ```python
-from ddmd import DDSimManager
+import asyncio
+from ddsim import DDSimManager
+
 
 class MyWorkflow(DDSimManager):
-    def __init__(self, asyncflow, **kwargs):
-        super().__init__(asyncflow)
-        # Your initialization code
-        self._register_learner_tasks()
+    def __init__(self, **kwargs):
+        self.max_sim_batch = kwargs.get("max_sim_batch", 4)
+        self.sim_batch_size = self.max_sim_batch
+        self.retrain_model = True
+        super().__init__()
 
-    def _register_learner_tasks(self):
-        @self.learner.simulation_task(as_executable=False)
-        async def simulation(*args, **kwargs):
-            # Your simulation logic
-            pass
-        self.simulation = simulation
+    def simulation(self, sim_inputs=None, **kwargs):
+        # Wrap your simulation coroutine in a task
+        return asyncio.create_task(self._run_sim(sim_inputs))
 
-    def stop_simulation(self, prediction):
+    async def _run_sim(self, sim_inputs):
+        # Your simulation logic here
+        pass
+
+    def stop_simulation(self, prediction, **kwargs):
         # Return True to cancel simulation based on prediction
         return prediction < 0.5
 
     async def init_sim_queue(self):
         # Populate self.sim_task_queue with simulation inputs
-        pass
+        for i in range(10):
+            await self.sim_task_queue.put({"sim_idx": f"sim_{i}"})
 
-    async def check_train_data(self):
-        # Return True when ready to start training
-        return True
+    async def check_train_status(self):
+        # Return True when enough data is available to start training
+        return len(self.completed_sims) >= 5
 
     async def train_model(self):
         # Your training logic
         pass
 
-    async def clean_sim_data(self, sim_ind):
-        # Cleanup files for canceled simulations
+    async def run_inference(self):
+        # Populate self.sim_predictions with scores for running sims
         pass
+
+    async def add_sims_to_queue(self, sim_ids):
+        # Re-queue sims that were cancelled to free resources
+        for sim_id in sim_ids:
+            await self.sim_task_queue.put({"sim_idx": sim_id})
+
+    async def post_process_sim(self, sim_idx):
+        # Cleanup or bookkeeping after each completed sim
+        pass
+
+    async def post_process(self):
+        # Called after each inference iteration
+        if not self.sim_task_queue.qsize() and not self.registered_sims:
+            self.run_workflow = False
+            self.shutting_down.set()
+
+    async def close(self):
+        # Graceful shutdown
+        self.shutting_down.set()
 ```
 
 ## Configuration Options
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `max_sim_batch` | Maximum concurrent simulations | 4 |
-| `training_cores` | CPU cores reserved for training | 1 |
-| `training_threshold` | Accuracy threshold for training | 0.5 |
-| `prediction_threshold` | Score threshold for cancellation | 0.5 |
-| `force_start_training` | Skip waiting for data threshold | False |
-| `clean_unregistered_sims` | Delete files from canceled sims | True |
+| `sleep_time` | Seconds between prediction/train checks | 20 |
+| `debug` | Enable verbose debug logging | False |
+| `free_resources_for_train` | Preempt sims to free resources for training | False |

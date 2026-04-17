@@ -21,7 +21,7 @@ DeepDriveSim is a toolkit developed by Brookhaven National Laboratory (BNL) / RA
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     DDMD Manager                            │
+│                     DDSim Manager                           │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
 │  │ Simulation  │  │  Training   │  │     Prediction      │  │
@@ -37,82 +37,58 @@ DeepDriveSim is a toolkit developed by Brookhaven National Laboratory (BNL) / RA
 ```
 
 
-### 1. Basic Usage with DummyWorkflow (for testing)
+### 1. Basic Usage
 
 ```python
 import asyncio
-from radical.asyncflow import ConcurrentExecutionBackend, WorkflowEngine
-from concurrent.futures import ThreadPoolExecutor
-from ddmd import DummyWorkflow
+from ddsim import DDSimManager
 
-async def main():
-    # Create execution backend
-    engine = await ConcurrentExecutionBackend(ThreadPoolExecutor())
-    asyncflow = await WorkflowEngine.create(engine)
 
-    # Initialize workflow
-    workflow = DummyWorkflow(
-        asyncflow=asyncflow,
-        max_sim_batch=4,
-        training_cores=1,
-        num_files=10
-    )
+class MyWorkflow(DDSimManager):
+    def __init__(self):
+        self.max_sim_batch = 4
+        self.sim_batch_size = self.max_sim_batch
+        self.retrain_model = False
+        super().__init__()
 
-    # Run the adaptive learning loop
-    await workflow.start()
-    await workflow.close()
+    def simulation(self, sim_inputs=None, **kwargs):
+        return asyncio.create_task(asyncio.sleep(1.0))
 
-asyncio.run(main())
+    async def init_sim_queue(self):
+        for i in range(8):
+            await self.sim_task_queue.put({"sim_idx": f"sim_{i}"})
+
+    async def check_train_status(self):
+        return True
+
+    async def post_process_sim(self, sim_idx):
+        pass
+
+    async def post_process(self):
+        self.run_workflow = False
+        self.shutting_down.set()
+
+    async def add_sims_to_queue(self, sim_ids):
+        pass
+
+    def stop_simulation(self, **kwargs):
+        return False
+
+    async def close(self):
+        pass
+
+
+asyncio.run(MyWorkflow().start())
 ```
 
 ### 2. Creating a Custom Workflow
 
-Extend `DDSimManager` to create your own workflow:
-
-```python
-from ddmd import DDSimManager
-
-class MyWorkflow(DDSimManager):
-    def __init__(self, asyncflow, **kwargs):
-        super().__init__(asyncflow)
-        # Your initialization code
-        self._register_learner_tasks()
-
-    def _register_learner_tasks(self):
-        @self.learner.simulation_task(as_executable=False)
-        async def simulation(*args, **kwargs):
-            # Your simulation logic
-            pass
-        self.simulation = simulation
-
-    def stop_simulation(self, prediction):
-        # Return True to cancel simulation based on prediction
-        return prediction < 0.5
-
-    async def init_sim_queue(self):
-        # Populate self.sim_task_queue with simulation inputs
-        pass
-
-    async def check_train_data(self):
-        # Return True when ready to start training
-        return True
-
-    async def train_model(self):
-        # Your training logic
-        pass
-
-    async def clean_sim_data(self, sim_ind):
-        # Cleanup files for canceled simulations
-        pass
-```
+See the [Custom Workflow](getting-started/custom_workflow.md) guide for a full example.
 
 ## Configuration Options
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `max_sim_batch` | Maximum concurrent simulations | 4 |
-| `training_cores` | CPU cores reserved for training | 1 |
-| `training_threshold` | Accuracy threshold for training | 0.5 |
-| `prediction_threshold` | Score threshold for cancellation | 0.5 |
-| `force_start_training` | Skip waiting for data threshold | False |
-| `clean_unregistered_sims` | Delete files from canceled sims | True |
+| `sleep_time` | Seconds between prediction/train checks | 20 |
+| `debug` | Enable verbose debug logging | False |
+| `free_resources_for_train` | Preempt sims to free resources for training | False |

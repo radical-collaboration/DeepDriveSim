@@ -21,7 +21,7 @@ DeepDriveSim is a toolkit developed by Brookhaven National Laboratory (BNL) / RA
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     DDMD Manager                            │
+│                     DDSim Manager                            │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
 │  │ Simulation  │  │  Training   │  │     Prediction      │  │
@@ -65,6 +65,8 @@ pip install -e ".[doc]"
 
 See the [examples/](examples/) directory for complete working examples:
 
+- **[ddmd_pipeline/](examples/ddmd_pipeline/)**: Deep-Learning Driven Adaptive Molecular Simulations
+    https://github.com/DeepDriveMD/DeepDriveMD-pipeline
 - **[dummy_pipeline/](examples/dummy_pipeline/)**: Standalone demo with synthetic data
 - **[miniapps_pipeline/](examples/miniapps_pipeline/)**  
     Reference scalable HPC workflow using RADICAL-Cybertools Workflow mini-apps 
@@ -84,7 +86,7 @@ pytest tests/unit
 pytest tests/integration
 
 # Run with coverage
-pytest --cov=ddmd --cov-report=html
+pytest --cov=ddsim --cov-report=html
 ```
 
 ## Development
@@ -95,10 +97,10 @@ This project uses [ruff](https://github.com/astral-sh/ruff) for linting and form
 
 ```bash
 # Check code style
-ruff check ddmd tests
+ruff check ddsim tests
 
 # Format code
-ruff format ddmd tests
+ruff format ddsim tests
 ```
 
 ### Using tox
