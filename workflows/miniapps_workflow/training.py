@@ -108,12 +108,9 @@ def main():
     if device == "gpu":
         wf.dataCopyH2D(args.dense_dim_in * args.dense_dim_out)
 
-    for epoch in range(args.num_epochs):
-        tt = time.time()
+    for _ in range(args.num_epochs):
         if device == "gpu":
             wf.dataCopyH2D(args.num_sample * args.dense_dim_in)
-        print(f"epoch is {epoch}, data movementi (CPU->GPU) takes {time.time() - tt}")
-        tt = time.time()
         for _ in range(args.num_mult):
             wf.matMulGeneral(
                 device,
@@ -122,8 +119,6 @@ def main():
                 ([1], [0]),
             )
             wf.axpy(device, args.dense_dim_in * args.dense_dim_out)
-        print(f"epoch is {epoch}, mult takes {time.time() - tt}")
-        tt = time.time()
 
     if device == "gpu":
         wf.dataCopyD2H(args.dense_dim_in * args.dense_dim_out)

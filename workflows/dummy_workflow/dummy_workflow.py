@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import yaml
+
 try:
     from rose import Learner
     from rose.metrics import MODEL_ACCURACY
@@ -38,8 +39,7 @@ class DummyWorkflow(DDSimManager):
               asyncflow, name, home_dir, on_ready
         """
         cfg = config or {}
-        # on_ready: async callable injected by AsyncCampaignManager so that
-        # _signal_ready() can unblock dependent workflow groups (e.g. inference).
+        # Callback injected by AsyncCampaignManager to unblock dependent workflows.
         self._on_ready = kwargs.get("on_ready", None)
 
         super().__init__(name=kwargs.get("name", "dummy_workflow"))
@@ -50,17 +50,17 @@ class DummyWorkflow(DDSimManager):
             raise ValueError("Unable to initiate DummyWorkflow w/o asyncflow")
         self.learner = Learner(self.flow) if Learner is not None else None
 
-        home_dir = self._ensure_dir(cfg.get("home_dir", Path.home() / "DDSim"))
+        home_dir = self._ensure_dir(
+            kwargs.get("home_dir", cfg.get("home_dir", Path.home() / "DDSim"))
+        )
         self._clean_dir(home_dir)  # ❗Careful: deletes everything in home_dir!
 
-        # Create workflow directories
         self.sim_output_dir = self._ensure_dir(home_dir / "sim_output")
         self.sim_inputs_dir = self._ensure_dir(home_dir / "sim_input")
         self.train_dir = self._ensure_dir(home_dir / "train")
         self.train_al_dir = self._ensure_dir(home_dir / "train_al")
         self.val_dir = self._ensure_dir(home_dir / "val")
 
-        # ── Simulation / training parameters ──────────────────────────────────
         # kwargs take precedence over config dict (useful for tests/overrides).
         def _get(key, default, alias=None):
             if key in kwargs:
@@ -79,8 +79,8 @@ class DummyWorkflow(DDSimManager):
         self.training_epochs = int(_get("training_epochs", 1))
         self.free_resources_for_train = bool(_get("free_resources_for_train", True))
         self.force_start_training = bool(_get("force_start_training", False))
-        # Must exceed simulation.py's asyncio.sleep so evaluation doesn't
-        # always preempt the last running sim before it can finish.
+        # sleep_time should exceed a single simulation's runtime so the main
+        # loop doesn't evaluate before the last sim has had a chance to finish.
         self.sleep_time = float(cfg.get("sleep_time", 30))
 
         self.call_cancel_simulations = True
@@ -90,29 +90,21 @@ class DummyWorkflow(DDSimManager):
         self.iteration = 0
         self.retrain_model = self.training_epochs > 0
 
-        # ── Dependent workflow trigger ─────────────────────────────────────────────────
-        # After this many sims complete, signal the CM that enough data has been
-        # produced for dependent workflows (e.g. inference) to start.
-        # Defaults to num_inputs (i.e. signal only when all sims finish) so that
-        # dep_threshold remains the fallback strategy when not explicitly set.
+        # Signal dependent workflows after this many sims complete.
+        # Defaults to num_inputs so the signal fires only when all sims finish.
         self.ddsim_data_ready = int(cfg.get("ddsim_data_ready", self.num_inputs))
-        self._data_ready_signaled = False  # fire the signal at most once
+        self._data_ready_signaled = False
 
-        # ── Executable paths ──────────────────────────────────────────────────
-        # Default src_dir to the directory that contains dummy_workflow.py so
-        # simulation.py, train.py, etc. are found regardless of WORK_DIR or cwd.
+        # Default src_dir to the workflow directory so scripts are found
+        # regardless of the working directory.  Using `or` ensures an empty
+        # string in config also falls back to the default.
         _default_src = str(Path(__file__).parent)
-        # Use `or` so that an empty string in config also falls back to the default.
-        # cfg.get("src_dir", default) would return "" (the key exists) and never
-        # reach the default, causing command paths like /simulation.py (wrong).
         self.src_dir = cfg.get("src_dir") or os.getenv("WORK_DIR", _default_src)
 
-        # Python executable for all tasks — falls back to the current interpreter.
+        # Python executable for all tasks; falls back to the current interpreter.
         self.executable = cfg.get("executable") or sys.executable
 
-        # Dragon Policy for GPU/CPU affinity (injected by AsyncCampaignManager).
-        # CM passes a list (`policies`); we use the first entry for this single-GPU
-        # workflow.  A bare `policy` kwarg is also accepted for standalone use.
+        # GPU/CPU affinity policy injected by AsyncCampaignManager.
         policies = kwargs.get("policies", None)
         if policies is not None:
             self.policy = policies[0] if policies else None
@@ -122,7 +114,6 @@ class DummyWorkflow(DDSimManager):
         self.model_filename = home_dir / "model.pkl"
         self.prediction_file = home_dir / "predictions.yml"
 
-        # Register learner tasks then generate dummy input files
         self.register_tasks()
         self.sim_inputs = {}
         self._generate_sim_inputs(self.sim_inputs_dir, num_inputs=self.num_inputs)
@@ -149,8 +140,6 @@ class DummyWorkflow(DDSimManager):
         """Delete an existing directory (used for a clean workflow run)."""
         dir_path = Path(dir_name)
         if dir_path.exists() and dir_path.is_dir():
-            # ignore_errors=True handles ENOTEMPTY on network filesystems (NFS/Lustre)
-            # where directory entries may linger briefly after files are removed.
             shutil.rmtree(dir_path, ignore_errors=True)
 
     # --------------------------------------------------------------------------
@@ -162,7 +151,7 @@ class DummyWorkflow(DDSimManager):
         sim_inputs_path = Path(sim_inputs_dir)
         for i in range(num_inputs):
             file_path = sim_inputs_path / f"config_{i}.npz"
-            x = np.random.rand(100, 1)  # Dummy input data
+            x = np.random.rand(100, 1)
             np.savez(file_path, X=x)
 
     # --------------------------------------------------------------------------
@@ -179,7 +168,6 @@ class DummyWorkflow(DDSimManager):
         else:
             self.logger.info("Task policy: none (no GPU affinity)", component=self.name)
 
-        # @self.learner.simulation_task()
         @self.flow.executable_task
         async def simulation(task_description=_task_desc, **kwargs):
             sim_idx = kwargs["sim_inputs"]["sim_idx"]
@@ -188,11 +176,13 @@ class DummyWorkflow(DDSimManager):
                 f"--output_dir {self.sim_output_dir} --sim_tag {sim_idx} "
                 f"--filename {filename}"
             )
-            return f'{self.executable} {self.src_dir}/simulation.py {args}'
+            return f"{self.executable} {self.src_dir}/simulation.py {args}"
 
         self.simulation = simulation
 
-        _training_dec = self.learner.training_task() if self.learner else self.flow.executable_task
+        _training_dec = (
+            self.learner.training_task() if self.learner else self.flow.executable_task
+        )
 
         @_training_dec
         async def training(task_description=_task_desc, **kwargs):
@@ -201,11 +191,15 @@ class DummyWorkflow(DDSimManager):
                 f"--sim_output_dir {self.sim_output_dir} "
                 f"--train_dir {self.train_al_dir} --val_dir {self.val_dir}"
             )
-            return f'{self.executable} {self.src_dir}/train.py {args}'
+            return f"{self.executable} {self.src_dir}/train.py {args}"
 
         self.training = training
 
-        _active_learn_dec = self.learner.active_learn_task() if self.learner else self.flow.executable_task
+        _active_learn_dec = (
+            self.learner.active_learn_task()
+            if self.learner
+            else self.flow.executable_task
+        )
 
         @_active_learn_dec
         async def active_learn(task_description=_task_desc, **kwargs):
@@ -214,11 +208,10 @@ class DummyWorkflow(DDSimManager):
                 f"--train_dir {self.train_dir} "
                 f"--train_al_dir {self.train_al_dir}"
             )
-            return f'{self.executable} {self.src_dir}/active_learn.py {args}'
+            return f"{self.executable} {self.src_dir}/active_learn.py {args}"
 
         self.active_learn = active_learn
 
-        # @self.learner.prediction_task(as_executable=True)
         @self.flow.executable_task
         async def prediction(task_description=_task_desc, **kwargs):
             args = (
@@ -226,19 +219,22 @@ class DummyWorkflow(DDSimManager):
                 f"--sim_output_dir {self.sim_output_dir} "
                 f"--output_file {self.prediction_file}"
             )
-            return f'{self.executable} {self.src_dir}/predict.py {args}'
+            return f"{self.executable} {self.src_dir}/predict.py {args}"
 
         self.prediction = prediction
 
         _accuracy_dec = (
-            self.learner.as_stop_criterion(metric_name=MODEL_ACCURACY, threshold=self.training_threshold)
-            if self.learner else self.flow.executable_task
+            self.learner.as_stop_criterion(
+                metric_name=MODEL_ACCURACY, threshold=self.training_threshold
+            )
+            if self.learner
+            else self.flow.executable_task
         )
 
         @_accuracy_dec
         async def check_accuracy(task_description=_task_desc, **kwargs):
             args = f"--model_filename {self.model_filename} --val_dir {self.val_dir}"
-            return f'{self.executable} {self.src_dir}/check_accuracy.py {args}'
+            return f"{self.executable} {self.src_dir}/check_accuracy.py {args}"
 
         self.check_accuracy = check_accuracy
 
@@ -287,13 +283,9 @@ class DummyWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def check_train_status(self) -> bool:
-        """Return True when enough simulations have completed to start training.
-
-        Uses completed_sims (set by _on_sim_done before post_process_sim runs) rather
-        than checking sim_output_dir, which post_process_sim deletes immediately after
-        each sim finishes — making it unreliably empty at poll time.
-        """
-        return len(self.completed_sims) >= self.start_training_threshold
+        """Return True when enough simulation outputs have accumulated to start training."""
+        outputs = list(self.sim_output_dir.iterdir())
+        return len(outputs) >= self.start_training_threshold
 
     # --------------------------------------------------------------------------
     async def post_process_sim(self, sim_idx):
@@ -315,7 +307,6 @@ class DummyWorkflow(DDSimManager):
                     f"Error deleting {file_path}: {e}", component=self.name
                 )
 
-        # Collect all deletion tasks (parallel file cleanup)
         tasks = []
         for directory in [self.train_al_dir, self.train_dir, self.val_dir]:
             for filename in directory.iterdir():
@@ -324,7 +315,6 @@ class DummyWorkflow(DDSimManager):
         if tasks:
             await asyncio.gather(*tasks)
 
-        # Remove simulation output directory after files are gone
         sim_dir = Path(self.sim_output_dir, sim_idx)
         try:
             if sim_dir.exists():
@@ -353,15 +343,8 @@ class DummyWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     async def train_model(self):
         """Train until accuracy threshold is met or epochs are exhausted."""
-        # If all simulations have already completed, no new training data will
-        # ever appear in sim_output_dir (post_process_sim deletes everything).
-        # Stop retraining immediately to prevent train.py from hanging on empty
-        # directories. DDSimManager.start() already decremented sim_batch_size
-        # by training_cores before calling us, so restore it here.
+        # Skip training if all sims are already done; no new data will appear.
         if len(self.completed_sims) >= self.num_inputs:
-            # self.retrain_model = False
-            # self.sim_batch_size += self.training_cores
-            # self.training_cores = 0
             return
 
         self.iteration += 1
@@ -382,8 +365,8 @@ class DummyWorkflow(DDSimManager):
                 self.logger.task_started("Check Accuracy", component=self.name)
 
             result = await self.check_accuracy()
-            # learner.as_stop_criterion returns (bool, float); the executable_task
-            # fallback (when rose is not installed) returns None — treat as no-stop.
+            # learner.as_stop_criterion returns (bool, float); fall back to no-stop
+            # when rose is not installed and the task returns None.
             try:
                 should_stop, metric_val = result
             except (TypeError, ValueError):
@@ -392,7 +375,8 @@ class DummyWorkflow(DDSimManager):
             if should_stop:
                 if self.debug:
                     self.logger.info(
-                        f"Accuracy ({metric_val}) reached threshold → stopping training",
+                        f"Accuracy ({metric_val}) reached threshold"
+                        " → stopping training",
                         component=self.name,
                     )
                 self.retrain_model = False
@@ -426,7 +410,8 @@ class DummyWorkflow(DDSimManager):
         if n_done >= self.num_inputs:
             if self.registered_sims:
                 self.logger.warning(
-                    f"All sim have completed BUT there are still registered sims {self.registered_sims.keys()}",
+                    f"All sim have completed BUT there are still registered sims"
+                    f" {self.registered_sims.keys()}",
                     component=self.name,
                 )
             else:
@@ -442,15 +427,12 @@ class DummyWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def close(self):
-        """Gracefully shutdown learner.
+        """Gracefully shut down the workflow.
 
-        NOTE: self.flow (the asyncflow WorkflowEngine) is intentionally NOT shut
-        down here — and neither is self.learner, since Learner.shutdown() delegates
-        directly to asyncflow.shutdown().  Calling either from one replica while
-        other replicas are still running destroys shared asyncio subprocess
-        infrastructure and causes concurrent replicas' asyncflow task submissions
-        to hang indefinitely.  The AsyncCampaignManager shuts down the shared
-        engine via cm.close() after all replicas have finished.
+        The asyncflow engine is intentionally not shut down here; when running
+        multiple replicas the engine is shared and must remain alive until all
+        replicas have finished.  The caller (AsyncCampaignManager or run_workflow.py)
+        is responsible for calling asyncflow.shutdown() after all replicas close.
         """
         pass
 

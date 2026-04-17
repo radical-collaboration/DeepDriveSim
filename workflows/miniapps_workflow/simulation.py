@@ -7,7 +7,7 @@ import time
 
 try:
     import wfMiniAPI.kernel as wf
-except:
+except Exception:
     wf = None
 
 
@@ -85,17 +85,12 @@ def main():
     num_step = args.num_step
 
     print(f"Running time of step 1 is {time.time() - start_time} seconds")
-    for mi in range(num_step):
-        print(f"Simulation step {mi + 1}/{num_step}")
-        elap = time.time()
+    for _ in range(num_step):
         wf.axpy(device, msz)
         wf.axpy(device, msz)
         wf.generateRandomNumber(device, msz * msz)
         wf.inplaceCompute(device, msz * msz, 1, "square")
         wf.matMulGeneral(device, [msz, msz], [msz], ([1], [0]))
-        print(
-            f"Elapsed time for step {mi + 1}/{num_step}: {time.time() - elap} seconds"
-        )
     print(f"Running time of step 2 is {time.time() - start_time} seconds")
 
     if device == "gpu":

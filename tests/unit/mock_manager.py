@@ -28,7 +28,12 @@ class MockLearner(DDSimManager):
     """Minimal workflow subclass for unit and integration tests."""
 
     def __init__(self, **kwargs):
-        # Simulation/training config
+        # Initialize parent class first so its __init__ doesn't overwrite the
+        # values we set below (DDSimManager.__init__ resets sim_batch_size and
+        # max_sim_batch to 0).
+        super().__init__()
+
+        # Simulation/training config — must come after super().__init__()
         self.max_sim_batch = kwargs.get("max_sim_batch", 4)
         self.training_cores = kwargs.get("training_cores", 1)
         self.sim_batch_size = self.max_sim_batch + self.training_cores
@@ -40,9 +45,6 @@ class MockLearner(DDSimManager):
 
         self.iteration = 0
         self.retrain_model = self.training_epochs > 0
-
-        # Initialize parent class (no resource manager for tests)
-        super().__init__()
 
         # Override timing for faster tests
         self.sleep_time = 0.01

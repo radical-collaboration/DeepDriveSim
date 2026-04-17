@@ -180,15 +180,16 @@ class TestDummyWorkflowAsync:
     @pytest.mark.asyncio
     async def test_check_train_data_insufficient(self, workflow):
         """Test check_train_status returns False when insufficient data."""
-        # sim_inputs_dir has 1 .npz from __init__; start_training_threshold=2
+        # sim_output_dir is empty at start; start_training_threshold=2
         result = await workflow.check_train_status()
         assert result is False
 
     @pytest.mark.asyncio
     async def test_check_train_data_sufficient(self, workflow):
         """Test check_train_status returns True when sufficient data."""
-        # Create one more file so count reaches start_training_threshold=2
-        (workflow.sim_inputs_dir / "extra.txt").write_text("data")
+        # Simulate 2 completed sim outputs to meet start_training_threshold=2
+        (workflow.sim_output_dir / "sim_0").mkdir()
+        (workflow.sim_output_dir / "sim_1").mkdir()
 
         result = await workflow.check_train_status()
         assert result is True

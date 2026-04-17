@@ -4,7 +4,7 @@
 
 debug: true
 engine:      dragon       # concurrent | dragon
-num_replicas: 1
+num_replicas: 2
 home_dir:    "DDSim"
 
 num_inputs:               10    # number of dummy simulation inputs to generate

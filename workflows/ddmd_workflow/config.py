@@ -3,7 +3,7 @@
 import json
 import os
 from pathlib import Path
-from typing import List, Optional, Type, TypeVar
+from typing import Optional, TypeVar
 
 import yaml
 from pydantic import validator
@@ -25,7 +25,7 @@ class BaseSettings(_BaseSettings):
             yaml.dump(json.loads(self.json()), fp, indent=4, sort_keys=False)
 
     @classmethod
-    def from_yaml(cls: Type[_T], filename: PathLike) -> _T:
+    def from_yaml(cls: type[_T], filename: PathLike) -> _T:
         with open(filename) as fp:
             raw_data = yaml.safe_load(fp)
         # Expand environment variables in string values
@@ -102,9 +102,9 @@ class BaseTaskConfig(BaseSettings):
 class BaseStageConfig(BaseSettings):
     """Base configuration for all StageConfig objects."""
 
-    pre_exec: List[str] = []
+    pre_exec: list[str] = []
     executable: str = ""
-    arguments: List[str] = []
+    arguments: list[str] = []
     cpu_reqs: CPUReqs = CPUReqs()
     gpu_reqs: GPUReqs = GPUReqs()
 

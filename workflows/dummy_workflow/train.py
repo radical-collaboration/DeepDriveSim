@@ -98,7 +98,7 @@ async def train(
     count = 0
     for file in await async_iterdir(train_dir):
         count += 1
-        # This condition helps avoid long execution times when there are too many files to iterate through.
+        # Avoid long iteration when there are many files.
         if count == MIN_TRAIN_SIZE:
             break
         if file.is_file():
