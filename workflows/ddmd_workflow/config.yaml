@@ -4,7 +4,8 @@
 
 num_replicas: 8           # number of parallel MD workflows to run
 engine:      dragon       # concurrent | dragon
-debug:       true
+debug:       false
 ddsim_config: "/scratch/bblj/${USER}/DeepDriveSim/workflows/ddmd_workflow/data/new_lassen-keras-dbscan.yaml"
 tf_gpu_wrapper: "/scratch/bblj/${USER}/DeepDriveSim/workflows/ddmd_workflow/delta_tf_gpu_wrapper.sh"
 tf_cpu_wrapper: "/scratch/bblj/${USER}/DeepDriveSim/workflows/ddmd_workflow/delta_tf_cpu_wrapper.sh"
+executable: "/u/${USER}/ve/ddmd/bin/python"

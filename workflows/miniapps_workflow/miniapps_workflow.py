@@ -90,11 +90,14 @@ class MiniAppsWorkflow(DDSimManager):
         _default_src = str(Path(__file__).parent)
         self.src_dir = cfg.get("src_dir") or os.getenv("WORK_DIR", _default_src)
 
-        _default_exe = sys.executable
-        self.sim_executable = cfg.get("sim_executable") or _default_exe
-        self.train_executable = cfg.get("train_executable") or _default_exe
-        self.predict_executable = cfg.get("predict_executable") or _default_exe
-        self.selection_executable = cfg.get("selection_executable") or _default_exe
+        _default_exe = os.path.expandvars(cfg.get("executable") or "") or sys.executable
+        def _exe(key):
+            val = cfg.get(key)
+            return os.path.expandvars(val) if val else _default_exe
+        self.sim_executable = _exe("sim_executable")
+        self.train_executable = _exe("train_executable")
+        self.predict_executable = _exe("predict_executable")
+        self.selection_executable = _exe("selection_executable")
 
         self.prediction_file = home_dir / "predictions.yaml"
 

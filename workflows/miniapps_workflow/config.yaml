@@ -2,7 +2,7 @@
 # MiniApps Workflow — workflow-specific parameters
 # =============================================================================
 
-debug: true
+debug: false
 engine:      dragon       # concurrent | dragon
 num_replicas: 4
 home_dir:    "MiniApps"

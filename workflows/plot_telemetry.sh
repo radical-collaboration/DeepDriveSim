@@ -60,7 +60,7 @@ mkdir -p "${OUT_DIR}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 OUT_FILE="${OUT_DIR}/workflow_dashboard_${TIMESTAMP}.png"
 
-python "${PLOT_SCRIPT}" "${JSONL_FILE}" --out "${OUT_FILE}"
+python "${PLOT_SCRIPT}" "${JSONL_FILE}" --out "${OUT_FILE}" --split
 echo "Telemetry plot saved to ${OUT_FILE}"
 
 
