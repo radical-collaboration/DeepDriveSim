@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
-from pathlib import Path
 
 from radical.asyncflow import WorkflowEngine
 
 from ddsim.util import find_gpus, load_config, make_policies
 from workflows.ddmd_workflow.ddmd_workflow import DDMdWorkflow
+
 
 async def run_ddmd(config_file: str) -> None:
     cfg = load_config(config_file)

@@ -10,7 +10,6 @@ from ddsim.util import find_gpus, load_config, make_policies
 from workflows.dummy_workflow.dummy_workflow import DummyWorkflow
 
 
-
 async def run_dummy(config_file: str) -> None:
     cfg = load_config(config_file)
     backend = cfg.get("engine", "dragon")
