@@ -5,6 +5,8 @@
 debug: true
 engine:      dragon       # concurrent | dragon
 num_replicas: 1
+telemetry:     true
+telemetry_dir: "telemetry-output"
 
 # ── MD / Exchange simulation parameters ──────────────────────────────────────
 num_init_sims:        4      # number of concurrent MD replicas to launch

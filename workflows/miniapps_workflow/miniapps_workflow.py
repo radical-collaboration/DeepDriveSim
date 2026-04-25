@@ -52,11 +52,6 @@ from pathlib import Path
 
 import yaml
 
-try:
-    from rose import Learner
-except ModuleNotFoundError:
-    Learner = None
-
 from ddsim.ddsim_manager import DDSimManager
 
 
@@ -75,17 +70,15 @@ class MiniAppsWorkflow(DDSimManager):
         self.debug = config.get("debug", False)
 
         self.flow = kwargs.get("asyncflow", None)
-        self.learner = Learner(self.flow) if Learner is not None else None
-
         self._on_ready = kwargs.get("on_ready", None)
         self._data_ready_signaled = False
         self.miniapps_data_ready = int(cfg.get("miniapps_data_ready", 3))
 
-        home_dir = Path(kwargs.get("home_dir", Path.home() / "DDMD"))
-        self.clean_dir(home_dir)
+        _home_base = Path(kwargs.get("home_dir", cfg.get("home_dir", Path.home() / "MiniApps")))
+        self.home_dir = self._ensure_dir(_home_base / self.name)
+        self.clean_dir(self.home_dir)
 
-        self.sim_output_dir = self._ensure_dir(home_dir / f"{self.name}/sim_output")
-        self.clean_dir(self.sim_output_dir)
+        self.sim_output_dir = self._ensure_dir(self.home_dir / "sim_output")
 
         _default_src = str(Path(__file__).parent)
         self.src_dir = cfg.get("src_dir") or os.getenv("WORK_DIR", _default_src)
@@ -99,7 +92,7 @@ class MiniAppsWorkflow(DDSimManager):
         self.predict_executable = _exe("predict_executable")
         self.selection_executable = _exe("selection_executable")
 
-        self.prediction_file = home_dir / "predictions.yaml"
+        self.prediction_file = self.home_dir / "predictions.yaml"
 
         self.max_sim_batch = int(cfg.get("max_sim_batch", 4))
         self.training_cores = int(cfg.get("training_cores", 1))
@@ -402,13 +395,12 @@ class MiniAppsWorkflow(DDSimManager):
         pass
 
     async def close(self):
-        try:
-            await self.learner.shutdown()
-        except Exception:
-            pass
+        # Temporary cleanup to test campaign manager and aid Disk quota exceeded.
+        if self.home_dir.exists():
+            shutil.rmtree(self.home_dir, ignore_errors=True)
+            self.logger.info(
+                f"Removed home directory: {self.home_dir}", component=self.name
+            )
 
     async def stop(self):
-        try:
-            await self.learner.shutdown()
-        except Exception:
-            pass
+        await self.close()

@@ -50,16 +50,15 @@ class DummyWorkflow(DDSimManager):
             raise ValueError("Unable to initiate DummyWorkflow w/o asyncflow")
         self.learner = Learner(self.flow) if Learner is not None else None
 
-        home_dir = self._ensure_dir(
-            kwargs.get("home_dir", cfg.get("home_dir", Path.home() / "DDSim"))
-        )
-        self._clean_dir(home_dir)  # ❗Careful: deletes everything in home_dir!
+        _home_base = Path(kwargs.get("home_dir", cfg.get("home_dir", Path.home() / "Dummy")))
+        self.home_dir = self._ensure_dir(_home_base / self.name)
+        self._clean_dir(self.home_dir)  # ❗Careful: deletes everything in home_dir!
 
-        self.sim_output_dir = self._ensure_dir(home_dir / "sim_output")
-        self.sim_inputs_dir = self._ensure_dir(home_dir / "sim_input")
-        self.train_dir = self._ensure_dir(home_dir / "train")
-        self.train_al_dir = self._ensure_dir(home_dir / "train_al")
-        self.val_dir = self._ensure_dir(home_dir / "val")
+        self.sim_output_dir = self._ensure_dir(self.home_dir / "sim_output")
+        self.sim_inputs_dir = self._ensure_dir(self.home_dir / "sim_input")
+        self.train_dir = self._ensure_dir(self.home_dir / "train")
+        self.train_al_dir = self._ensure_dir(self.home_dir / "train_al")
+        self.val_dir = self._ensure_dir(self.home_dir / "val")
 
         # kwargs take precedence over config dict (useful for tests/overrides).
         def _get(key, default, alias=None):
@@ -102,7 +101,7 @@ class DummyWorkflow(DDSimManager):
         self.src_dir = cfg.get("src_dir") or os.getenv("WORK_DIR", _default_src)
 
         # Python executable for all tasks; falls back to the current interpreter.
-        self.executable = cfg.get("executable") or sys.executable
+        self.executable = os.path.expandvars(cfg.get("executable") or sys.executable)
 
         # GPU/CPU affinity policy injected by AsyncCampaignManager.
         policies = kwargs.get("policies", None)
@@ -111,8 +110,8 @@ class DummyWorkflow(DDSimManager):
         else:
             self.policy = kwargs.get("policy", None)
 
-        self.model_filename = home_dir / "model.pkl"
-        self.prediction_file = home_dir / "predictions.yml"
+        self.model_filename = self.home_dir / "model.pkl"
+        self.prediction_file = self.home_dir / "predictions.yml"
 
         self.register_tasks()
         self.sim_inputs = {}
@@ -149,6 +148,7 @@ class DummyWorkflow(DDSimManager):
         Generate dummy input `.npz` files for simulations.
         """
         sim_inputs_path = Path(sim_inputs_dir)
+        sim_inputs_path.mkdir(parents=True, exist_ok=True)
         for i in range(num_inputs):
             file_path = sim_inputs_path / f"config_{i}.npz"
             x = np.random.rand(100, 1)
@@ -254,8 +254,11 @@ class DummyWorkflow(DDSimManager):
         await self.prediction()
         if self.debug:
             self.logger.task_completed("Model Prediction", component="prediction")
-        with open(self.prediction_file) as f:
-            predictions = yaml.safe_load(f)
+        try:
+            with open(self.prediction_file) as f:
+                predictions = yaml.safe_load(f)
+        except (OSError, yaml.YAMLError):
+            predictions = {}
 
         self.sim_predictions = predictions
 
@@ -430,14 +433,12 @@ class DummyWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def close(self):
-        """Gracefully shut down the workflow.
-
-        The asyncflow engine is intentionally not shut down here; when running
-        multiple replicas the engine is shared and must remain alive until all
-        replicas have finished.  The caller (AsyncCampaignManager or run_workflow.py)
-        is responsible for calling asyncflow.shutdown() after all replicas close.
-        """
-        pass
+        # Temporary cleanup to test campaign manager and aid Disk quota exceeded.
+        if self.home_dir.exists():
+            shutil.rmtree(self.home_dir, ignore_errors=True)
+            self.logger.info(
+                f"Removed home directory: {self.home_dir}", component=self.name
+            )
 
     # --------------------------------------------------------------------------
     async def stop(self):

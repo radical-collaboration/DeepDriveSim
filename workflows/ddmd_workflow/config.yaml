@@ -5,7 +5,10 @@
 num_replicas: 8           # number of parallel MD workflows to run
 engine:      dragon       # concurrent | dragon
 debug:       false
-ddsim_config: "/scratch/bblj/${USER}/DeepDriveSim/workflows/ddmd_workflow/data/new_lassen-keras-dbscan.yaml"
-tf_gpu_wrapper: "/scratch/bblj/${USER}/DeepDriveSim/workflows/ddmd_workflow/delta_tf_gpu_wrapper.sh"
-tf_cpu_wrapper: "/scratch/bblj/${USER}/DeepDriveSim/workflows/ddmd_workflow/delta_tf_cpu_wrapper.sh"
+telemetry:     true
+telemetry_dir: "telemetry-output"
+ddsim_config: "${INPUT_DIR}/new_lassen-keras-dbscan.yaml"
+experiment_dir: "DDMD"   # relative to campaign work dir; overrides experiment_directory in ddsim_config
+tf_gpu_wrapper: "${WORK_DIR}/delta_tf_gpu_wrapper.sh"
+tf_cpu_wrapper: "${WORK_DIR}/delta_tf_cpu_wrapper.sh"
 executable: "/u/${USER}/ve/ddmd/bin/python"

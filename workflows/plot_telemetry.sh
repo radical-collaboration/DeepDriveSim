@@ -3,16 +3,19 @@
 # plot_telemetry.sh — Plot AsyncFlow workflow telemetry dashboard.
 #
 # Usage:
-#   bash plot_telemetry.sh <telemetry.jsonl> [--out-dir DIR]
+#   bash plot_telemetry.sh <telemetry.jsonl> [--out-dir DIR] [--split]
 #
 # Arguments:
 #   <telemetry.jsonl>   Path to the JSONL telemetry checkpoint file (required).
-#   --out-dir DIR       Directory to save the PNG (default: plots/<wf_name>/ next to
-#                       this script, where <wf_name> is inferred from the file path
-#                       as the grandparent of the telemetry-output directory,
+#   --out-dir DIR       Output directory (default: plots/<wf_name>/ next to this
+#                       script, where <wf_name> is inferred from the file path as
+#                       the grandparent of the telemetry-output directory,
 #                       e.g. miniapps_workflow/telemetry-output/... → plots/miniapps_workflow/).
+#   --split             Save each subplot as a separate PNG instead of one combined
+#                       dashboard image.
 #
-# Output file name: workflow_dashboard_<YYYYMMDD_HHMMSS>.png
+# Output (combined): workflow_dashboard_<YYYYMMDD_HHMMSS>.png
+# Output (--split):  one <stem>.<panel>.png per subplot, in OUT_DIR.
 # =============================================================================
 set -euo pipefail
 
@@ -21,7 +24,7 @@ PLOT_SCRIPT=/scratch/bblj/${USER}/radical.asyncflow/examples/telemetry/plot_work
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 <telemetry.jsonl> [--out-dir DIR]"
+    echo "Usage: $0 <telemetry.jsonl> [--out-dir DIR] [--split]"
     exit 1
 fi
 
@@ -36,10 +39,12 @@ if [ -z "${WF_NAME}" ] || [ "${WF_NAME}" = "." ]; then
 fi
 
 OUT_DIR="${SCRIPT_DIR}/plots/${WF_NAME}"
+SPLIT=0
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --out-dir) OUT_DIR="$2"; shift 2 ;;
+        --split)   SPLIT=1; shift ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
@@ -57,12 +62,18 @@ fi
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
 mkdir -p "${OUT_DIR}"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-OUT_FILE="${OUT_DIR}/workflow_dashboard_${TIMESTAMP}.png"
 
-python "${PLOT_SCRIPT}" "${JSONL_FILE}" --out "${OUT_FILE}" --split
-echo "Telemetry plot saved to ${OUT_FILE}"
+if [ "${SPLIT}" -eq 1 ]; then
+    python "${PLOT_SCRIPT}" "${JSONL_FILE}" --split --out "${OUT_DIR}"
+    echo "Telemetry panels saved to ${OUT_DIR}/"
+else
+    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    OUT_FILE="${OUT_DIR}/workflow_dashboard_${TIMESTAMP}.png"
+    python "${PLOT_SCRIPT}" "${JSONL_FILE}" --out "${OUT_FILE}"
+    echo "Telemetry plot saved to ${OUT_FILE}"
+fi
 
 
 # --- Plot telemetry ---
 #bash plot_telemetry.sh telemetry-output/out.jsonl
+#bash plot_telemetry.sh telemetry-output/out.jsonl --split

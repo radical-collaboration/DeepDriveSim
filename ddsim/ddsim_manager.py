@@ -229,85 +229,101 @@ class DDSimManager:
         """
         Main loop: submit sims, train, evaluate, cancel, finalize — until all done.
         """
-        await self.init_sim_queue()
-        submit_task = asyncio.create_task(self.submit_sims())
 
-        try:
-            while self.run_workflow:
-                if self.debug:
-                    self.logger.info(
-                        f"{len(self.registered_sims)} simulation(s) running: "
-                        f"{list(self.registered_sims.keys())}",
-                        component=self.name,
-                    )
+        flow = self.flow
+        workflow = self
 
-                if self.retrain_model:
-                    await self.monitor_training_data()
-                    if self.free_resources_for_train:
-                        await self._free_resources_for_training()
+        @flow.block
+        async def run_workflow():
+            await workflow.init_sim_queue()
+            submit_task = asyncio.create_task(workflow.submit_sims())
 
-                    if self.debug:
-                        self.logger.task_started(
-                            "Model Training", component=f"{self.name}-train"
-                        )
-                    await asyncio.gather(
-                        self.train_model(), *(t() for t in self.train_models)
-                    )
-                    if self.debug:
-                        self.logger.task_completed(
-                            "Model Training", component=f"{self.name}-train"
-                        )
-                else:
-                    await asyncio.sleep(self.sleep_time)
-
-                if self.call_evaluate_simulations:
-                    if self.debug:
-                        self.logger.task_started(
-                            "Sim evaluation", component=f"{self.name}-eval"
-                        )
-                    await self.evaluate_simulations()
-                    if self.debug:
-                        self.logger.task_completed(
-                            "Sim evaluation", component=f"{self.name}-eval"
+            try:
+                while workflow.run_workflow:
+                    if workflow.debug:
+                        workflow.logger.info(
+                            f"{len(workflow.registered_sims)} simulation(s) running: "
+                            f"{list(workflow.registered_sims.keys())}",
+                            component=workflow.name,
                         )
 
-                if self.call_cancel_simulations:
-                    if self.debug:
-                        self.logger.task_started(
-                            "Sim cancelation", component=f"{self.name}-cancel"
+                    if workflow.retrain_model:
+                        await workflow.monitor_training_data()
+                        if workflow.free_resources_for_train:
+                            await workflow._free_resources_for_training()
+
+                        if workflow.debug:
+                            workflow.logger.task_started(
+                                "Model Training", component=f"{workflow.name}-train"
+                            )
+                        await asyncio.gather(
+                            workflow.train_model(),
+                            *(t() for t in workflow.train_models),
                         )
-                    await self.cancel_sims()
-                    if self.debug:
-                        self.logger.task_completed(
-                            "Sim cancelation", component=f"{self.name}-cancel"
-                        )
+                        if workflow.debug:
+                            workflow.logger.task_completed(
+                                "Model Training", component=f"{workflow.name}-train"
+                            )
+                    else:
+                        await asyncio.sleep(workflow.sleep_time)
 
-                if self.call_finalize_results:
-                    if self.debug:
-                        self.logger.task_started(
-                            "Finalize Results", component=f"{self.name}-finalize"
-                        )
-                    await self.finalize_results()
-                    if self.debug:
-                        self.logger.task_completed(
-                            "Finalize Results", component=f"{self.name}-finalize"
-                        )
+                    if workflow.call_evaluate_simulations:
+                        if workflow.debug:
+                            workflow.logger.task_started(
+                                "Sim evaluation", component=f"{workflow.name}-eval"
+                            )
+                        await workflow.evaluate_simulations()
+                        if workflow.debug:
+                            workflow.logger.task_completed(
+                                "Sim evaluation", component=f"{workflow.name}-eval"
+                            )
 
-                await asyncio.sleep(1)
+                    if workflow.call_cancel_simulations:
+                        if workflow.debug:
+                            workflow.logger.task_started(
+                                "Sim cancelation", component=f"{workflow.name}-cancel"
+                            )
+                        await workflow.cancel_sims()
+                        if workflow.debug:
+                            workflow.logger.task_completed(
+                                "Sim cancelation", component=f"{workflow.name}-cancel"
+                            )
 
-        finally:
-            if not self.shutting_down.is_set():
-                self.shutting_down.set()
+                    if workflow.call_finalize_results:
+                        if workflow.debug:
+                            workflow.logger.task_started(
+                                "Finalize Results",
+                                component=f"{workflow.name}-finalize",
+                            )
+                        await workflow.finalize_results()
+                        if workflow.debug:
+                            workflow.logger.task_completed(
+                                "Finalize Results",
+                                component=f"{workflow.name}-finalize",
+                            )
 
-            submit_task.cancel()
-            await asyncio.gather(submit_task, return_exceptions=True)
+                    await asyncio.sleep(1)
 
-            if self.registered_sims:
-                for task in list(self.registered_sims.values()):
-                    task.cancel()
-                await asyncio.gather(
-                    *self.registered_sims.values(), return_exceptions=True
+            finally:
+                if not workflow.shutting_down.is_set():
+                    workflow.shutting_down.set()
+
+                workflow.logger.task_completed(
+                    "Finalize Results - canceling sims",
+                    component=f"{workflow.name}-finalize",
                 )
+                submit_task.cancel()
+                await asyncio.gather(submit_task, return_exceptions=True)
 
-        self.logger.manager_exiting()
-        self.logger.separator(f"{self.name} MANAGER FINISHED")
+                if workflow.registered_sims:
+                    for task in list(workflow.registered_sims.values()):
+                        task.cancel()
+                    await asyncio.gather(
+                        *workflow.registered_sims.values(), return_exceptions=True
+                    )
+
+            workflow.logger.manager_exiting()
+            workflow.logger.separator(f"{workflow.name} MANAGER FINISHED")
+
+        await run_workflow()
+        await self.close()

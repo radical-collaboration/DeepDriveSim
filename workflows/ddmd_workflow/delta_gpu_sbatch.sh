@@ -25,8 +25,6 @@ export EXPRMNT_DIR=${WORK_DIR}/ddmd_test_experiments
 rm -rf ${EXPRMNT_DIR}
 
 cd ${WORK_DIR}
-rm -rf *telemetry*
-rm ddict_*
 
 cp  ${INPUT_DIR}/lassen-keras-dbscan.yaml ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
 sed -i "s|\${EXPRMNT_DIR}|${EXPRMNT_DIR}|g" ${INPUT_DIR}/new_lassen-keras-dbscan.yaml

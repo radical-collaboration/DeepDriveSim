@@ -119,7 +119,7 @@ class DDMdWorkflow(DDSimManager):
         self.sim_batch_size = self.max_sim_batch
 
         self.free_resources_for_train = False
-        self.call_cancel_simulations = True
+        self.call_cancel_simulations = False
         self.call_finalize_results = True
         self.call_evaluate_simulations = True
 
@@ -268,6 +268,13 @@ class DDMdWorkflow(DDSimManager):
         for sim_idx in range(self.num_sims):
             await self.sim_task_queue.put({"sim_idx": sim_idx})
             self.sim_inputs[sim_idx] = None
+
+    # --------------------------------------------------------------------------
+    async def add_sims_to_queue(self, *args, **kwargs):
+        '''
+        For subseq iterations, new simulations are added to the queue in finalize_results() 
+        '''
+        pass
 
     # --------------------------------------------------------------------------
     async def check_train_status(self):
@@ -472,5 +479,15 @@ class DDMdWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def close(self):
-        """Gracefully shut down the asyncflow engine."""
-        pass
+        # Temporary cleanup to test campaign manager and aid Disk quota exceeded.
+        exp_dir = self.experiment_config.experiment_directory
+        if exp_dir.exists():
+            shutil.rmtree(exp_dir, ignore_errors=True)
+            self.logger.info(
+                f"Removed experiment directory: {exp_dir}", component=self.name
+            )
+
+    # --------------------------------------------------------------------------
+    async def stop(self):
+        """Alias for close(), can be used for external termination."""
+        await self.close()

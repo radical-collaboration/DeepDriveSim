@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
-from pathlib import Path
 
 from radical.asyncflow import WorkflowEngine
 
 from ddsim.util import find_gpus, load_config, make_policies
 from workflows.exchange_workflow.exchange_workflow import ExchangeWorkflow
-
-_DEFAULT_CONFIG = Path(__file__).parent / "config.yaml"
 
 
 async def run_exchange(config_file: str) -> None:
@@ -30,39 +27,22 @@ async def run_exchange(config_file: str) -> None:
         except ImportError:
             backend = "concurrent"
 
-    if backend != "dragon":
+    else:
         from rhapsody.backends import ConcurrentExecutionBackend
 
         engine_concurrent = await ConcurrentExecutionBackend()
         asyncflow = await WorkflowEngine.create(engine_concurrent)
 
-    # --- Telemetry (Dragon mode only) ---
+    # --- Telemetry
     telemetry = None
-    collector = None
-    if backend == "dragon":
+    if cfg.get("telemetry", True):
+        telemetry_dir = cfg.get("telemetry_dir", "telemetry-output")
         if hasattr(asyncflow, "start_telemetry"):
             telemetry = await asyncflow.start_telemetry(
                 resource_poll_interval=0.5,
-                checkpoint_path="telemetry-output",
+                checkpoint_path=telemetry_dir,
             )
             print("Started Asyncflow telemetry ...")
-        else:
-            from rhapsody.backends import DragonTelemetryCollector
-
-            collector_dir = "telemetry-results"
-            Path(collector_dir).mkdir(parents=True, exist_ok=True)
-            collector = DragonTelemetryCollector(
-                collection_rate=1.0,
-                checkpoint_interval=30.0,
-                checkpoint_dir=collector_dir,
-                checkpoint_count=150,
-                enable_cpu=True,
-                enable_gpu=True,
-                enable_memory=False,
-                metric_prefix="SPHERICAL-exchange",
-            )
-            collector.start()
-            print("Started Dragon telemetry...")
 
     workflow = ExchangeWorkflow(
         config=cfg,
@@ -89,8 +69,6 @@ async def run_exchange(config_file: str) -> None:
 
         if telemetry:
             await telemetry.stop()
-        if collector:
-            collector.stop()
 
         # ExchangeWorkflow.close() calls asyncflow.shutdown() internally.
         await workflow.close()
@@ -104,7 +82,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_file",
         type=str,
-        default=str(_DEFAULT_CONFIG),
+        default="config.yaml",
         help="Path to workflow config file (default: config.yaml next to this script)",
     )
 

@@ -5,9 +5,11 @@
 debug: false
 engine:      dragon       # concurrent | dragon
 num_replicas: 2
-home_dir:    "DDSim"
+home_dir:      "Dummy"
+telemetry:     true
+telemetry_dir: "telemetry-output"
 
-num_inputs:               100  # number of dummy simulation inputs to generate
+num_inputs:               20  # number of dummy simulation inputs to generate
 max_sim_batch:            4     # max simulations running in parallel
 training_cores:           1     # cores reserved for training (subtracted from sim budget)
 training_threshold:       0.5   # model-accuracy threshold to stop retraining
