@@ -11,7 +11,7 @@
 #SBATCH --mail-type=ALL
 
 export VE_HOME=~/ve
-export DDSIM_DIR=/scratch/bblj/${USER}/DeepDriveSim
+export DDSIM_DIR=/scratch/***/${USER}/DeepDriveSim
 export WORK_DIR=${DDSIM_DIR}/workflows/dummy_workflow
 
 cd ${WORK_DIR}

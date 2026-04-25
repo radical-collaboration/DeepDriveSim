@@ -29,3 +29,7 @@ tasks:
     cpu_reqs: 1
     gpu_reqs: 0
     pre_exec: []
+
+# Python executable for all tasks — set to the python binary of the target venv,
+# or leave empty to inherit the current interpreter.
+executable: "${VE_HOME}/exchange/bin/python"

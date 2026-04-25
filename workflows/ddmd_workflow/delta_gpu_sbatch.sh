@@ -16,20 +16,20 @@ export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
 export TF_FORCE_GPU_ALLOW_GROWTH=true
 
-export HOME_DIR=/scratch/bblj/${USER}
-export WORK_DIR=${HOME_DIR}/DeepDriveSim/workflows/ddmd_workflow
-export INPUT_DIR=${WORK_DIR}/data
+export HOME_DIR=/scratch/***/${USER}
+export MD_HOME=${HOME_DIR}/DeepDriveSim/workflows/ddmd_workflow
+export MD_INPUT=${MD_HOME}/data
 
 # WARNING: this directory must be empty before running a new experiment!
-export EXPRMNT_DIR=${WORK_DIR}/ddmd_test_experiments
+export EXPRMNT_DIR=${MD_HOME}/ddmd_test_experiments
 rm -rf ${EXPRMNT_DIR}
 
-cd ${WORK_DIR}
+cd ${MD_HOME}
 
-cp  ${INPUT_DIR}/lassen-keras-dbscan.yaml ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
-sed -i "s|\${EXPRMNT_DIR}|${EXPRMNT_DIR}|g" ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
-sed -i "s|\${CONDA_ENV}|/u/${USER}/ve|g"  ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
-sed -i "s|\${WORK_DIR}|${WORK_DIR}|g"       ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
+cp  ${MD_INPUT}/lassen-keras-dbscan.yaml ${MD_INPUT}/new_lassen-keras-dbscan.yaml
+sed -i "s|\${EXPRMNT_DIR}|${EXPRMNT_DIR}|g" ${MD_INPUT}/new_lassen-keras-dbscan.yaml
+sed -i "s|\${CONDA_ENV}|/u/${USER}/ve|g"  ${MD_INPUT}/new_lassen-keras-dbscan.yaml
+sed -i "s|\${MD_HOME}|${MD_HOME}|g"       ${MD_INPUT}/new_lassen-keras-dbscan.yaml
 
 
 source /u/${USER}/ve/ddmd/bin/activate

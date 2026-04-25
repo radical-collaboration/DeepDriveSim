@@ -10,7 +10,7 @@
 #SBATCH --mail-user=mariya.goliyad@rutgers.edu
 #SBATCH --mail-type=ALL
 
-export HOME_DIR=/scratch/bblj/${USER}
+export HOME_DIR=/scratch/***/${USER}
 export WORK_DIR=${HOME_DIR}/DeepDriveSim/workflows/ddmd_workflow
 export INPUT_DIR=${WORK_DIR}/data
 
