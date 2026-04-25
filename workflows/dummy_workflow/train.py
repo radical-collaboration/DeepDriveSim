@@ -40,7 +40,7 @@ async def data_loading(sim_output_dir: Path, train_dir: Path, val_dir: Path):
         if not sim_dir.is_dir():
             continue
 
-        files = [f.name for f in await async_iterdir(sim_dir)]
+        files = [f.name for f in await async_iterdir(sim_dir) if f.suffix == ".npz"]
         if not files:
             continue
 
@@ -51,9 +51,15 @@ async def data_loading(sim_output_dir: Path, train_dir: Path, val_dir: Path):
 
         # Move files asynchronously (threaded because shutil is blocking)
         for filename in train_files:
-            await to_thread(shutil.move, sim_dir / filename, train_dir / filename)
+            try:
+                await to_thread(shutil.move, sim_dir / filename, train_dir / filename)
+            except FileNotFoundError:
+                pass
         for filename in val_files:
-            await to_thread(shutil.move, sim_dir / filename, val_dir / filename)
+            try:
+                await to_thread(shutil.move, sim_dir / filename, val_dir / filename)
+            except FileNotFoundError:
+                pass
 
 
 async def train(

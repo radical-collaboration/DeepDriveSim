@@ -8,8 +8,6 @@ from radical.asyncflow import WorkflowEngine
 from ddsim.util import find_gpus, load_config, make_policies
 from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
 
-_DEFAULT_CONFIG = Path(__file__).parent / "config.yaml"
-
 
 async def run_miniapps(config_file: str) -> None:
     cfg = load_config(config_file)
@@ -30,39 +28,22 @@ async def run_miniapps(config_file: str) -> None:
         except ImportError:
             backend = "concurrent"
 
-    if backend != "dragon":
+    else:
         from rhapsody.backends import ConcurrentExecutionBackend
 
         engine_concurrent = await ConcurrentExecutionBackend()
         asyncflow = await WorkflowEngine.create(engine_concurrent)
 
-    # --- Telemetry (Dragon mode only) ---
+    # --- Telemetry
     telemetry = None
-    collector = None
-    if backend == "dragon":
+    if cfg.get("telemetry", True):
+        telemetry_dir = cfg.get("telemetry_dir", "telemetry-output")
         if hasattr(asyncflow, "start_telemetry"):
             telemetry = await asyncflow.start_telemetry(
                 resource_poll_interval=0.05,
-                checkpoint_path="telemetry-output",
+                checkpoint_path=telemetry_dir,
             )
             print("Started Asyncflow telemetry ...")
-        else:
-            from rhapsody.backends import DragonTelemetryCollector
-
-            collector_dir = "telemetry-results"
-            Path(collector_dir).mkdir(parents=True, exist_ok=True)
-            collector = DragonTelemetryCollector(
-                collection_rate=1.0,
-                checkpoint_interval=30.0,
-                checkpoint_dir=collector_dir,
-                checkpoint_count=150,
-                enable_cpu=True,
-                enable_gpu=True,
-                enable_memory=False,
-                metric_prefix="SPHERICAL-inference",
-            )
-            collector.start()
-            print("Started Dragon telemetry...")
 
     home_dir = Path(cfg.get("home_dir", Path.home() / "MiniApps")).expanduser()
 
@@ -72,7 +53,7 @@ async def run_miniapps(config_file: str) -> None:
             config=cfg,
             name=f"min{i + 1}",
             asyncflow=asyncflow,
-            home_dir=f"{home_dir}/min{i + 1}",
+            home_dir=str(home_dir),
             policies=[policies[i]] if policies[i] is not None else [],
         )
         for i in range(num_replicas)
@@ -99,9 +80,13 @@ async def run_miniapps(config_file: str) -> None:
 
         if telemetry:
             await telemetry.stop()
-        if collector:
-            collector.stop()
         await asyncflow.shutdown()
+
+        pending = {t for t in asyncio.all_tasks() if t is not asyncio.current_task()}
+        if pending:
+            for t in pending:
+                t.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
 
 
 if __name__ == "__main__":
@@ -112,7 +97,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_file",
         type=str,
-        default=str(_DEFAULT_CONFIG),
+        default="config.yaml",
         help="Path to workflow configuration file",
     )
 

@@ -1,9 +1,9 @@
 # predict_async_limited.py
 import argparse
 import asyncio
-import os
 import random
 import zipfile
+import zlib
 from asyncio import to_thread
 from pathlib import Path
 from typing import Union
@@ -37,7 +37,14 @@ async def evaluate_npz_file(file: Path, model) -> float:
     try:
         data = await asyncio.to_thread(np.load, file)
         y_eval = data["y"]
-    except (OSError, KeyError, EOFError, zipfile.BadZipFile):
+    except (
+        OSError,
+        KeyError,
+        EOFError,
+        UnicodeDecodeError,
+        zipfile.BadZipFile,
+        zlib.error,
+    ):
         # print(f" Skipping corrupt file {file}: {e}")
         return None
 
@@ -101,8 +108,8 @@ async def predict(model_filename: str, sim_output_dir: str, output_file: str) ->
 
     print(f"\nPrediction completed. Saving results to {output_file}")
 
-    # def _write():
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    output_file = Path(output_file)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w") as f:
         yaml.dump(results, f, sort_keys=True)
 

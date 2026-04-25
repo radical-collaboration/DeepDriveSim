@@ -14,7 +14,7 @@
 export CUDA_HOME=/opt/nvidia/hpc_sdk/Linux_x86_64/25.3/cuda/12.8
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
-export DDSIM_DIR=/scratch/bblj/${USER}/DeepDriveSim
+export DDSIM_DIR=/scratch/***/${USER}/DeepDriveSim
 export VE_HOME=/u/${USER}/ve
 export WORK_DIR=${DDSIM_DIR}/workflows/exchange_workflow
 

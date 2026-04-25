@@ -4,13 +4,14 @@
 #SBATCH --partition=cpu
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=128
-#SBATCH --time=00:30:00
+#SBATCH --cpus-per-task=16
+#SBATCH --time=00:10:00
 #SBATCH --job-name=dummy_cpu
 #SBATCH --mail-user=mariya.goliyad@rutgers.edu
 #SBATCH --mail-type=ALL
 
-export DDSIM_DIR=/scratch/bblj/${USER}/DeepDriveSim
+export VE_HOME=~/ve
+export DDSIM_DIR=/scratch/***/${USER}/DeepDriveSim
 export WORK_DIR=${DDSIM_DIR}/workflows/dummy_workflow
 
 cd ${WORK_DIR}

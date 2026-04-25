@@ -52,6 +52,11 @@ class MockLearner(DDSimManager):
         # Enable finalize_results so start() has an exit path
         self.call_finalize_results = True
 
+        # Minimal asyncflow mock: .block is a passthrough decorator
+        mock_flow = MagicMock()
+        mock_flow.block = lambda f: f
+        self.flow = mock_flow
+
         # Register simulation callable
         self._register_tasks()
         self.logger = DummyLogger()

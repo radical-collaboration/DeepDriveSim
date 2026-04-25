@@ -11,6 +11,10 @@
 #SBATCH --mail-user=mariya.goliyad@rutgers.edu
 #SBATCH --mail-type=ALL
 
+export DDSIM_DIR=/scratch/***/${USER}/DeepDriveSim
+export VE_HOME=~/ve
+export WORK_DIR=${DDSIM_DIR}/workflows/miniapps_workflow
+
 export CUDA_HOME=/opt/nvidia/hpc_sdk/Linux_x86_64/25.3/cuda/12.8
 # MPI: cray-mpich names its library libmpi_gnu_112.so.12 (not libmpi.so.12).
 # delta_env_setup.sh symlinks libmpi.so.12 → libmpi_gnu_112.so.12 inside the
@@ -18,10 +22,6 @@ export CUDA_HOME=/opt/nvidia/hpc_sdk/Linux_x86_64/25.3/cuda/12.8
 # finds the library at import time via the dynamic linker.
 export MPI_LIB=/opt/cray/pe/mpich/8.1.32/ofi/gnu/11.2/lib
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:${VE_HOME}/miniapps/lib:$MPI_LIB:$LD_LIBRARY_PATH
-
-export DDSIM_DIR=/scratch/bblj/${USER}/DeepDriveSim
-export VE_HOME=~/ve
-export WORK_DIR=${DDSIM_DIR}/workflows/miniapps_workflow
 
 cd ${WORK_DIR}
 

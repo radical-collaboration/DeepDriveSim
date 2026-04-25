@@ -15,9 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# Skip the entire module if rose or radical.asyncflow are unavailable, because
-# MiniAppsWorkflow imports both at module level.
-pytest.importorskip("rose", reason="rose not installed")
 pytest.importorskip("radical.asyncflow", reason="radical.asyncflow not installed")
 
 
@@ -35,19 +32,10 @@ def tmp_home(tmp_path):
 @pytest.fixture()
 def workflow(tmp_home):
     """
-    MiniAppsWorkflow with:
-      - rose.Learner mocked so register_tasks() decorators are no-ops
-      - radical.asyncflow mocked
-      - No real filesystem side-effects beyond tmp_home
+    MiniAppsWorkflow with radical.asyncflow mocked.
+    No real filesystem side-effects beyond tmp_home.
     """
-    mock_learner_cls = MagicMock()
-    mock_learner_instance = MagicMock()
-    # Make the decorator simply return the original function unchanged
-    mock_learner_instance.simulation_task = lambda f: f
-    mock_learner_instance.training_task = lambda f: f
-    mock_learner_instance.prediction_task = lambda **kw: lambda f: f
-    mock_learner_instance.utility_task = lambda **kw: lambda f: f
-    mock_learner_cls.return_value = mock_learner_instance
+    from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
 
     mock_asyncflow = MagicMock()
 
@@ -64,18 +52,12 @@ def workflow(tmp_home):
         "miniapps_data_ready": 3,
     }
 
-    with patch(
-        "workflows.miniapps_workflow.miniapps_workflow.Learner", mock_learner_cls
-    ):
-        from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
-
-        wf = MiniAppsWorkflow(
-            config=cfg,
-            asyncflow=mock_asyncflow,
-            name="test_wf",
-            home_dir=str(tmp_home),
-        )
-    return wf
+    return MiniAppsWorkflow(
+        config=cfg,
+        asyncflow=mock_asyncflow,
+        name="test_wf",
+        home_dir=str(tmp_home),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -97,8 +79,8 @@ class TestSimCmd:
         assert f"--num_step {workflow.num_step}" in cmd
 
     def test_contains_hdf5_env(self, workflow):
-        cmd = workflow._sim_cmd(sim_idx=0)
-        assert "HDF5_USE_FILE_LOCKING=FALSE" in cmd
+        env = workflow.task_description["process_template"]["env"]
+        assert env.get("HDF5_USE_FILE_LOCKING") == "FALSE"
 
     def test_contains_simulation_script(self, workflow):
         cmd = workflow._sim_cmd(sim_idx=0)
@@ -142,8 +124,8 @@ class TestTrainingCmd:
         assert f"--num_epochs {workflow.num_epochs}" in cmd
 
     def test_contains_hdf5_env(self, workflow):
-        cmd = workflow._training_cmd()
-        assert "HDF5_USE_FILE_LOCKING=FALSE" in cmd
+        env = workflow.task_description["process_template"]["env"]
+        assert env.get("HDF5_USE_FILE_LOCKING") == "FALSE"
 
     def test_contains_training_script(self, workflow):
         cmd = workflow._training_cmd()
@@ -171,7 +153,8 @@ class TestPredictionCmd:
         assert "predictions.yaml" in cmd
 
     def test_contains_hdf5_env(self, workflow):
-        assert "HDF5_USE_FILE_LOCKING=FALSE" in workflow._prediction_cmd()
+        env = workflow.task_description["process_template"]["env"]
+        assert env.get("HDF5_USE_FILE_LOCKING") == "FALSE"
 
     def test_contains_agent_script(self, workflow):
         assert "agent.py" in workflow._prediction_cmd()
