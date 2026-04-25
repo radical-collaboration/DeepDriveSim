@@ -50,7 +50,8 @@ class DummyWorkflow(DDSimManager):
             raise ValueError("Unable to initiate DummyWorkflow w/o asyncflow")
         self.learner = Learner(self.flow) if Learner is not None else None
 
-        _home_base = Path(kwargs.get("home_dir", cfg.get("home_dir", Path.home() / "Dummy")))
+        _home_base = Path(kwargs.get("home_dir",
+            cfg.get("home_dir", Path.home() / "Dummy")))
         self.home_dir = self._ensure_dir(_home_base / self.name)
         self._clean_dir(self.home_dir)  # ❗Careful: deletes everything in home_dir!
 

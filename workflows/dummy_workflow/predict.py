@@ -37,7 +37,8 @@ async def evaluate_npz_file(file: Path, model) -> float:
     try:
         data = await asyncio.to_thread(np.load, file)
         y_eval = data["y"]
-    except (OSError, KeyError, EOFError, UnicodeDecodeError, zipfile.BadZipFile, zlib.error):
+    except (OSError, KeyError, EOFError, UnicodeDecodeError,
+            zipfile.BadZipFile, zlib.error):
         # print(f" Skipping corrupt file {file}: {e}")
         return None
 

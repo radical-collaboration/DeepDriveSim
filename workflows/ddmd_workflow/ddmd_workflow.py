@@ -272,7 +272,8 @@ class DDMdWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     async def add_sims_to_queue(self, *args, **kwargs):
         '''
-        For subseq iterations, new simulations are added to the queue in finalize_results() 
+        For subseq iterations, new simulations are added
+        to the queue in finalize_results()
         '''
         pass
 

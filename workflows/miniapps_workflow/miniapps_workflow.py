@@ -74,7 +74,8 @@ class MiniAppsWorkflow(DDSimManager):
         self._data_ready_signaled = False
         self.miniapps_data_ready = int(cfg.get("miniapps_data_ready", 3))
 
-        _home_base = Path(kwargs.get("home_dir", cfg.get("home_dir", Path.home() / "MiniApps")))
+        _home_base = Path(kwargs.get("home_dir",
+            cfg.get("home_dir", Path.home() / "MiniApps")))
         self.home_dir = self._ensure_dir(_home_base / self.name)
         self.clean_dir(self.home_dir)
 
