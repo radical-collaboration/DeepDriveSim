@@ -253,11 +253,10 @@ class DDMdWorkflow(DDSimManager):
         self.stage_idx += 1
 
         self.logger.info(
-            f"Iteration {self.stage_idx} complete — "
-            "signaling downstream workflows",
+            f"Iteration {self.stage_idx} complete — signaling downstream workflows",
             component=self.name,
         )
-        #for _ in range(3):
+        # for _ in range(3):
         await self._signal_ready()
 
         if self.stage_idx == self.experiment_config.max_iteration:
