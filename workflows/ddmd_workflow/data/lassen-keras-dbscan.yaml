@@ -20,7 +20,7 @@ molecular_dynamics_stage:
     - conda activate ${CONDA_ENV}/ddmd-openmm
     executable: ${CONDA_ENV}/ddmd-openmm/bin/python
     arguments:
-    - ${WORK_DIR}/sim/openmm/run_openmm.py
+    - ${MD_HOME}/sim/openmm/run_openmm.py
     cpu_reqs:
         processes: 1
         process_type: null
@@ -39,7 +39,7 @@ molecular_dynamics_stage:
         output_path: set_by_deepdrivemd
         node_local_path: set_by_deepdrivemd
         pdb_file: set_by_deepdrivemd
-        initial_pdb_dir: ${WORK_DIR}/data/bba
+        initial_pdb_dir: ${MD_HOME}/data/bba
         solvent_type: implicit
         top_suffix: null
         simulation_length_ns: 100.0
@@ -48,7 +48,7 @@ molecular_dynamics_stage:
         temperature_kelvin: 310.0
         heat_bath_friction_coef: 1.0
         wrap: false
-        reference_pdb_file: ${WORK_DIR}/data/bba/1FME-folded.pdb
+        reference_pdb_file: ${MD_HOME}/data/bba/1FME-folded.pdb
         openmm_selection:
         - CA
         mda_selection: protein and name CA
@@ -101,7 +101,7 @@ machine_learning_stage:
     - export OMP_NUM_THREADS=4
     executable: ${CONDA_ENV}/ddmd-keras/bin/python
     arguments:
-    - ${WORK_DIR}/models/keras_cvae/train.py
+    - ${MD_HOME}/models/keras_cvae/train.py
     cpu_reqs:
         processes: 1
         process_type: MPI
@@ -176,7 +176,7 @@ model_selection_stage:
     - conda activate ${CONDA_ENV}/ddmd-keras
     executable: ${CONDA_ENV}/ddmd-keras/bin/python
     arguments:
-    - ${WORK_DIR}/selection/latest/select_model.py
+    - ${MD_HOME}/selection/latest/select_model.py
     cpu_reqs:
         processes: 1
         process_type: null
@@ -212,7 +212,7 @@ agent_stage:
     - export LD_LIBRARY_PATH=/opt/packages/cuda/v12.6.1/lib64:$LD_LIBRARY_PATH
     executable: ${CONDA_ENV}/ddmd-keras/bin/python
     arguments:
-    - ${WORK_DIR}/agents/lof/lof.py
+    - ${MD_HOME}/agents/lof/lof.py
     cpu_reqs:
         processes: 1
         process_type: null

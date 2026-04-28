@@ -11,19 +11,19 @@
 #SBATCH --mail-type=ALL
 
 export HOME_DIR=/scratch/***/${USER}
-export WORK_DIR=${HOME_DIR}/DeepDriveSim/workflows/ddmd_workflow
-export INPUT_DIR=${WORK_DIR}/data
+export MD_HOME=${HOME_DIR}/DeepDriveSim/workflows/ddmd_workflow
+export INPUT_DIR=${MD_HOME}/data
 
 # WARNING: this directory must be empty before running a new experiment!
-export EXPRMNT_DIR=${WORK_DIR}/ddmd_test_experiments
+export EXPRMNT_DIR=${MD_HOME}/ddmd_test_experiments
 rm -rf ${EXPRMNT_DIR}
 
-cd ${WORK_DIR}
+cd ${MD_HOME}
 
 cp  ${INPUT_DIR}/lassen-keras-dbscan.yaml ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
 sed -i "s|\${EXPRMNT_DIR}|${EXPRMNT_DIR}|g" ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
 sed -i "s|\${CONDA_ENV}|/u/${USER}/ve|g"  ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
-sed -i "s|\${WORK_DIR}|${WORK_DIR}|g"       ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
+sed -i "s|\${MD_HOME}|${MD_HOME}|g"       ${INPUT_DIR}/new_lassen-keras-dbscan.yaml
 
 
 source /u/${USER}/ve/ddmd/bin/activate
