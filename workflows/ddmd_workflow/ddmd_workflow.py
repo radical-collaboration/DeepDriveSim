@@ -34,9 +34,10 @@ class DDMdWorkflow(DDSimManager):
     def __init__(self, *args, **kwargs):
         super().__init__(name=kwargs.get("name", "ddsim"))
 
-        # Callback injected by AsyncCampaignManager to unblock dependent workflows.
+        # Callback injected by the campaign wrapper to signal downstream workflows.
+        # Called once per completed iteration — the CM decides how many dependent
+        # replicas to queue per signal.
         self._on_ready = kwargs.get("on_ready", None)
-        self._data_ready_signaled = False
 
         self.flow = kwargs.get("asyncflow", None)
         if self.flow is None:
@@ -251,14 +252,13 @@ class DDMdWorkflow(DDSimManager):
         """
         self.stage_idx += 1
 
-        if not self._data_ready_signaled:
-            self._data_ready_signaled = True
-            self.logger.info(
-                f"Iteration {self.stage_idx} complete — "
-                "signaling ready for downstream workflows",
-                component=self.name,
-            )
-            await self._signal_ready()
+        self.logger.info(
+            f"Iteration {self.stage_idx} complete — "
+            "signaling downstream workflows",
+            component=self.name,
+        )
+        #for _ in range(3):
+        await self._signal_ready()
 
         if self.stage_idx == self.experiment_config.max_iteration:
             self.shutting_down.set()

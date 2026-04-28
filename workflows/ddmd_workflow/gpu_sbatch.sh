@@ -15,12 +15,12 @@
 
 export BASE_DIR="${PROJECT}"
 export DDSim_DIR="${BASE_DIR}/DeepDriveSim"
-export WORK_DIR="${DDSim_DIR}/workflows/ddmd_workflow"
+export MD_HOME="${DDSim_DIR}/workflows/ddmd_workflow"
 export CONDA_ENV="${BASE_DIR}/conda_env"
-export INPUT_DIR="${WORK_DIR}/data"
+export INPUT_DIR="${MD_HOME}/data"
 
 #WARNING: this directory has to be empty before running new experiment!
-export EXPRMNT_DIR=$WORK_DIR/ddmd_test_experiments
+export EXPRMNT_DIR=$MD_HOME/ddmd_test_experiments
 # Remove the following line if you want to keep data from previous experiments.
 rm -rf $EXPRMNT_DIR
 
@@ -35,7 +35,7 @@ conda activate   $CONDA_ENV/ddmd
 cp  $INPUT_DIR/lassen-keras-dbscan.yaml $INPUT_DIR/new_lassen-keras-dbscan.yaml
 sed -i "s|\${EXPRMNT_DIR}|$EXPRMNT_DIR|g" $INPUT_DIR/new_lassen-keras-dbscan.yaml 
 sed -i "s|\${CONDA_ENV}|$CONDA_ENV|g" $INPUT_DIR/new_lassen-keras-dbscan.yaml
-sed -i "s|\${WORK_DIR}|$WORK_DIR|g" $INPUT_DIR/new_lassen-keras-dbscan.yaml
+sed -i "s|\${MD_HOME}|$MD_HOME|g" $INPUT_DIR/new_lassen-keras-dbscan.yaml
 
 rm *telemetry*/*
 

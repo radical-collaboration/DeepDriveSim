@@ -61,6 +61,101 @@ pip install -e ".[doc]"
 ##  Documentation
  [DeepDriveSim Documentation](https://radical-collaboration.github.io/DeepDriveSim/)
 
+## Campaign Manager Integration
+
+`DDMdWorkflow` exposes a lightweight hook that lets an external Campaign
+Manager (CM) react to each completed iteration — for example to queue
+downstream analysis or inference replicas.
+
+### How it works
+
+`DDMdWorkflow.__init__` accepts an optional `on_ready` keyword argument.
+When provided, the method `_signal_ready()` calls it after every completed
+iteration (inside `finalize_results()`).
+
+```
+DDMdWorkflow iteration N completes
+  └─ finalize_results()
+       └─ _signal_ready()          ← fires every iteration
+            └─ on_ready()          ← CM hook injected at construction
+                 └─ CM queues +1 dependent replica
+```
+
+`on_ready` may be a plain callable or a coroutine function — `_signal_ready`
+handles both:
+
+```python
+async def _signal_ready(self) -> None:
+    if self._on_ready is not None:
+        result = self._on_ready()
+        if asyncio.iscoroutine(result):
+            await result
+```
+
+The hook fires **once per iteration**, not once per replica lifetime.  A
+single DDMdWorkflow replica that runs `max_iteration=5` will call `on_ready`
+five times, each time the full simulation → training → selection loop
+completes.
+
+### Wrapper pattern (SPHERICAL Campaign Manager)
+
+The SPHERICAL CM runs `DDMdWorkflow` via a thin `DDMdWrapperWorkflow` that
+inherits `BaseWorkflow`.  It wires `on_ready` to the CM's `_signal_done()`
+so that each completed DDMd iteration cascades downstream replicas based on
+the pipeline config — without the workflow knowing downstream group names.
+
+```python
+# workflows/run_campaign/ddmd_workflow.py
+class DDMdWrapperWorkflow(BaseWorkflow):
+    workflow_id = "ddmd"
+
+    async def run(self, replica_id: str) -> None:
+        workflow = DDMdWorkflow(
+            asyncflow=self.asyncflow,
+            config=replica_config_path,
+            name=replica_id.replace("_", ""),
+            on_ready=lambda: self._signal_done(),   # ← CM hook
+            policies=self.policies,
+            engine_dragon=self.engine_dragon,
+        )
+        await workflow.start()
+```
+
+`_signal_done()` notifies the CM, which adds +1 replica to every group
+whose `dependencies` config field lists `"md"`.  The pipeline topology lives
+entirely in `config.yaml`; neither `DDMdWorkflow` nor `DDMdWrapperWorkflow`
+hardcodes downstream names.
+
+### Standalone usage (no CM)
+
+When running `DDMdWorkflow` directly (e.g. in tests or as a standalone
+script), omit `on_ready` or pass `None`:
+
+```python
+workflow = DDMdWorkflow(
+    asyncflow=asyncflow,
+    config="config.yaml",
+    name="ddmd",
+    # on_ready omitted → _signal_ready() is a no-op
+)
+await workflow.start()
+```
+
+### Constructor parameters summary
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `asyncflow` | `WorkflowEngine` | required | Shared radical-asyncflow engine |
+| `config` | `str` | required | Path to experiment YAML config |
+| `name` | `str` | `"ddsim"` | Replica name; used to namespace experiment directories |
+| `on_ready` | callable or coroutine function | `None` | Hook called after each completed iteration; CM injects `lambda: self._signal_done()` |
+| `policies` | `list[Policy]` | `[]` | Dragon GPU policies (one per assigned GPU); split into per-GPU policies internally |
+| `debug` | `bool` | `False` | Enable verbose RHAPSODY debug logging |
+| `tf_gpu_wrapper` | `str` | auto-detected | Shell wrapper script for GPU training subprocess |
+| `tf_cpu_wrapper` | `str` | auto-detected | Shell wrapper script for CPU agent subprocess |
+
+---
+
 ## Examples
 
 See the [examples/](examples/) directory for complete working examples:
