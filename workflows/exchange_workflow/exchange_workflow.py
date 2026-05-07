@@ -35,8 +35,8 @@ class ExchangeWorkflow(DDSimManager):
 
         self.retrain_model = False
         self.call_finalize_results = True
-        # If True, call evaluate_simulations after each sim; else call post_process_sim
-        self.call_evaluate_simulations = True
+        self.call_evaluate_simulations = False
+        self.call_post_process_sim = True
 
         self.num_steps = self.config.get("num_steps", 1000)
         self.target_temp = self.config.get("target_temp", 300.0)
@@ -46,7 +46,7 @@ class ExchangeWorkflow(DDSimManager):
         #   target_temp_reached[i] — True once sim i reaches target_temp
         num_sims = self.config.get("num_init_sims", 1)
         self.steps_reached = mp_Array(ctypes.c_int, num_sims)
-        self.target_temp_reached = mp_Array(ctypes.c_bool, num_sims)
+        self.target_temp_reached = mp_Array(ctypes.c_int, num_sims)
 
         # Exchange fires when every active sim has reached a multiple of this interval.
         self.exchange_step_interval = self.config.get("exchange_step_interval", 100)
@@ -222,13 +222,13 @@ class ExchangeWorkflow(DDSimManager):
         return bool(self.registered_sims) or completing_sim_idx is not None
 
     # --------------------------------------------------------------------------
-    async def evaluate_simulations(self, sim_idx):
+    async def post_process_sim(self, sim_idx):
         """Called after each simulation completes.
 
         Triggers an exchange once all active replicas have reached the current
         step threshold, then advances the threshold for the next exchange window.
         """
-        del self.sim_inputs[sim_idx]
+        self.sim_inputs.pop(sim_idx, None)
 
         sim_type = sim_idx.split("_")[0]
         print(f"[evaluate_simulations] {sim_idx} completed (type={sim_type})")
