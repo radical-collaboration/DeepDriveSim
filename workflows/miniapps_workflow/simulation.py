@@ -5,7 +5,10 @@ import os
 import socket
 import time
 
-import wfMiniAPI.kernel as wf
+try:
+    import wfMiniAPI.kernel as wf
+except Exception:
+    wf = None
 
 
 def parse_args():
@@ -28,7 +31,7 @@ def parse_args():
     parser.add_argument(
         "--num_step",
         type=int,
-        default=10000,
+        default=100000,
         help="number of matrix mult to perform, need to be larger than num_worker!",
     )
     parser.add_argument(
@@ -69,37 +72,49 @@ def main():
 
     try:
         import cupy
+
+        cupy.cuda.runtime.getDevice()  # raises if no GPU / driver mismatch
         device = "gpu"
-    except ImportError:
+    except Exception:
         device = "cpu"
 
     print("device is ", device)
     wf.generateRandomNumber(device, msz)
     wf.generateRandomNumber(device, msz)
 
+    num_step = args.num_step
+
     print(f"Running time of step 1 is {time.time() - start_time} seconds")
-    for mi in range(args.num_step):
-        print(f"Simulation step {mi + 1}/{args.num_step}")
-        elap = time.time()
+    for _ in range(num_step):
         wf.axpy(device, msz)
         wf.axpy(device, msz)
         wf.generateRandomNumber(device, msz * msz)
         wf.inplaceCompute(device, msz * msz, 1, "square")
         wf.matMulGeneral(device, [msz, msz], [msz], ([1], [0]))
-        print(
-            f"Elapsed time for step {mi + 1}/{args.num_step}: "
-            f"{time.time() - elap} seconds"
-        )
     print(f"Running time of step 2 is {time.time() - start_time} seconds")
 
     if device == "gpu":
-        wf.dataCopyD2H(msz)
-        wf.dataCopyD2H(msz)
+        wf.dataCopyD2H(msz)  # only once (duplicate removed)
+
     print(f"Running time of step 3 is {time.time() - start_time} seconds")
 
-    wf.writeNonMPI(args.write_size, root_path, args.instance_index)
-    wf.readNonMPI(args.read_size, root_path, args.instance_index)
+    # # --- WRITE ---
+    # filename = f"{root_path}/data_{args.instance_index}.h5"
 
+    # # Ensure clean write (avoid corrupted leftovers)
+    # if os.path.exists(filename):
+    #     os.remove(filename)
+
+    wf.writeNonMPI(args.write_size, root_path, args.instance_index)
+
+    # # --- WAIT until file is fully written ---
+    # while True:
+    #     if os.path.exists(filename) and os.path.getsize(filename) > 0:
+    #         break
+    #     time.sleep(0.1)
+
+    # --- READ ---
+    wf.readNonMPI(args.read_size, root_path, args.instance_index)
     end_time = time.time()
     print(f"Total simulation time is {end_time - start_time} seconds")
 

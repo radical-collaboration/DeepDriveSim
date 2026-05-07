@@ -1,0 +1,28 @@
+# =============================================================================
+# Dummy Workflow — workflow-specific parameters
+# =============================================================================
+
+debug: false
+engine:      dragon       # concurrent | dragon
+num_replicas: 2
+home_dir:      "Dummy"
+telemetry:     true
+telemetry_dir: "telemetry-output"
+
+num_inputs:               20  # number of dummy simulation inputs to generate
+max_sim_batch:            4     # max simulations running in parallel
+training_cores:           1     # cores reserved for training (subtracted from sim budget)
+training_threshold:       0.5   # model-accuracy threshold to stop retraining
+prediction_threshold:     0.5   # score below which a sim is cancelled
+start_training_threshold: 1     # min completed sims before training starts
+training_epochs:          1     # epochs per training iteration (0 = skip training)
+free_resources_for_train: true  # preempt sims to free resources for training
+force_start_training:     false # start training even if threshold not yet met
+sleep_time:               3     # seconds between main-loop iterations (> sim runtime)
+ddsim_data_ready:         2     # signal inference-ready after this many sims complete
+
+# src_dir: ""   # leave empty to use the dummy_workflow/ directory (default)
+
+# Python executable for all tasks — set to the python binary of the target venv,
+# or leave empty to inherit the current interpreter.
+executable: "${VE_HOME}/ddsim/bin/python"

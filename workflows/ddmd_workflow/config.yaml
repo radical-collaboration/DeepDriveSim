@@ -1,0 +1,14 @@
+# =============================================================================
+# DDMd Workflow (real MD simulations) — workflow-specific parameters
+# =============================================================================
+
+num_replicas: 8           # number of parallel MD workflows to run
+engine:      dragon       # concurrent | dragon
+debug:       false
+telemetry:     true
+telemetry_dir: "telemetry-output"
+ddsim_config: "${MD_INPUT}/new_lassen-keras-dbscan.yaml"
+experiment_dir: "DDMD"   # relative to campaign work dir; overrides experiment_directory in ddsim_config
+tf_gpu_wrapper: "${MD_HOME}/delta_tf_gpu_wrapper.sh"
+tf_cpu_wrapper: "${MD_HOME}/delta_tf_cpu_wrapper.sh"
+executable: "/u/${USER}/ve/ddmd/bin/python"

@@ -28,8 +28,7 @@ def ssh_and_kill(host):
             ssh_cmd,
             shell=True,
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
         print(f"[SUCCESS] {host}: {result.stdout.decode().strip()}")
     except subprocess.CalledProcessError as e:

@@ -17,11 +17,10 @@ def _configure_amber_implicit(
     heat_bath_friction_coef: float,
     platform: "openmm.Platform",
     platform_properties: dict,
-) -> Tuple["app.Simulation", Optional["app.PDBFile"]]:
+) -> Tuple["app.Simulation", Optional[list]]:
 
     # Configure system
     if top_file is not None:
-        pdb = None
         top = app.AmberPrmtopFile(str(top_file))
         system = top.createSystem(
             nonbondedMethod=app.CutoffNonPeriodic,
@@ -29,10 +28,14 @@ def _configure_amber_implicit(
             constraints=app.HBonds,
             implicitSolvent=app.OBC1,
         )
+        positions = None  # caller will re-read pdb for positions
     else:
         pdb = app.PDBFile(str(pdb_file))
-        top = pdb.topology
         forcefield = app.ForceField("amber99sbildn.xml", "amber99_obc.xml")
+        modeller = app.Modeller(pdb.topology, pdb.positions)
+        modeller.addHydrogens(forcefield)
+        top = modeller.topology
+        positions = modeller.positions  # H-augmented; must match system atom count
         system = forcefield.createSystem(
             top,
             nonbondedMethod=app.CutoffNonPeriodic,
@@ -50,9 +53,7 @@ def _configure_amber_implicit(
 
     sim = app.Simulation(top, system, integrator, platform, platform_properties)
 
-    # Returning the pdb file object for later use to reduce I/O.
-    # If a topology file is passed, the pdb variable is None.
-    return sim, pdb
+    return sim, positions
 
 
 def _configure_amber_explicit(
@@ -161,7 +162,7 @@ def configure_simulation(
 
     # Select implicit or explicit solvent configuration
     if solvent_type == "implicit":
-        sim, pdb = _configure_amber_implicit(
+        sim, implicit_positions = _configure_amber_implicit(
             pdb_file,
             top_file,
             dt_ps,
@@ -173,7 +174,7 @@ def configure_simulation(
     else:
         assert solvent_type == "explicit"
         assert top_file is not None
-        pdb = None
+        implicit_positions = None
         sim = _configure_amber_explicit(
             top_file,
             dt_ps,
@@ -184,11 +185,13 @@ def configure_simulation(
             explicit_barostat,
         )
 
-    # Set the positions
+    # Set the positions. When addHydrogens() was called, implicit_positions
+    # holds the H-augmented coordinates that match the system atom count.
     if set_positions:
-        if pdb is None:
-            pdb = app.PDBFile(str(pdb_file))
-        sim.context.setPositions(pdb.getPositions())
+        if implicit_positions is not None:
+            sim.context.setPositions(implicit_positions)
+        else:
+            sim.context.setPositions(app.PDBFile(str(pdb_file)).getPositions())
 
     # Minimize energy and equilibrate
     if run_minimization:

@@ -5,7 +5,7 @@ import time
 from inspect import Traceback, currentframe, getframeinfo
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 
@@ -24,7 +24,7 @@ def setup_mpi_comm(distributed: bool) -> Optional[Any]:
     return None
 
 
-def setup_mpi(comm: Optional[Any] = None) -> Tuple[int, int]:
+def setup_mpi(comm: Optional[Any] = None) -> tuple[int, int]:
     comm_size = 1
     comm_rank = 0
     if comm is not None:
@@ -69,7 +69,7 @@ class Timer:
 
     def __exit__(
         self,
-        type: Optional[Type[BaseException]],
+        type: Optional[type[BaseException]],
         value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> None:
@@ -79,7 +79,7 @@ class Timer:
 
 def bestk(
     a: "npt.ArrayLike", k: int, smallest: bool = True
-) -> Tuple["npt.ArrayLike", "npt.ArrayLike"]:
+) -> tuple["npt.ArrayLike", "npt.ArrayLike"]:
     r"""Return the best `k` values and correspdonding indices.
 
     Parameters

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import importlib.util
 import os
 import random
 import socket
@@ -9,11 +10,7 @@ import time
 import wfMiniAPI.kernel as wf
 import yaml
 
-try:
-    import cupy
-    default_device = "gpu"
-except ImportError:
-    default_device = "cpu"
+default_device = "gpu" if importlib.util.find_spec("cupy") is not None else "cpu"
 
 
 def parse_args():
@@ -21,7 +18,7 @@ def parse_args():
     parser.add_argument(
         "--num_epochs",
         type=int,
-        default=30,
+        default=300,
         metavar="N",
         help="number of epochs to train (default: 30)",
     )
@@ -109,8 +106,13 @@ def main():
     root_path = args.data_root_dir + f"/phase{args.phase}" + "/"
     print("root_path for data = ", root_path)
 
-    device = args.device
-    print("device is ", device)
+    try:
+        import cupy
+
+        cupy.cuda.runtime.getDevice()  # raises if no GPU / driver mismatch
+        device = "gpu"
+    except Exception:
+        device = "cpu"
 
     wf.sleep(args.preprocess_time)
     wf.readNonMPI(args.read_size, root_path, args.instance_index)
@@ -119,12 +121,8 @@ def main():
     if device == "gpu":
         wf.dataCopyH2D(args.dense_dim_in * args.dense_dim_out)
 
-    tt = time.time()
-
     if device == "gpu":
         wf.dataCopyH2D(args.num_sample * args.dense_dim_in)
-        print(f"data movement (CPU->GPU) takes {time.time() - tt}")
-    tt = time.time()
     for _ in range(args.num_mult):
         wf.matMulGeneral(
             device,
@@ -133,15 +131,10 @@ def main():
             ([1], [0]),
         )
         wf.axpy(device, args.dense_dim_in * args.dense_dim_out)
-    print(f"mult takes {time.time() - tt}")
-    tt = time.time()
 
     for _ in range(args.num_epochs):
-        tt = time.time()
         if device == "gpu":
             wf.dataCopyH2D(args.num_sample * args.dense_dim_in)
-            print(f"data movement (CPU->GPU) takes {time.time() - tt}")
-        tt = time.time()
         for _ in range(args.num_mult_outlier):
             wf.matMulGeneral(
                 device,
@@ -150,8 +143,6 @@ def main():
                 ([1], [0]),
             )
             wf.axpy(device, args.dense_dim_in * args.dense_dim_out)
-            print(f"mult takes {time.time() - tt}")
-        tt = time.time()
 
     wf.writeNonMPI(args.write_size, root_path, args.instance_index)
 

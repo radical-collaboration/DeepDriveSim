@@ -1,6 +1,8 @@
 # sim_async.py
 import argparse
 import asyncio
+import os
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -30,8 +32,36 @@ async def simulate_one(output_file: Path):
 
     y = await asyncio.to_thread(run_math)
 
-    # Save results asynchronously
-    await asyncio.to_thread(np.savez_compressed, output_file, x=x, y=y)
+    def write_atomic():
+        try:
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+        except (FileExistsError, OSError):
+            pass  # Lustre metadata race; directory may already exist
+        try:
+            tmp = tempfile.NamedTemporaryFile(
+                dir=output_file.parent, suffix=".tmp", delete=False
+            )
+        except FileNotFoundError:
+            return  # directory was deleted by concurrent close(); skip file
+        try:
+            np.savez_compressed(tmp, x=x, y=y)
+            tmp.close()
+            os.rename(tmp.name, output_file)
+        except FileNotFoundError:
+            # temp file or directory removed by concurrent close(); nothing to clean up
+            try:
+                tmp.close()
+            except Exception:
+                pass
+        except Exception:
+            try:
+                tmp.close()
+                os.unlink(tmp.name)
+            except FileNotFoundError:
+                pass
+            raise
+
+    await asyncio.to_thread(write_atomic)
 
     # print(f"Saved simulation to {output_file}")
 
@@ -50,7 +80,7 @@ async def run_simulation(output_dir: str, sim_tag: str) -> None:
 
     # Run up to N simulations concurrently
     await asyncio.gather(*tasks)
-    await asyncio.sleep(25)
+    await asyncio.sleep(2)
 
     print(f"Simulation completed. Results saved in {output_sim_dir}")
     return

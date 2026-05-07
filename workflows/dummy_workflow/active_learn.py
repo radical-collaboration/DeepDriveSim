@@ -67,7 +67,7 @@ def move_labeled_to_train_al(
 
     Args:
         train_al_dir: directory to store labeled data
-        sample_indices: indices of the newly labeled samples in the original 
+        sample_indices: indices of the newly labeled samples in the original
         UNLABELED_DATA snapshot
         unlabeled_data_snapshot: the UNLABELED_DATA list at the start of iteration
         labels_snapshot: dictionary of labels for the newly labeled samples

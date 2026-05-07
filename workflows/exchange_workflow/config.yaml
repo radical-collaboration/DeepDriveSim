@@ -1,30 +1,35 @@
-# Exchange workflow config
+# =============================================================================
+# Exchange Workflow — workflow-specific parameters
+# =============================================================================
 
-# ── Execution ─────────────────────────────────────────────────────────────────
-engine:          dragon # concurrent (asyncio) or dragon
+debug: true
+engine:      dragon       # concurrent | dragon
+num_replicas: 1
+telemetry:     true
+telemetry_dir: "telemetry-output"
 
-# Number of MD simulations to launch initially
-num_init_sims: 4
+# ── MD / Exchange simulation parameters ──────────────────────────────────────
+num_init_sims:        4      # number of concurrent MD replicas to launch
+num_steps:            1000   # MD steps per simulation run
+target_temp:          310.0  # target temperature (K)
+exchange_step_interval: 100  # trigger exchange every N steps across all replicas
 
-# Total MD steps per simulation run
-num_steps: 500
+# experiment_dir: "exchange_output"   # leave unset to skip experiment dir creation
 
-# Target temperature (K); simulation records when this is first reached
-target_temp: 300.0
-
-# Exchange fires once every exchange_step_interval steps (when all sims hit threshold)
-exchange_step_interval: 100
-
-# Output directory for experiment results
-experiment_dir: ./experiment_output
-
+# ── Per-task resource descriptions ───────────────────────────────────────────
+# cpu_reqs: cores per rank
+# gpu_reqs: GPUs per rank (0 = CPU only)
+# pre_exec:  list of shell commands run before the task (module loads, env vars, etc.)
 tasks:
   MD:
     cpu_reqs: 1
-    gpu_reqs: 0
+    gpu_reqs: 1
     pre_exec: []
-
   EXCHANGE:
     cpu_reqs: 1
     gpu_reqs: 0
     pre_exec: []
+
+# Python executable for all tasks — set to the python binary of the target venv,
+# or leave empty to inherit the current interpreter.
+executable: "${VE_HOME}/exchange/bin/python"

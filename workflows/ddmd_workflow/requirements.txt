@@ -5,3 +5,9 @@ pydantic-settings
 MDAnalysis
 numpy
 pathos
+pandas
+matplotlib
+scikit-learn
+tensorflow[and-cuda]==2.16.1
+nvidia-cudnn-cu12==8.9.7.29
+keras==3.0.5

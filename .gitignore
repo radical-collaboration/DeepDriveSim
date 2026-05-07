@@ -32,7 +32,9 @@ site/
 log
 *.log
 workflows/*/slurm*
+workflows/*/*telemetry*
 workflows/*/*experiment*
+workflows/plots
 
 # OS
 .DS_Store

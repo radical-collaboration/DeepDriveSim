@@ -22,6 +22,7 @@ async def load_model(model_filename):
             async with aiofiles.open(model_filename, "rb") as f:
                 data = await f.read()
         except Exception:
+
             def _read_file(path):
                 with open(path, "rb") as f:
                     return f.read()

@@ -4,7 +4,7 @@ queue: GPU
 schema_: local
 project: cv19-a01
 walltime_min: 290
-max_iteration: 5
+max_iteration: 3
 cpus_per_node: 40
 gpus_per_node: 8
 hardware_threads_per_cpu: 1
@@ -17,10 +17,10 @@ molecular_dynamics_stage:
     #- unset PYTHONPATH
     - module load anaconda3
     - source activate base
-    - conda activate ${CONDA_ENV}/conda-openmm
-    executable: ${CONDA_ENV}/conda-openmm/bin/python
+    - conda activate ${CONDA_ENV}/ddmd-openmm
+    executable: ${CONDA_ENV}/ddmd-openmm/bin/python
     arguments:
-    - ${WORK_DIR}/sim/openmm/run_openmm.py
+    - ${MD_HOME}/sim/openmm/run_openmm.py
     cpu_reqs:
         processes: 1
         process_type: null
@@ -39,7 +39,7 @@ molecular_dynamics_stage:
         output_path: set_by_deepdrivemd
         node_local_path: set_by_deepdrivemd
         pdb_file: set_by_deepdrivemd
-        initial_pdb_dir: ${WORK_DIR}/data/bba
+        initial_pdb_dir: ${MD_HOME}/data/bba
         solvent_type: implicit
         top_suffix: null
         simulation_length_ns: 100.0
@@ -48,7 +48,7 @@ molecular_dynamics_stage:
         temperature_kelvin: 310.0
         heat_bath_friction_coef: 1.0
         wrap: false
-        reference_pdb_file: ${WORK_DIR}/data/bba/1FME-folded.pdb
+        reference_pdb_file: ${MD_HOME}/data/bba/1FME-folded.pdb
         openmm_selection:
         - CA
         mda_selection: protein and name CA
@@ -89,20 +89,19 @@ machine_learning_stage:
     - export IBM_POWERAI_LICENSE_ACCEPT=yes
     - unset PYTHONPATH
 #    - module load gcc
-    - module load cuda/12.6.1
-    - module load cudnn    #/8.0.4   # <-- consider switching to cudnn 8 if available
-    - export XLA_FLAGS=--xla_gpu_strict_conv_algorithm_picker=false
+    - export CUDA_HOME=/opt/packages/cuda/v12.6.1
+    - export LD_LIBRARY_PATH=/opt/packages/cuda/v12.6.1/lib64:$LD_LIBRARY_PATH
     - export TF_ENABLE_XLA=0
     - export TF_FORCE_GPU_ALLOW_GROWTH=true
+    - export XLA_FLAGS="--xla_gpu_strict_conv_algorithm_picker=false --xla_gpu_cuda_data_dir=/opt/packages/cuda/v12.6.1"
     - module load anaconda3
-    - source activate base
-    - conda activate ${CONDA_ENV}/conda-keras
+    - source /opt/packages/anaconda3-2024.10-1/etc/profile.d/conda.sh
+    - conda activate ${CONDA_ENV}/ddmd-keras
     - unset CUDA_VISIBLE_DEVICES
     - export OMP_NUM_THREADS=4
-    - export LD_LIBRARY_PATH=$(CUDA_HOME)/lib64:$(LD_LIBRARY_PATH)
-    executable: ${CONDA_ENV}/conda-keras/bin/python
+    executable: ${CONDA_ENV}/ddmd-keras/bin/python
     arguments:
-    - ${WORK_DIR}/models/keras_cvae/train.py
+    - ${MD_HOME}/models/keras_cvae/train.py
     cpu_reqs:
         processes: 1
         process_type: MPI
@@ -174,10 +173,10 @@ model_selection_stage:
     #- unset PYTHONPATH
     - module load anaconda3
     - source activate base
-    - conda activate ${CONDA_ENV}/conda-keras
-    executable: ${CONDA_ENV}/conda-keras/bin/python
+    - conda activate ${CONDA_ENV}/ddmd-keras
+    executable: ${CONDA_ENV}/ddmd-keras/bin/python
     arguments:
-    - ${WORK_DIR}/selection/latest/select_model.py
+    - ${MD_HOME}/selection/latest/select_model.py
     cpu_reqs:
         processes: 1
         process_type: null
@@ -199,31 +198,31 @@ model_selection_stage:
         checkpoint_suffix: .h5
 agent_stage:
     pre_exec:
-    #- . /etc/profile.d/conda.sh
-    #- export IBM_POWERAI_LICENSE_ACCEPT=yes
-    #- unset PYTHONPATH
-    - module load cuda
-    - module load gcc
-    - module load anaconda3
-    - source activate base
-    - conda activate ${CONDA_ENV}/conda-keras
+    - unset CUDA_VISIBLE_DEVICES
     - export LANG=en_US.utf-8
     - export LC_ALL=en_US.utf-8
-    - unset CUDA_VISIBLE_DEVICES
+    - export HDF5_USE_FILE_LOCKING=FALSE
+    - export TF_ENABLE_XLA=0
+    - export TF_FORCE_GPU_ALLOW_GROWTH=true
+    - module load anaconda3
+    - source /opt/packages/anaconda3-2024.10-1/etc/profile.d/conda.sh
+    - conda activate ${CONDA_ENV}/ddmd-keras
+    - export CUDA_HOME=/opt/packages/cuda/v12.6.1
     - export OMP_NUM_THREADS=4
-    executable: ${CONDA_ENV}/conda-keras/bin/python
+    - export LD_LIBRARY_PATH=/opt/packages/cuda/v12.6.1/lib64:$LD_LIBRARY_PATH
+    executable: ${CONDA_ENV}/ddmd-keras/bin/python
     arguments:
-    - ${WORK_DIR}/agents/lof/lof.py
+    - ${MD_HOME}/agents/lof/lof.py
     cpu_reqs:
         processes: 1
         process_type: null
         threads_per_process: 8
         thread_type: OpenMP
     gpu_reqs:
-        processes: 1
+        processes: 0
         process_type: null
-        threads_per_process: 1
-        thread_type: CUDA
+        threads_per_process: 0
+        thread_type: null
     task_config:
         experiment_directory: set_by_deepdrivemd
         stage_idx: 0
