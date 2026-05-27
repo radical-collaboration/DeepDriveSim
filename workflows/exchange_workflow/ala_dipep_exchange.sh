@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=16
-#SBATCH --time=00:10:00
+#SBATCH --time=01:00:00
 #SBATCH --job-name=dummy_cpu
 #SBATCH --mail-user=rks174@scarletmail.rutgers.edu
 #SBATCH --mail-type=ALL
@@ -20,7 +20,7 @@ source /u/${USER}/ve/exchange/bin/activate
 dragon-config add --ofi-runtime-lib=/opt/cray/libfabric/1.22.0/lib64
 
 if [ "${SLURM_NNODES}" -gt 1 ]; then
-    dragon -m run_workflow.py
+    dragon -m run_workflow.py --config_file ala_dipep_config.yaml 
 else
-    dragon -s run_workflow.py
+    dragon -s run_workflow.py --config_file ala_dipep_config.yaml
 fi

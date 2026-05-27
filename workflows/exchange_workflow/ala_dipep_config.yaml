@@ -1,0 +1,57 @@
+# =============================================================================
+# Exchange Workflow — workflow-specific parameters
+# =============================================================================
+
+debug: true
+engine:      dragon       # concurrent | dragon
+num_replicas: 1
+telemetry:     true
+telemetry_dir: "ala_dipep_output"
+
+# ── MD / Exchange simulation parameters ──────────────────────────────────────
+
+#----Paths----------------
+input: /scratch/bblj/rrishabh/DeepDriveSim/workflows/exchange_workflow/input
+work_dir: /scratch/bblj/rrishabh/DeepDriveSim/workflows/exchange_workflow/output
+top_file: ala_dipep.top 
+
+gro_files:
+  - md_temp_1.gro
+  - md_temp_2.gro
+  - md_temp_3.gro
+  - md_temp_4.gro
+
+temperatures:
+  - 300
+  - 309
+  - 318
+  - 328
+
+#-----Simulation parameters----------------------
+num_init_sims:     4
+max_equil_steps:   1000000
+production_steps:  2000
+exchange_step_interval: 2000
+max_exchange_cycles:   20
+
+# experiment_dir: "exchange_output"   # leave unset to skip experiment dir creation
+
+# ── Per-task resource descriptions ───────────────────────────────────────────
+# cpu_reqs: cores per rank
+# gpu_reqs: GPUs per rank (0 = CPU only)
+# pre_exec:  list of shell commands run before the task (module loads, env vars, etc.)
+tasks:
+  MD:
+    cpu_reqs: 4
+    gpu_reqs: 1
+    pre_exec: []
+  EXCHANGE:
+    cpu_reqs: 4
+    gpu_reqs: 0
+    pre_exec: []
+
+# Python executable for all tasks — set to the python binary of the target venv,
+# or leave empty to inherit the current interpreter.
+executable: "${VE_HOME}/exchange/bin/python"
+
+

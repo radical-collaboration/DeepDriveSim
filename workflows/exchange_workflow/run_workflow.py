@@ -5,7 +5,8 @@ import asyncio
 from radical.asyncflow import WorkflowEngine
 
 from ddsim.util import find_gpus, load_config, make_policies
-from workflows.exchange_workflow.exchange_workflow import ExchangeWorkflow
+#from workflows.exchange_workflow.exchange_workflow import ExchangeWorkflow
+from workflows.exchange_workflow.new_exchange_workflow import ExchangeWorkflow
 
 
 async def run_exchange(config_file: str) -> None:

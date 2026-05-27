@@ -1,0 +1,10 @@
+{
+    "sim_idx": "MD_2",
+    "rid": 2,
+    "cycle": 4,
+    "steps_completed": 2000,
+    "final_temp": 316.18859056969404,
+    "potential_energy": -20641.498902274183,
+    "target_temp": 318,
+    "checkpoint_path": "/scratch/bblj/rrishabh/DeepDriveSim/workflows/exchange_workflow/output/checkpoint_0002.0004"
+}
