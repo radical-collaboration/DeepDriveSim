@@ -40,6 +40,7 @@ from openmm.app import (
     StateDataReporter,
 )
 from openmm.unit import kelvin, kilojoules_per_mole, nanometer, picosecond, picoseconds
+from openmm import Platform
 
 KB_KJ = 0.008_314_462_175
 GROMACS_TOP_INCLUDE = (
@@ -68,12 +69,12 @@ def _instant_temp(simulation, n_dof: int) -> float:
     return (2.0 * ke) / (n_dof * KB_KJ)
 
 
-def _checkpoint_path(work_dir: Path, rid: int, cycle: int) -> Path:
-    return work_dir / ("checkpoint_%04d.%04d" % (rid, cycle))
+def _checkpoint_path(work_dir: Path, rid: int) -> Path:
+    return work_dir / ("checkpoint_%04d.chk" % rid)
 
 
-def _state_json_path(work_dir: Path, rid: int, cycle: int) -> Path:
-    return work_dir / ("state_%04d.%04d.json" % (rid, cycle))
+def _state_json_path(work_dir: Path, rid: int) -> Path:
+    return work_dir / ("state_%04d.jsonl" % rid)
 
 
 def _build_simulation(top_file, gro_file, target_temp, top_include_dir):
@@ -89,21 +90,42 @@ def _build_simulation(top_file, gro_file, target_temp, top_include_dir):
         constraints=HBonds,
     )
     integrator = LangevinMiddleIntegrator(
-        target_temp * kelvin, 1 / picosecond, 0.002 * picoseconds
+        target_temp * kelvin, 0.5 / picosecond, 0.002 * picoseconds
     )
-    sim = Simulation(top.topology, system, integrator)
+    platform = Platform.getPlatformByName("OpenCL") 
+    sim = Simulation(top.topology, system, integrator,platform,{"Precision": "mixed"})
     return sim, system, gro
 
 
-def _attach_reporters(simulation, work_dir, rid, cycle, dcd_interval, stat_interval):
-    dcd_path  = work_dir / ("output_%04d.%04d.dcd" % (rid, cycle))
-    stat_path = work_dir / ("state_%04d.%04d.txt"  % (rid, cycle))
+def _attach_reporters(simulation, work_dir, rid, dcd_interval, stat_interval, append=False):
+    """
+    Attach DCD and state reporters to the simulation.
+    
+    Parameters
+    ----------
+    append : bool
+        If False (first cycle): create files fresh (overwrite if exist)
+        If True (subsequent cycles): append to existing files
+        
+    Note: Call this function once before the production loop with append=False.
+    The reporters remain attached across all cycles.
+    """
+    work_dir = Path(work_dir)
+    try:
+        work_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"[Error] Failed to create work_dir {work_dir}: {e}", flush=True)
+        raise
+    
+    dcd_path  = work_dir / ("output_%04d.dcd" % rid)
+    stat_path = work_dir / ("state_%04d.txt" % rid)
+    
     simulation.reporters.clear()
-    simulation.reporters.append(DCDReporter(str(dcd_path), dcd_interval))
+    simulation.reporters.append(DCDReporter(str(dcd_path), dcd_interval, append=append))
     simulation.reporters.append(
         StateDataReporter(
             str(stat_path), stat_interval,
-            step=True, potentialEnergy=True, temperature=True,
+            step=True, potentialEnergy=True, temperature=True, append=append,
         )
     )
     return stat_path
@@ -118,6 +140,7 @@ async def run_simulation(
     top_file: Path,
     work_dir: Path,
     target_temp: float,
+    start_cycle: int,
     max_exchange_cycles: int,
     ready_events: List[_FileSignal],
     resume_events: List[_FileSignal],
@@ -156,53 +179,62 @@ async def run_simulation(
     n_dof = _get_dof(system)
 
     # ── Cycle 0: initialise + equilibrate ─────────────────────────────────────
-    simulation.context.setPositions(gro.positions)
-    simulation.minimizeEnergy()
-    # ONLY call to setVelocitiesToTemperature in the entire workflow.
-    simulation.context.setVelocitiesToTemperature(target_temp * kelvin)
-    print(f"[sim {rid}] initialised from {Path(gro_file).name}", flush=True)
+    if start_cycle == 0:
+        simulation.context.setPositions(gro.positions)
+        simulation.minimizeEnergy()
+        # ONLY call to setVelocitiesToTemperature in the entire workflow.
+        simulation.context.setVelocitiesToTemperature(target_temp * kelvin)
+        print(f"[sim {rid}] initialised from {Path(gro_file).name}", flush=True)
 
-    _attach_reporters(
-        simulation, work_dir, rid, 0,
-        dcd_report_interval, stat_report_interval
-    )
+       # Attach reporters ONCE with append=False — they stay attached through all cycles
+        _attach_reporters(
+         simulation, work_dir, rid,
+         dcd_report_interval, stat_report_interval, append=False
+         )
 
-    # Equilibration loop — run in executor so event loop stays live
-    temp_history = deque(maxlen=window)
-    total_equil  = 0
+       # Equilibration loop — run in executor so event loop stays live
+        temp_history = deque(maxlen=window)
+        total_equil  = 0
 
-    while total_equil < max_equil_steps:
-        await loop.run_in_executor(None, simulation.step, check_interval)
-        total_equil += check_interval
+        while total_equil < max_equil_steps:
+           await loop.run_in_executor(None, simulation.step, check_interval)
+           total_equil += check_interval
 
-        instant_t = _instant_temp(simulation, n_dof)
-        temp_history.append(instant_t)
+           instant_t = _instant_temp(simulation, n_dof)
+           temp_history.append(instant_t)
 
-        if len(temp_history) < window:
-            continue
+           if len(temp_history) < window:
+              continue
 
-        rolling_mean = sum(temp_history) / window
-        if abs(rolling_mean - target_temp) <= temp_tolerance:
-            print(
-                f"[sim {rid}] equilibrated at step {total_equil} "
-                f"(rolling mean {rolling_mean:.1f} K)",
-                flush=True,
-            )
-            break
+           rolling_mean = sum(temp_history) / window
+           if abs(rolling_mean - target_temp) <= temp_tolerance:
+              print(
+                 f"[sim {rid}] equilibrated at step {total_equil} "
+                 f"(rolling mean {rolling_mean:.1f} K)",
+                 flush=True,
+                )
+              break
+        else:
+            print(f"[sim {rid}] WARNING: equilibration not achieved", flush=True)
     else:
-        print(f"[sim {rid}] WARNING: equilibration not achieved", flush=True)
-
+        # Restarting: Load checkpoint and attach reporters with append=True
+        ckpt_path = _checkpoint_path(work_dir,rid)
+        print(f"[sim {rid}] restarting from checkpoint {ckpt_path}", flush=True)
+        simulation.loadCheckpoint(str(ckpt_path))
+        
+        _attach_reporters(
+            simulation, work_dir, rid,
+            dcd_report_interval, stat_report_interval, append=True 
+        )
+        
     # ── Production loop across all exchange cycles ─────────────────────────────
     pot     = 0.0
     final_T = target_temp
 
-    for cycle in range(max_exchange_cycles):
+    for cycle in range(start_cycle,max_exchange_cycles):
 
-        # Fresh reporters for this cycle's output files
-        _attach_reporters(
-            simulation, work_dir, rid, cycle,
-            dcd_report_interval, stat_report_interval
-        )
+        # Reporters remain attached from before — no need to re-attach.
+        # DCDReporter naturally appends to the open file.
 
         # Run production window in executor — keeps event loop responsive
         # so resume_events.wait() can resolve while other replicas are stepping
@@ -217,10 +249,11 @@ async def run_simulation(
         final_T = _instant_temp(simulation, n_dof)
 
         # Save checkpoint and JSON sidecar BEFORE signalling exchange
-        ckpt_path = _checkpoint_path(work_dir, rid, cycle)
+        ckpt_path = _checkpoint_path(work_dir, rid)
         simulation.saveCheckpoint(str(ckpt_path))
 
-        with open(_state_json_path(work_dir, rid, cycle), "w") as fh:
+        # Append one JSON Lines record per cycle
+        with open(_state_json_path(work_dir, rid), "a") as fh:
             json.dump({
                 "sim_idx"         : sim_idx,
                 "rid"             : rid,
@@ -230,7 +263,8 @@ async def run_simulation(
                 "potential_energy": pot,
                 "target_temp"     : target_temp,
                 "checkpoint_path" : str(ckpt_path),
-            }, fh, indent=4)
+            }, fh)
+            fh.write("\n")
 
         print(
             f"[sim {rid}] cycle {cycle} done — "

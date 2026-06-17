@@ -1,12 +1,13 @@
 #!/bin/sh -l
 
-#SBATCH -A bblj-delta-cpu
-#SBATCH --partition=cpu
+#SBATCH -A bblj-delta-gpu
+#SBATCH --partition=gpuA40x4
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
-#SBATCH --time=01:00:00
-#SBATCH --job-name=dummy_cpu
+#SBATCH --cpus-per-task=64
+#SBATCH --gpus-per-node=4
+#SBATCH --time=24:00:00
+#SBATCH --job-name=ala_dipep_exchng
 #SBATCH --mail-user=rks174@scarletmail.rutgers.edu
 #SBATCH --mail-type=ALL
 

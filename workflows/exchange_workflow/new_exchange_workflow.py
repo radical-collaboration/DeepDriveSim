@@ -103,6 +103,7 @@ class ExchangeWorkflow(DDSimManager):
         )
 
         # ── Parameters ─────────────────────────────────────────────────────────
+        self.start_cycle = self.config.get("start_cycle",0)
         self.max_equil_steps     = self.config.get("max_equil_steps",     1_000_000)
         self.production_steps    = self.config.get("production_steps",    2_000)
         self.max_exchange_cycles = self.config.get("max_exchange_cycles", 50)
@@ -141,6 +142,7 @@ class ExchangeWorkflow(DDSimManager):
         replica_temps  = self.replica_temps
         top_file       = self.top_file
         work_dir       = self.work_dir
+        start_cycle    = self.start_cycle
         max_equil      = self.max_equil_steps
         prod_steps     = self.production_steps
         max_cycles     = self.max_exchange_cycles
@@ -165,6 +167,7 @@ class ExchangeWorkflow(DDSimManager):
                 top_file            = top_file,
                 work_dir            = work_dir,
                 target_temp         = replica_temps[rid],
+                start_cycle         = start_cycle,
                 max_exchange_cycles = max_cycles,
                 ready_events        = ready_events,
                 resume_events       = resume_events,
@@ -192,7 +195,7 @@ class ExchangeWorkflow(DDSimManager):
         gro_ref = self.replica_gro[ex_list[0]]
         loop    = asyncio.get_event_loop()
 
-        for cycle in range(self.max_exchange_cycles):
+        for cycle in range(self.start_cycle,self.max_exchange_cycles):
             self.logger.info(
                 f"Cycle {cycle} — waiting for all replicas",
                 component="exchange",
@@ -205,21 +208,30 @@ class ExchangeWorkflow(DDSimManager):
                 f"Cycle {cycle} — all replicas ready, running swap",
                 component="exchange",
             )
-
+            
+            # ADD DEBUG: print before executor call
+            print(f"[DEBUG] Starting run_exchange for cycle {cycle}", flush=True)
+            
             # Push CPU-bound OpenMM work to a thread so the event loop
             # stays responsive (resume_events.wait() must remain awaitable)
-            await loop.run_in_executor(
-                None,
-                lambda c=cycle: run_exchange(
-                    ex_list  = ex_list,
-                    cycle    = c,
-                    work_dir = self.work_dir,
-                    top_file = self.top_file,
-                    gro_file = gro_ref,
-                    verbose  = self.debug,
+            try:
+                await loop.run_in_executor(
+                    None,
+                    lambda c=cycle: run_exchange(
+                        ex_list  = ex_list,
+                        cycle    = c,
+                        work_dir = self.work_dir,
+                        top_file = self.top_file,
+                        gro_file = gro_ref,
+                        verbose  = self.debug,
+                    )
                 )
-            )
-
+            except Exception as e:
+                print(f"[Error] run_exchange failed: {e}", flush=True)
+                raise
+            
+            # ADD DEBUG: print after executor call
+            print(f"[DEBUG] run_exchange completed for cycle {cycle}", flush=True)            
             # ── Clear ready_events BEFORE setting resume_events ────────────────
             # A fast replica could finish its next window and call
             # ready_events[rid].set() before we clear it here.

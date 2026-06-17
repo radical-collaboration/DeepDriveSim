@@ -20,19 +20,28 @@ gro_files:
   - md_temp_2.gro
   - md_temp_3.gro
   - md_temp_4.gro
+  - md_temp_5.gro
+  - md_temp_6.gro 
+  - md_temp_7.gro
+  - md_temp_8.gro
 
 temperatures:
   - 300
-  - 309
-  - 318
-  - 328
+  - 323
+  - 347
+  - 373
+  - 402
+  - 423
+  - 465
+  - 500
 
 #-----Simulation parameters----------------------
-num_init_sims:     4
-max_equil_steps:   1000000
-production_steps:  2000
-exchange_step_interval: 2000
-max_exchange_cycles:   20
+num_init_sims:     8
+start_cycle: 0
+max_equil_steps:   50000
+production_steps:  10000
+exchange_step_interval: 10000
+max_exchange_cycles:   500
 
 # experiment_dir: "exchange_output"   # leave unset to skip experiment dir creation
 
@@ -43,10 +52,10 @@ max_exchange_cycles:   20
 tasks:
   MD:
     cpu_reqs: 4
-    gpu_reqs: 1
+    gpu_reqs: 0
     pre_exec: []
   EXCHANGE:
-    cpu_reqs: 4
+    cpu_reqs: 2
     gpu_reqs: 0
     pre_exec: []
 

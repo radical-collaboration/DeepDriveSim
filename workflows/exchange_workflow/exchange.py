@@ -35,6 +35,7 @@ import json
 import random
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from openmm import Platform
 
 import numpy as np
 from openmm import LangevinMiddleIntegrator
@@ -56,12 +57,12 @@ GROMACS_TOP_INCLUDE = (
 
 # ── I/O helpers ───────────────────────────────────────────────────────────────
 
-def _checkpoint_path(work_dir: Path, rid: int, cycle: int) -> Path:
-    return work_dir / ("checkpoint_%04d.%04d" % (rid, cycle))
+def _checkpoint_path(work_dir: Path, rid: int) -> Path:
+    return work_dir / ("checkpoint_%04d.chk" % rid)
 
 
-def _state_json_path(work_dir: Path, rid: int, cycle: int) -> Path:
-    return work_dir / ("state_%04d.%04d.json" % (rid, cycle))
+def _state_json_path(work_dir: Path, rid: int) -> Path:
+    return work_dir / ("state_%04d.jsonl" % rid)
 
 
 def _load_replica_states(
@@ -75,13 +76,21 @@ def _load_replica_states(
     poten: Dict[int, float] = {}
     temp:  Dict[int, float] = {}
     for rid in ex_list:
-        path = _state_json_path(work_dir, rid, cycle)
+        path = _state_json_path(work_dir, rid)
         if not path.exists():
             raise FileNotFoundError(
                 f"State JSON not found for replica {rid} cycle {cycle}: {path}"
             )
+        # Read the last non-empty line -most recent cycle
         with open(path) as fh:
-            data = json.load(fh)
+            for line in fh:
+                line = line.strip()
+                if line:
+                    last_line = line
+        if last_line is None:
+            raise ValueError(f"Empty state file for replica {rid}: {path}")
+        
+        data = json.loads(last_line)
         poten[rid] = data["potential_energy"]
         temp[rid]  = data["target_temp"]
     return poten, temp
@@ -240,8 +249,9 @@ def _do_coordinate_swap(
         integrator = LangevinMiddleIntegrator(
             temp[rid] * kelvin, 1 / picosecond, 0.002 * picoseconds
         )
-        sim = Simulation(top.topology, system, integrator)
-        sim.loadCheckpoint(str(_checkpoint_path(work_dir, rid, cycle)))
+        platform = Platform.getPlatformByName("OpenCL")
+        sim = Simulation(top.topology, system, integrator,platform, {"Precision": "mixed"})
+        sim.loadCheckpoint(str(_checkpoint_path(work_dir, rid)))
         simulations[rid] = sim
         print(f"[exchange] loaded checkpoint replica {rid}", flush=True)
 
@@ -260,7 +270,7 @@ def _do_coordinate_swap(
     # Re-save ALL checkpoints (swapped and non-swapped)
     swapped = {r for pair in exchange_pairs for r in pair}
     for rid in ex_list:
-        simulations[rid].saveCheckpoint(str(_checkpoint_path(work_dir, rid, cycle)))
+        simulations[rid].saveCheckpoint(str(_checkpoint_path(work_dir, rid)))
         label = "swapped" if rid in swapped else "unchanged"
         print(f"[exchange] saved checkpoint replica {rid} ({label})", flush=True)
 
@@ -315,8 +325,9 @@ def run_exchange(
         "exchange_pairs": exchange_pairs,
         "n_swaps"       : len(exchange_pairs),
     }
-    log_path = work_dir / ("exchange_%04d.json" % cycle)
-    with open(log_path, "w") as fh:
-        json.dump(log, fh, indent=4)
+    log_path = work_dir / "exchange.json"
+    with open(log_path, "a") as fh:
+        json.dump(log, fh)
+        fh.write("\n")
     print(f"[exchange] log → {log_path}", flush=True)
     return log
