@@ -76,5 +76,9 @@ class ReplicaSignalSet:
     def __init__(self, work_dir: Path, num_replicas: int):
         work_dir = Path(work_dir)
         work_dir.mkdir(parents=True, exist_ok=True)
-        self.ready  = [_FileSignal(work_dir, "ready",  rid) for rid in range(num_replicas)]
-        self.resume = [_FileSignal(work_dir, "resume", rid) for rid in range(num_replicas)]
+        self.ready  = [
+            _FileSignal(work_dir, "ready",  rid) for rid in range(num_replicas)
+        ]
+        self.resume = [
+            _FileSignal(work_dir, "resume", rid) for rid in range(num_replicas)
+        ]

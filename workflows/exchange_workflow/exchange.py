@@ -34,16 +34,15 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-from openmm import Platform
+from typing import Optional
 
 import numpy as np
-from openmm import LangevinMiddleIntegrator
+from openmm import LangevinMiddleIntegrator, Platform
 from openmm.app import (
+    PME,
     GromacsGroFile,
     GromacsTopFile,
     HBonds,
-    PME,
     Simulation,
 )
 from openmm.unit import kelvin, nanometer, picosecond, picoseconds
@@ -58,23 +57,23 @@ GROMACS_TOP_INCLUDE = (
 # ── I/O helpers ───────────────────────────────────────────────────────────────
 
 def _checkpoint_path(work_dir: Path, rid: int) -> Path:
-    return work_dir / ("checkpoint_%04d.chk" % rid)
+    return work_dir / f"checkpoint_{rid:04d}.chk"
 
 
 def _state_json_path(work_dir: Path, rid: int) -> Path:
-    return work_dir / ("state_%04d.jsonl" % rid)
+    return work_dir / f"state_{rid:04d}.jsonl"
 
 
 def _load_replica_states(
-    ex_list: List[int], cycle: int, work_dir: Path
-) -> Tuple[Dict[int, float], Dict[int, float]]:
+    ex_list: list[int], cycle: int, work_dir: Path
+) -> tuple[dict[int, float], dict[int, float]]:
     """
     Read potential energies and thermostat temperatures from JSON sidecars
     written by simulation.py after each production window.
     Returns (poten, temp) dicts keyed by rid.
     """
-    poten: Dict[int, float] = {}
-    temp:  Dict[int, float] = {}
+    poten: dict[int, float] = {}
+    temp:  dict[int, float] = {}
     for rid in ex_list:
         path = _state_json_path(work_dir, rid)
         if not path.exists():
@@ -89,7 +88,7 @@ def _load_replica_states(
                     last_line = line
         if last_line is None:
             raise ValueError(f"Empty state file for replica {rid}: {path}")
-        
+
         data = json.loads(last_line)
         poten[rid] = data["potential_energy"]
         temp[rid]  = data["target_temp"]
@@ -104,22 +103,22 @@ def reduced_potential(temperature: float, potential: float) -> float:
 
 
 def build_swap_matrix(
-    ex_list: List[int],
-    poten: Dict[int, float],
-    temp:  Dict[int, float],
-) -> List[List[float]]:
-    """U[i][j] = reduced_potential(T_j, E_i)."""
+    ex_list: list[int],
+    poten: dict[int, float],
+    temp:  dict[int, float],
+) -> list[list[float]]:
+    """matrix[i][j] = reduced_potential(T_j, E_i)."""
     n = len(ex_list)
-    U = [[0.0] * n for _ in range(n)]
+    matrix = [[0.0] * n for _ in range(n)]
     for i, r_i in enumerate(ex_list):
         for j, r_j in enumerate(ex_list):
-            U[i][j] = reduced_potential(temp[r_j], poten[r_i])
-    return U
+            matrix[i][j] = reduced_potential(temp[r_j], poten[r_i])
+    return matrix
 
 
 # ── Pairwise-independence sampling ────────────────────────────────────────────
 
-def _weighted_choice(weights: List[float]) -> Optional[int]:
+def _weighted_choice(weights: list[float]) -> Optional[int]:
     total = sum(weights)
     if total <= 0:
         return None
@@ -133,9 +132,9 @@ def _weighted_choice(weights: List[float]) -> Optional[int]:
 
 def pairwise_independence_sampling(
     repl_i: int,
-    candidates: List[int],
-    U: List[List[float]],
-    ex_list: List[int],
+    candidates: list[int],
+    u_matrix: list[list[float]],
+    ex_list: list[int],
     verbose: bool = False,
 ) -> int:
     g2l = {r: k for k, r in enumerate(ex_list)}
@@ -148,8 +147,8 @@ def pairwise_independence_sampling(
     for jj, repl_j in enumerate(candidates):
         j_pos  = g2l[repl_j]
         du[jj] = (
-            U[i_pos][j_pos] + U[j_pos][i_pos]
-            - U[i_pos][i_pos] - U[j_pos][j_pos]
+            u_matrix[i_pos][j_pos] + u_matrix[j_pos][i_pos]
+            - u_matrix[i_pos][i_pos] - u_matrix[j_pos][j_pos]
         )
         if repl_j == repl_i:
             i_i = jj
@@ -177,24 +176,26 @@ def pairwise_independence_sampling(
 
 
 def attempt_exchange(
-    repl_i: int, ex_list: List[int], U: List[List[float]], verbose: bool = False
+    repl_i: int, ex_list: list[int], u_matrix: list[list[float]], verbose: bool = False
 ) -> int:
     """Only offer adjacent-temperature replicas as swap candidates."""
     pos = ex_list.index(repl_i)
     candidates = [ex_list[k] for k in range(len(ex_list)) if abs(k - pos) <= 1]
-    return pairwise_independence_sampling(repl_i, candidates, U, ex_list, verbose)
+    return pairwise_independence_sampling(
+        repl_i, candidates, u_matrix, ex_list, verbose
+    )
 
 
 def select_pairs(
-    ex_list: List[int], U: List[List[float]], verbose: bool = False
-) -> List[Tuple[int, int]]:
+    ex_list: list[int], u_matrix: list[list[float]], verbose: bool = False
+) -> list[tuple[int, int]]:
     """Greedy non-overlapping swap pair selection."""
-    exchange_pairs: List[Tuple[int, int]] = []
+    exchange_pairs: list[tuple[int, int]] = []
     occupied: set = set()
     for r_i in ex_list:
         if r_i in occupied:
             continue
-        r_j = attempt_exchange(r_i, ex_list, U, verbose=verbose)
+        r_j = attempt_exchange(r_i, ex_list, u_matrix, verbose=verbose)
         if r_i == r_j or r_j in occupied:
             continue
         pair = (min(r_i, r_j), max(r_i, r_j))
@@ -207,10 +208,10 @@ def select_pairs(
 # ── Coordinate swap via OpenMM ────────────────────────────────────────────────
 
 def _do_coordinate_swap(
-    exchange_pairs: List[Tuple[int, int]],
-    ex_list: List[int],
+    exchange_pairs: list[tuple[int, int]],
+    ex_list: list[int],
     cycle: int,
-    temp: Dict[int, float],
+    temp: dict[int, float],
     work_dir: Path,
     top_file: Path,
     gro_file: Path,
@@ -244,20 +245,26 @@ def _do_coordinate_swap(
         constraints=HBonds,
     )
 
-    simulations: Dict[int, Simulation] = {}
+    simulations: dict[int, Simulation] = {}
     for rid in ex_list:
         integrator = LangevinMiddleIntegrator(
             temp[rid] * kelvin, 1 / picosecond, 0.002 * picoseconds
         )
         platform = Platform.getPlatformByName("OpenCL")
-        sim = Simulation(top.topology, system, integrator,platform, {"Precision": "mixed"})
+        sim = Simulation(
+            top.topology, system, integrator, platform, {"Precision": "mixed"}
+        )
         sim.loadCheckpoint(str(_checkpoint_path(work_dir, rid)))
         simulations[rid] = sim
         print(f"[exchange] loaded checkpoint replica {rid}", flush=True)
 
     for r_i, r_j in exchange_pairs:
-        state_i = simulations[r_i].context.getState(getPositions=True, getVelocities=True)
-        state_j = simulations[r_j].context.getState(getPositions=True, getVelocities=True)
+        state_i = simulations[r_i].context.getState(
+            getPositions=True, getVelocities=True
+        )
+        state_j = simulations[r_j].context.getState(
+            getPositions=True, getVelocities=True
+        )
         # Swap coordinates only — velocities stay with their original replica
         simulations[r_i].context.setPositions(state_j.getPositions())
         simulations[r_j].context.setPositions(state_i.getPositions())
@@ -278,7 +285,7 @@ def _do_coordinate_swap(
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def run_exchange(
-    ex_list: List[int],
+    ex_list: list[int],
     cycle: int,
     work_dir: Path,
     top_file: Path,
@@ -299,8 +306,8 @@ def run_exchange(
     poten, temp = _load_replica_states(ex_list, cycle, work_dir)
     print(f"[exchange] cycle {cycle} | pot={poten} | T={temp}", flush=True)
 
-    U              = build_swap_matrix(ex_list, poten, temp)
-    exchange_pairs = select_pairs(ex_list, U, verbose=verbose)
+    swap_matrix    = build_swap_matrix(ex_list, poten, temp)
+    exchange_pairs = select_pairs(ex_list, swap_matrix, verbose=verbose)
     print(f"[exchange] selected pairs: {exchange_pairs}", flush=True)
 
     if exchange_pairs:

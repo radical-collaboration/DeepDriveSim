@@ -56,12 +56,12 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Dict, List
+
+from exchange import run_exchange
+from replica_signals import ReplicaSignalSet
+from simulation import run_simulation
 
 from ddsim.ddsim_manager import DDSimManager
-from simulation import run_simulation
-from exchange   import run_exchange
-from replica_signals import ReplicaSignalSet
 
 
 class ExchangeWorkflow(DDSimManager):
@@ -95,10 +95,10 @@ class ExchangeWorkflow(DDSimManager):
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
         gro_files         = self.config["gro_files"]
-        self.replica_gro  : Dict[int, Path]  = {
+        self.replica_gro  : dict[int, Path]  = {
             i: input_path / f for i, f in enumerate(gro_files)
         }
-        self.replica_temps: Dict[int, float] = dict(
+        self.replica_temps: dict[int, float] = dict(
             enumerate(self.config["temperatures"])
         )
 
@@ -113,7 +113,7 @@ class ExchangeWorkflow(DDSimManager):
         # resume_events[rid] — set by exchange loop to release replica
         num_replicas = len(gro_files)
         self.signals = ReplicaSignalSet(self.work_dir, num_replicas)
-        self.ready_events = self.signals.ready 
+        self.ready_events = self.signals.ready
         self.resume_events = self.signals.resume
         #self.ready_events  : List[asyncio.Event] = [
         #    asyncio.Event() for _ in range(num_replicas)
@@ -123,8 +123,8 @@ class ExchangeWorkflow(DDSimManager):
         #]
 
         # ── Internal state ──────────────────────────────────────────────────────
-        self.all_sims       : Dict[str, int]  = {}
-        self.sim_inputs     : Dict[str, dict] = {}
+        self.all_sims       : dict[str, int]  = {}
+        self.sim_inputs     : dict[str, dict] = {}
         self._exchange_task : asyncio.Task | None = None
 
         self.register_tasks()
@@ -208,10 +208,10 @@ class ExchangeWorkflow(DDSimManager):
                 f"Cycle {cycle} — all replicas ready, running swap",
                 component="exchange",
             )
-            
+
             # ADD DEBUG: print before executor call
             print(f"[DEBUG] Starting run_exchange for cycle {cycle}", flush=True)
-            
+
             # Push CPU-bound OpenMM work to a thread so the event loop
             # stays responsive (resume_events.wait() must remain awaitable)
             try:
@@ -229,9 +229,9 @@ class ExchangeWorkflow(DDSimManager):
             except Exception as e:
                 print(f"[Error] run_exchange failed: {e}", flush=True)
                 raise
-            
+
             # ADD DEBUG: print after executor call
-            print(f"[DEBUG] run_exchange completed for cycle {cycle}", flush=True)            
+            print(f"[DEBUG] run_exchange completed for cycle {cycle}", flush=True)
             # ── Clear ready_events BEFORE setting resume_events ────────────────
             # A fast replica could finish its next window and call
             # ready_events[rid].set() before we clear it here.
@@ -259,7 +259,8 @@ class ExchangeWorkflow(DDSimManager):
     # ──────────────────────────────────────────────────────────────────────────
 
     async def init_sim_queue(self):
-        """Queue ONE long-running MD task per replica (submitted once, never re-queued)."""
+        """Queue ONE long-running MD task per replica (submitted once, never re-queued).
+        """
         for rid in range(len(self.replica_gro)):
             n       = self.all_sims.get("MD", 0)
             sim_idx = f"MD_{n}"
@@ -272,7 +273,7 @@ class ExchangeWorkflow(DDSimManager):
                 component="queue",
             )
 
-    async def add_sims_to_queue(self, sim_ids: List[str]):
+    async def add_sims_to_queue(self, sim_ids: list[str]):
         """Re-queue sims cancelled to free resources (should not occur normally)."""
         for sim_idx in sim_ids:
             inputs  = self.sim_inputs.get(sim_idx, {})

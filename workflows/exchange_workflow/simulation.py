@@ -25,22 +25,19 @@ import asyncio
 import json
 from collections import deque
 from pathlib import Path
-from typing import List
 
-from replica_signals import _FileSignal
-
-from openmm import CMMotionRemover, LangevinMiddleIntegrator
+from openmm import CMMotionRemover, LangevinMiddleIntegrator, Platform
 from openmm.app import (
+    PME,
     DCDReporter,
     GromacsGroFile,
     GromacsTopFile,
     HBonds,
-    PME,
     Simulation,
     StateDataReporter,
 )
 from openmm.unit import kelvin, kilojoules_per_mole, nanometer, picosecond, picoseconds
-from openmm import Platform
+from replica_signals import _FileSignal
 
 KB_KJ = 0.008_314_462_175
 GROMACS_TOP_INCLUDE = (
@@ -70,11 +67,11 @@ def _instant_temp(simulation, n_dof: int) -> float:
 
 
 def _checkpoint_path(work_dir: Path, rid: int) -> Path:
-    return work_dir / ("checkpoint_%04d.chk" % rid)
+    return work_dir / f"checkpoint_{rid:04d}.chk"
 
 
 def _state_json_path(work_dir: Path, rid: int) -> Path:
-    return work_dir / ("state_%04d.jsonl" % rid)
+    return work_dir / f"state_{rid:04d}.jsonl"
 
 
 def _build_simulation(top_file, gro_file, target_temp, top_include_dir):
@@ -92,21 +89,23 @@ def _build_simulation(top_file, gro_file, target_temp, top_include_dir):
     integrator = LangevinMiddleIntegrator(
         target_temp * kelvin, 0.5 / picosecond, 0.002 * picoseconds
     )
-    platform = Platform.getPlatformByName("OpenCL") 
+    platform = Platform.getPlatformByName("OpenCL")
     sim = Simulation(top.topology, system, integrator,platform,{"Precision": "mixed"})
     return sim, system, gro
 
 
-def _attach_reporters(simulation, work_dir, rid, dcd_interval, stat_interval, append=False):
+def _attach_reporters(
+    simulation, work_dir, rid, dcd_interval, stat_interval, append=False
+):
     """
     Attach DCD and state reporters to the simulation.
-    
+
     Parameters
     ----------
     append : bool
         If False (first cycle): create files fresh (overwrite if exist)
         If True (subsequent cycles): append to existing files
-        
+
     Note: Call this function once before the production loop with append=False.
     The reporters remain attached across all cycles.
     """
@@ -116,10 +115,10 @@ def _attach_reporters(simulation, work_dir, rid, dcd_interval, stat_interval, ap
     except Exception as e:
         print(f"[Error] Failed to create work_dir {work_dir}: {e}", flush=True)
         raise
-    
-    dcd_path  = work_dir / ("output_%04d.dcd" % rid)
-    stat_path = work_dir / ("state_%04d.txt" % rid)
-    
+
+    dcd_path  = work_dir / f"output_{rid:04d}.dcd"
+    stat_path = work_dir / f"state_{rid:04d}.txt"
+
     simulation.reporters.clear()
     simulation.reporters.append(DCDReporter(str(dcd_path), dcd_interval, append=append))
     simulation.reporters.append(
@@ -142,8 +141,8 @@ async def run_simulation(
     target_temp: float,
     start_cycle: int,
     max_exchange_cycles: int,
-    ready_events: List[_FileSignal],
-    resume_events: List[_FileSignal],
+    ready_events: list[_FileSignal],
+    resume_events: list[_FileSignal],
     *,
     temp_tolerance: float    = 5.0,
     check_interval: int      = 500,
@@ -221,15 +220,15 @@ async def run_simulation(
         ckpt_path = _checkpoint_path(work_dir,rid)
         print(f"[sim {rid}] restarting from checkpoint {ckpt_path}", flush=True)
         simulation.loadCheckpoint(str(ckpt_path))
-        
+
         _attach_reporters(
             simulation, work_dir, rid,
-            dcd_report_interval, stat_report_interval, append=True 
+            dcd_report_interval, stat_report_interval, append=True
         )
-        
+
     # ── Production loop across all exchange cycles ─────────────────────────────
     pot     = 0.0
-    final_T = target_temp
+    final_temp = target_temp
 
     for cycle in range(start_cycle,max_exchange_cycles):
 
@@ -246,7 +245,7 @@ async def run_simulation(
             getEnergy=True, enforcePeriodicBox=True,
         )
         pot     = state.getPotentialEnergy().value_in_unit(kilojoules_per_mole)
-        final_T = _instant_temp(simulation, n_dof)
+        final_temp = _instant_temp(simulation, n_dof)
 
         # Save checkpoint and JSON sidecar BEFORE signalling exchange
         ckpt_path = _checkpoint_path(work_dir, rid)
@@ -259,7 +258,7 @@ async def run_simulation(
                 "rid"             : rid,
                 "cycle"           : cycle,
                 "steps_completed" : production_steps,
-                "final_temp"      : final_T,
+                "final_temp"      : final_temp,
                 "potential_energy": pot,
                 "target_temp"     : target_temp,
                 "checkpoint_path" : str(ckpt_path),
@@ -268,7 +267,7 @@ async def run_simulation(
 
         print(
             f"[sim {rid}] cycle {cycle} done — "
-            f"pot={pot:.2f} kJ/mol, T={final_T:.1f} K — signalling exchange",
+            f"pot={pot:.2f} kJ/mol, T={final_temp:.1f} K — signalling exchange",
             flush=True,
         )
 
@@ -297,6 +296,6 @@ async def run_simulation(
         "sim_idx"          : sim_idx,
         "rid"              : rid,
         "cycles_completed" : max_exchange_cycles,
-        "final_temp"       : final_T,
+        "final_temp"       : final_temp,
         "potential_energy" : pot,
     }

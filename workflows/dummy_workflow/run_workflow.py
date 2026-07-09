@@ -50,7 +50,8 @@ async def run_dummy(config_file: str) -> None:
     _base = replica_id.replace("_", "") if replica_id else f"dummy{os.getpid()}"
     # Resolve to an absolute path so Dragon subprocesses (simulation.py,
     # predict.py) find the same directory regardless of their working dir.
-    home_dir = Path(cfg.get("home_dir", Path.home() / "DDSim")).expanduser().resolve() / _base
+    _raw_home = Path(cfg.get("home_dir", Path.home() / "DDSim"))
+    home_dir = _raw_home.expanduser().resolve() / _base
 
     def _replica_name(i: int) -> str:
         if num_replicas == 1:
