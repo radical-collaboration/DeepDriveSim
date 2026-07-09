@@ -143,7 +143,15 @@ class MiniAppsWorkflow(DDSimManager):
         # subprocesses hang when running cupy GPU ops.  See module docstring.
         _gpu_id = self.policy.gpu_affinity[0] if self.policy else None
 
-        _env = {"HDF5_USE_FILE_LOCKING": "FALSE"}
+        # Pass LD_LIBRARY_PATH from the parent process so Dragon subprocess tasks
+        # can find libmpi.so.12 (Cray MPICH, needed by mpi4py).  Dragon's env dict
+        # may replace rather than merge the subprocess environment, so we must
+        # include any library paths the subprocess needs.
+        _env = {
+            "HDF5_USE_FILE_LOCKING": "FALSE",
+            "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH", ""),
+            "PATH": os.environ.get("PATH", ""),
+        }
         if _gpu_id is not None:
             _env["CUDA_VISIBLE_DEVICES"] = str(_gpu_id)
 

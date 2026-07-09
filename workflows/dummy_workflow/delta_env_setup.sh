@@ -7,9 +7,9 @@
 # Usage:
 #   bash delta_env_setup.sh [--env-dir DIR] [--ddsim-dir DIR]
 #
-# Defaults:
+# Defaults (set SCRATCH to your allocation scratch root, e.g. /scratch/bblj):
 #   ENV_DIR   = /u/$USER/ve/ddsim
-#   DDSIM_DIR = /scratch/bblj/$USER/DeepDriveSim
+#   DDSIM_DIR = $SCRATCH/$USER/DeepDriveSim
 # =============================================================================
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     set -euo pipefail
@@ -17,7 +17,13 @@ fi
 
 # ── Parse optional overrides ──────────────────────────────────────────────────
 ENV_DIR="${ENV_DIR:-/u/${USER}/ve/ddsim}"
-DDSIM_DIR="${DDSIM_DIR:-/scratch/bblj/${USER}/DeepDriveSim}"
+if [[ -z "${SCRATCH:-}" ]]; then
+    echo "ERROR: set the SCRATCH env var to your allocation scratch root, e.g.:"
+    echo "  export SCRATCH=/scratch/<allocation>"
+    echo "  bash delta_env_setup.sh"
+    exit 1
+fi
+DDSIM_DIR="${DDSIM_DIR:-${SCRATCH}/${USER}/DeepDriveSim}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -106,8 +112,9 @@ echo "── Step 4: DeepDriveSim [dragon] (editable) ──"
 
 # ── 5. radical.asyncflow ──────────────────────────────────────────────────────
 echo ""
-echo "── Step 5: radical.asyncflow ──"
-"${PIP}" install -q "radical.asyncflow>=0.3.0"
+echo "── Step 5: radical.asyncflow + rhapsody ──"
+"${PIP}" install --force-reinstall "radical.asyncflow>=0.3.0"
+"${PIP}" install --force-reinstall "rhapsody-py>=0.3.0"
 "${PIP}" install -q matplotlib
 
 # ── 6. Verify ─────────────────────────────────────────────────────────────────

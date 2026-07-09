@@ -4,7 +4,7 @@ queue: GPU
 schema_: local
 project: cv19-a01
 walltime_min: 290
-max_iteration: 3
+max_iteration: 1
 cpus_per_node: 40
 gpus_per_node: 8
 hardware_threads_per_cpu: 1
@@ -42,7 +42,7 @@ molecular_dynamics_stage:
         initial_pdb_dir: ${MD_HOME}/data/bba
         solvent_type: implicit
         top_suffix: null
-        simulation_length_ns: 100.0
+        simulation_length_ns: 10.0
         report_interval_ps: 1.0
         dt_ps: 0.002
         temperature_kelvin: 310.0

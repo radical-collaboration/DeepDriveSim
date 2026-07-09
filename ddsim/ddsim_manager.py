@@ -207,6 +207,7 @@ class DDSimManager:
         Permanently cancel sims whose prediction score is below threshold.
         Pre-adds to completed_sims so _on_sim_done skips re-queuing.
         """
+        to_await = []
         for sim_idx, pred in self.sim_predictions.items():
             if self.debug:
                 self.logger.info(
@@ -218,11 +219,21 @@ class DDSimManager:
             ):
                 self._perm_cancelled.add(sim_idx)
                 self.completed_sims.append(sim_idx)
-                self.registered_sims[sim_idx].cancel()
+                task = self.registered_sims[sim_idx]
+                task.cancel()
+                to_await.append(task)
                 self.logger.task_killed(
                     f"Sim {sim_idx} permanently killed (prediction score {pred})",
                     component=f"{self.name}-sim",
                 )
+
+        # Await all cancelled tasks so their done-callbacks (_on_sim_done pops
+        # from registered_sims) fire before the caller proceeds to
+        # finalize_results.  Without this yield, finalize_results sees
+        # registered_sims non-empty even though all sims are already counted
+        # in completed_sims, causing a spurious warning and a missed shutdown.
+        if to_await:
+            await asyncio.gather(*to_await, return_exceptions=True)
 
     # --------------------------------------------------------------------------
     async def start(self):
@@ -238,6 +249,7 @@ class DDSimManager:
             await workflow.init_sim_queue()
             submit_task = asyncio.create_task(workflow.submit_sims())
 
+            wm = None
             try:
                 while workflow.run_workflow:
                     if workflow.debug:
@@ -246,12 +258,13 @@ class DDSimManager:
                             f"{list(workflow.registered_sims.keys())}",
                             component=workflow.name,
                         )
-
                     if workflow.retrain_model:
-                        await workflow.monitor_training_data()
+                        wm = workflow.monitor_training_data()
+
                         if workflow.free_resources_for_train:
                             await workflow._free_resources_for_training()
-
+                    if wm:
+                        await wm
                         if workflow.debug:
                             workflow.logger.task_started(
                                 "Model Training", component=f"{workflow.name}-train"

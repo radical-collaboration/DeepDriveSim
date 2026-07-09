@@ -1,6 +1,6 @@
 #!/bin/sh -l
 
-#SBATCH -A ***-delta-gpu
+#SBATCH -A bblj-delta-gpu
 #SBATCH --partition=gpuA40x4
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -11,7 +11,7 @@
 #SBATCH --mail-user=mariya.goliyad@rutgers.edu
 #SBATCH --mail-type=ALL
 
-export DDSIM_DIR=/scratch/***/${USER}/DeepDriveSim
+export DDSIM_DIR=/scratch/bblj/${USER}/DeepDriveSim
 export VE_HOME=~/ve
 export WORK_DIR=${DDSIM_DIR}/workflows/miniapps_workflow
 
