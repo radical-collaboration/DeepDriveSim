@@ -36,9 +36,9 @@ class _FileSignal:
     """A single file-based signal for one replica, one direction."""
 
     def __init__(self, work_dir: Path, prefix: str, rid: int):
-        self._dir    = Path(work_dir)
+        self._dir = Path(work_dir)
         self._prefix = prefix
-        self._rid    = rid
+        self._rid = rid
 
     def _path(self, cycle: int) -> Path:
         return self._dir / f"{self._prefix}_{self._rid:04d}_{cycle:04d}.signal"
@@ -76,8 +76,8 @@ class ReplicaSignalSet:
     def __init__(self, work_dir: Path, num_replicas: int):
         work_dir = Path(work_dir)
         work_dir.mkdir(parents=True, exist_ok=True)
-        self.ready  = [
-            _FileSignal(work_dir, "ready",  rid) for rid in range(num_replicas)
+        self.ready = [
+            _FileSignal(work_dir, "ready", rid) for rid in range(num_replicas)
         ]
         self.resume = [
             _FileSignal(work_dir, "resume", rid) for rid in range(num_replicas)

@@ -49,12 +49,12 @@ from openmm.unit import kelvin, nanometer, picosecond, picoseconds
 
 KB_KJ = 0.008_314_462_175
 GROMACS_TOP_INCLUDE = (
-    "/sw/rh9.4/spack/v1.0.0/sw/linux-x86_64_v2/"
-    "gromacs-2025.2-64mhcw3/share/gromacs/top"
+    "/sw/rh9.4/spack/v1.0.0/sw/linux-x86_64_v2/gromacs-2025.2-64mhcw3/share/gromacs/top"
 )
 
 
 # ── I/O helpers ───────────────────────────────────────────────────────────────
+
 
 def _checkpoint_path(work_dir: Path, rid: int) -> Path:
     return work_dir / f"checkpoint_{rid:04d}.chk"
@@ -73,7 +73,7 @@ def _load_replica_states(
     Returns (poten, temp) dicts keyed by rid.
     """
     poten: dict[int, float] = {}
-    temp:  dict[int, float] = {}
+    temp: dict[int, float] = {}
     for rid in ex_list:
         path = _state_json_path(work_dir, rid)
         if not path.exists():
@@ -91,11 +91,12 @@ def _load_replica_states(
 
         data = json.loads(last_line)
         poten[rid] = data["potential_energy"]
-        temp[rid]  = data["target_temp"]
+        temp[rid] = data["target_temp"]
     return poten, temp
 
 
 # ── Reduced-potential matrix ──────────────────────────────────────────────────
+
 
 def reduced_potential(temperature: float, potential: float) -> float:
     beta = 1.0 / (KB_KJ * temperature) if temperature != 0 else 1.0 / KB_KJ
@@ -105,7 +106,7 @@ def reduced_potential(temperature: float, potential: float) -> float:
 def build_swap_matrix(
     ex_list: list[int],
     poten: dict[int, float],
-    temp:  dict[int, float],
+    temp: dict[int, float],
 ) -> list[list[float]]:
     """matrix[i][j] = reduced_potential(T_j, E_i)."""
     n = len(ex_list)
@@ -117,6 +118,7 @@ def build_swap_matrix(
 
 
 # ── Pairwise-independence sampling ────────────────────────────────────────────
+
 
 def _weighted_choice(weights: list[float]) -> Optional[int]:
     total = sum(weights)
@@ -138,30 +140,32 @@ def pairwise_independence_sampling(
     verbose: bool = False,
 ) -> int:
     g2l = {r: k for k, r in enumerate(ex_list)}
-    n   = len(candidates)
-    ps  = np.zeros(n)
-    du  = np.zeros(n)
+    n = len(candidates)
+    ps = np.zeros(n)
+    du = np.zeros(n)
     i_i = -1
     i_pos = g2l[repl_i]
 
     for jj, repl_j in enumerate(candidates):
-        j_pos  = g2l[repl_j]
+        j_pos = g2l[repl_j]
         du[jj] = (
-            u_matrix[i_pos][j_pos] + u_matrix[j_pos][i_pos]
-            - u_matrix[i_pos][i_pos] - u_matrix[j_pos][j_pos]
+            u_matrix[i_pos][j_pos]
+            + u_matrix[j_pos][i_pos]
+            - u_matrix[i_pos][i_pos]
+            - u_matrix[j_pos][j_pos]
         )
         if repl_j == repl_i:
             i_i = jj
 
-    eu  = np.exp(-du)
-    f   = 1.0 / max(float(n - 1), 1.0)
+    eu = np.exp(-du)
+    f = 1.0 / max(float(n - 1), 1.0)
     pii = 1.0
 
     for jj, repl_j in enumerate(candidates):
         if repl_j == repl_i:
             continue
         ps[jj] = f if eu[jj] > 1.0 else f * eu[jj]
-        pii   -= ps[jj]
+        pii -= ps[jj]
 
     if i_i >= 0:
         ps[i_i] = max(0.0, pii)
@@ -206,6 +210,7 @@ def select_pairs(
 
 
 # ── Coordinate swap via OpenMM ────────────────────────────────────────────────
+
 
 def _do_coordinate_swap(
     exchange_pairs: list[tuple[int, int]],
@@ -284,6 +289,7 @@ def _do_coordinate_swap(
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
+
 def run_exchange(
     ex_list: list[int],
     cycle: int,
@@ -306,31 +312,43 @@ def run_exchange(
     poten, temp = _load_replica_states(ex_list, cycle, work_dir)
     print(f"[exchange] cycle {cycle} | pot={poten} | T={temp}", flush=True)
 
-    swap_matrix    = build_swap_matrix(ex_list, poten, temp)
+    swap_matrix = build_swap_matrix(ex_list, poten, temp)
     exchange_pairs = select_pairs(ex_list, swap_matrix, verbose=verbose)
     print(f"[exchange] selected pairs: {exchange_pairs}", flush=True)
 
     if exchange_pairs:
         _do_coordinate_swap(
-            exchange_pairs, ex_list, cycle, temp,
-            work_dir, top_file, gro_file, top_include_dir,
+            exchange_pairs,
+            ex_list,
+            cycle,
+            temp,
+            work_dir,
+            top_file,
+            gro_file,
+            top_include_dir,
         )
     else:
         # No swaps accepted — still re-save all checkpoints so simulation.py
         # always finds checkpoint_{rid}.{cycle} after resume_event is set.
         print("[exchange] no swaps accepted — re-saving all checkpoints", flush=True)
         _do_coordinate_swap(
-            [], ex_list, cycle, temp,
-            work_dir, top_file, gro_file, top_include_dir,
+            [],
+            ex_list,
+            cycle,
+            temp,
+            work_dir,
+            top_file,
+            gro_file,
+            top_include_dir,
         )
 
     log = {
-        "cycle"         : cycle,
-        "ex_list"       : ex_list,
-        "potentials"    : {str(k): v for k, v in poten.items()},
-        "temperatures"  : {str(k): v for k, v in temp.items()},
+        "cycle": cycle,
+        "ex_list": ex_list,
+        "potentials": {str(k): v for k, v in poten.items()},
+        "temperatures": {str(k): v for k, v in temp.items()},
         "exchange_pairs": exchange_pairs,
-        "n_swaps"       : len(exchange_pairs),
+        "n_swaps": len(exchange_pairs),
     }
     log_path = work_dir / "exchange.json"
     with open(log_path, "a") as fh:

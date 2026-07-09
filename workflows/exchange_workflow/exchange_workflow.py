@@ -65,7 +65,6 @@ from ddsim.ddsim_manager import DDSimManager
 
 
 class ExchangeWorkflow(DDSimManager):
-
     def __init__(self, *args, **kwargs):
         super().__init__()
 
@@ -73,29 +72,29 @@ class ExchangeWorkflow(DDSimManager):
         if self.flow is None:
             raise ValueError("asyncflow engine is required")
 
-        self.config      = kwargs.get("config")
+        self.config = kwargs.get("config")
         self.workflow_id = "exchange_workflow"
 
-        self.task_types        = list(self.config["tasks"].keys())
+        self.task_types = list(self.config["tasks"].keys())
         self.task_descriptions = self._generate_task_description(self.config)
 
         # One long-running task per replica; no resource competition with exchange.
         self.sim_batch_size = float("inf")
-        self.max_sim_batch  = float("inf")
+        self.max_sim_batch = float("inf")
 
-        self.retrain_model             = False
-        self.call_post_process_sim     = False  # replicas never complete mid-run
+        self.retrain_model = False
+        self.call_post_process_sim = False  # replicas never complete mid-run
         self.call_evaluate_simulations = False
-        self.call_finalize_results     = True
+        self.call_finalize_results = True
 
         # ── Paths ──────────────────────────────────────────────────────────────
-        input_path    = Path(self.config["input"])
+        input_path = Path(self.config["input"])
         self.top_file = input_path / self.config.get("top_file", "ala_dipep.top")
         self.work_dir = Path(self.config["work_dir"])
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
-        gro_files         = self.config["gro_files"]
-        self.replica_gro  : dict[int, Path]  = {
+        gro_files = self.config["gro_files"]
+        self.replica_gro: dict[int, Path] = {
             i: input_path / f for i, f in enumerate(gro_files)
         }
         self.replica_temps: dict[int, float] = dict(
@@ -103,9 +102,9 @@ class ExchangeWorkflow(DDSimManager):
         )
 
         # ── Parameters ─────────────────────────────────────────────────────────
-        self.start_cycle = self.config.get("start_cycle",0)
-        self.max_equil_steps     = self.config.get("max_equil_steps",     1_000_000)
-        self.production_steps    = self.config.get("production_steps",    2_000)
+        self.start_cycle = self.config.get("start_cycle", 0)
+        self.max_equil_steps = self.config.get("max_equil_steps", 1_000_000)
+        self.production_steps = self.config.get("production_steps", 2_000)
         self.max_exchange_cycles = self.config.get("max_exchange_cycles", 50)
 
         # ── Synchronisation events (one per replica) ───────────────────────────
@@ -115,17 +114,17 @@ class ExchangeWorkflow(DDSimManager):
         self.signals = ReplicaSignalSet(self.work_dir, num_replicas)
         self.ready_events = self.signals.ready
         self.resume_events = self.signals.resume
-        #self.ready_events  : List[asyncio.Event] = [
+        # self.ready_events  : List[asyncio.Event] = [
         #    asyncio.Event() for _ in range(num_replicas)
-        #]
-        #self.resume_events : List[asyncio.Event] = [
+        # ]
+        # self.resume_events : List[asyncio.Event] = [
         #    asyncio.Event() for _ in range(num_replicas)
-        #]
+        # ]
 
         # ── Internal state ──────────────────────────────────────────────────────
-        self.all_sims       : dict[str, int]  = {}
-        self.sim_inputs     : dict[str, dict] = {}
-        self._exchange_task : asyncio.Task | None = None
+        self.all_sims: dict[str, int] = {}
+        self.sim_inputs: dict[str, dict] = {}
+        self._exchange_task: asyncio.Task | None = None
 
         self.register_tasks()
 
@@ -137,17 +136,17 @@ class ExchangeWorkflow(DDSimManager):
         """Register md_simulation as a @flow.function_task (tracked by DDSimManager).
         The exchange loop is a plain async method — see _run_exchange_loop."""
 
-        task_desc_md   = self.task_descriptions["MD"]
-        replica_gro    = self.replica_gro
-        replica_temps  = self.replica_temps
-        top_file       = self.top_file
-        work_dir       = self.work_dir
-        start_cycle    = self.start_cycle
-        max_equil      = self.max_equil_steps
-        prod_steps     = self.production_steps
-        max_cycles     = self.max_exchange_cycles
-        ready_events   = self.ready_events
-        resume_events  = self.resume_events
+        task_desc_md = self.task_descriptions["MD"]
+        replica_gro = self.replica_gro
+        replica_temps = self.replica_temps
+        top_file = self.top_file
+        work_dir = self.work_dir
+        start_cycle = self.start_cycle
+        max_equil = self.max_equil_steps
+        prod_steps = self.production_steps
+        max_cycles = self.max_exchange_cycles
+        ready_events = self.ready_events
+        resume_events = self.resume_events
 
         @self.flow.function_task
         async def md_simulation(task_description=task_desc_md, **kwargs):
@@ -157,22 +156,22 @@ class ExchangeWorkflow(DDSimManager):
             Only returns when max_exchange_cycles are complete.
             """
             sim_inputs = kwargs.get("sim_inputs", {})
-            sim_idx    = sim_inputs.get("sim_idx", "MD_0")
-            rid        = sim_inputs.get("rid", int(sim_idx.split("_")[-1]))
+            sim_idx = sim_inputs.get("sim_idx", "MD_0")
+            rid = sim_inputs.get("rid", int(sim_idx.split("_")[-1]))
 
             return await run_simulation(
-                rid                 = rid,
-                sim_idx             = sim_idx,
-                gro_file            = replica_gro[rid],
-                top_file            = top_file,
-                work_dir            = work_dir,
-                target_temp         = replica_temps[rid],
-                start_cycle         = start_cycle,
-                max_exchange_cycles = max_cycles,
-                ready_events        = ready_events,
-                resume_events       = resume_events,
-                max_equil_steps     = max_equil,
-                production_steps    = prod_steps,
+                rid=rid,
+                sim_idx=sim_idx,
+                gro_file=replica_gro[rid],
+                top_file=top_file,
+                work_dir=work_dir,
+                target_temp=replica_temps[rid],
+                start_cycle=start_cycle,
+                max_exchange_cycles=max_cycles,
+                ready_events=ready_events,
+                resume_events=resume_events,
+                max_equil_steps=max_equil,
+                production_steps=prod_steps,
             )
 
         self.simulation = md_simulation
@@ -193,9 +192,9 @@ class ExchangeWorkflow(DDSimManager):
         """
         ex_list = list(self.replica_temps.keys())
         gro_ref = self.replica_gro[ex_list[0]]
-        loop    = asyncio.get_event_loop()
+        loop = asyncio.get_event_loop()
 
-        for cycle in range(self.start_cycle,self.max_exchange_cycles):
+        for cycle in range(self.start_cycle, self.max_exchange_cycles):
             self.logger.info(
                 f"Cycle {cycle} — waiting for all replicas",
                 component="exchange",
@@ -218,13 +217,13 @@ class ExchangeWorkflow(DDSimManager):
                 await loop.run_in_executor(
                     None,
                     lambda c=cycle: run_exchange(
-                        ex_list  = ex_list,
-                        cycle    = c,
-                        work_dir = self.work_dir,
-                        top_file = self.top_file,
-                        gro_file = gro_ref,
-                        verbose  = self.debug,
-                    )
+                        ex_list=ex_list,
+                        cycle=c,
+                        work_dir=self.work_dir,
+                        top_file=self.top_file,
+                        gro_file=gro_ref,
+                        verbose=self.debug,
+                    ),
                 )
             except Exception as e:
                 print(f"[Error] run_exchange failed: {e}", flush=True)
@@ -259,13 +258,12 @@ class ExchangeWorkflow(DDSimManager):
     # ──────────────────────────────────────────────────────────────────────────
 
     async def init_sim_queue(self):
-        """Queue ONE long-running MD task per replica (submitted once, never re-queued).
-        """
+        """Submit one long-running MD task per replica; never re-queued."""
         for rid in range(len(self.replica_gro)):
-            n       = self.all_sims.get("MD", 0)
+            n = self.all_sims.get("MD", 0)
             sim_idx = f"MD_{n}"
             self.all_sims["MD"] = n + 1
-            inputs  = {"sim_idx": sim_idx, "rid": rid}
+            inputs = {"sim_idx": sim_idx, "rid": rid}
             await self.sim_task_queue.put(inputs)
             self.sim_inputs[sim_idx] = inputs
             self.logger.info(
@@ -276,9 +274,9 @@ class ExchangeWorkflow(DDSimManager):
     async def add_sims_to_queue(self, sim_ids: list[str]):
         """Re-queue sims cancelled to free resources (should not occur normally)."""
         for sim_idx in sim_ids:
-            inputs  = self.sim_inputs.get(sim_idx, {})
-            rid     = inputs.get("rid", int(sim_idx.split("_")[-1]))
-            n       = self.all_sims.get("MD", 0)
+            inputs = self.sim_inputs.get(sim_idx, {})
+            rid = inputs.get("rid", int(sim_idx.split("_")[-1]))
+            n = self.all_sims.get("MD", 0)
             new_idx = f"MD_{n}"
             self.all_sims["MD"] = n + 1
             new_inputs = {"sim_idx": new_idx, "rid": rid}
@@ -347,10 +345,7 @@ class ExchangeWorkflow(DDSimManager):
         Both conditions are required to avoid shutting down while the last
         replica is still writing its final checkpoint.
         """
-        exchange_done = (
-            self._exchange_task is not None
-            and self._exchange_task.done()
-        )
+        exchange_done = self._exchange_task is not None and self._exchange_task.done()
         replicas_done = len(self.registered_sims) == 0
 
         if exchange_done and replicas_done:
@@ -369,11 +364,11 @@ class ExchangeWorkflow(DDSimManager):
         for t in self.task_types:
             cfg = config["tasks"][t]
             task_description[t] = {
-                "ranks"         : 1,
+                "ranks": 1,
                 "cores_per_rank": cfg.get("cpu_reqs", 1),
-                "gpus_per_rank" : cfg.get("gpu_reqs", 0),
-                "pre_exec"      : cfg.get("pre_exec", []),
-                "shell"         : True,
+                "gpus_per_rank": cfg.get("gpu_reqs", 0),
+                "pre_exec": cfg.get("pre_exec", []),
+                "shell": True,
             }
         return task_description
 
