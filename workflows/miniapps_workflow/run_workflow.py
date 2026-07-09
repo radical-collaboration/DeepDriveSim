@@ -88,6 +88,11 @@ async def run_miniapps(config_file: str) -> None:
                 t.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
 
+    print()
+    print("=" * 60)
+    print("  MiniApps workflow complete — no errors.")
+    print("=" * 60)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

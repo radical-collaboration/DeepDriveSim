@@ -85,8 +85,16 @@ class DummyWorkflow(DDSimManager):
         self.sleep_time = float(cfg.get("sleep_time", 30))
 
         self.call_cancel_simulations = True
-        self.call_finalize_results = True
         self.call_evaluate_simulations = True
+        self.call_finalize_results = True
+        # call_post_process_sim controls whether _on_sim_done() fires
+        # post_process_sim(sim_idx) immediately after each sim completes.
+        # It is kept False here because evaluate_simulations() (predict.py)
+        # still needs the sim output files in the same iteration — enabling it
+        # would race with predict.py, deleting files it is trying to read.
+        # Set to True only if your workflow does NOT use evaluate_simulations,
+        # or if you move cleanup to finalize_results / close() instead.
+        self.call_post_process_sim = False
 
         self.iteration = 0
         self.retrain_model = self.training_epochs > 0
@@ -117,7 +125,6 @@ class DummyWorkflow(DDSimManager):
 
         self.register_tasks()
         self.sim_inputs = {}
-        self._generate_sim_inputs(self.sim_inputs_dir, num_inputs=self.num_inputs)
 
     # --------------------------------------------------------------------------
     async def _signal_ready(self) -> None:
@@ -240,6 +247,31 @@ class DummyWorkflow(DDSimManager):
 
         self.check_accuracy = check_accuracy
 
+        # ── Secondary parallel training tasks (train_models) ──────────────────
+        # DDSimManager runs everything in self.train_models concurrently with
+        # train_model() on every training tick:
+        #
+        #   await asyncio.gather(train_model(), *(t() for t in self.train_models))
+        #
+        # Use this list to attach auxiliary steps that should run alongside
+        # primary training — for example a separate validation pass, a data
+        # pre-processing job, or a secondary model on a different feature set.
+        # Each entry must be a zero-argument async callable.
+        #
+        # Example — register a standalone validation task and add it:
+        #
+        #   @self.flow.executable_task
+        #   async def validate(task_description=_task_desc, **kwargs):
+        #       args = (
+        #           f"--model_filename {self.model_filename} "
+        #           f"--val_dir {self.val_dir}"
+        #       )
+        #       return f"{self.executable} {self.src_dir}/validate.py {args}"
+        #
+        #   self.train_models.append(validate)
+        #
+        # Leave the list empty (the default) to skip secondary training entirely.
+
     # --------------------------------------------------------------------------
     def stop_simulation(self, *args, **kwargs) -> bool:
         """Return True if prediction < threshold (cancel simulation)."""
@@ -266,7 +298,10 @@ class DummyWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def init_sim_queue(self) -> None:
-        """Collect all simulation input files into task queue."""
+        """Generate sim inputs (in a thread) then queue them for submission."""
+        await asyncio.to_thread(
+            self._generate_sim_inputs, self.sim_inputs_dir, self.num_inputs
+        )
         filenames = await asyncio.to_thread(lambda: list(self.sim_inputs_dir.iterdir()))
         for sim_idx, filename in enumerate(filenames):
             if filename.is_file():
@@ -289,9 +324,18 @@ class DummyWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     async def check_train_status(self) -> bool:
         """
-        Return True when enough simulation outputs have
-        accumulated to start training.
+        Return True when training should begin.
+
+        Two paths:
+        - Normal: wait until at least `start_training_threshold` sim outputs
+          have accumulated (data-driven gate).
+        - Force: if `force_start_training` is True, bypass the data gate and
+          start training immediately regardless of how many outputs exist.
+          Useful when you want the first training round to start as soon as
+          any sim finishes, e.g. to warm-start the model early.
         """
+        if self.force_start_training:
+            return True
         outputs = list(self.sim_output_dir.iterdir())
         return len(outputs) >= self.start_training_threshold
 
@@ -415,17 +459,79 @@ class DummyWorkflow(DDSimManager):
             )
             await self._signal_ready()
 
+        # ── Inter-iteration queue management ─────────────────────────────────────
+        # This block runs after every training cycle but before the campaign
+        # decides whether to shut down.  Use it to reshape the pending work queue
+        # so the next simulation batch reflects the latest model knowledge.
+        #
+        # Two complementary operations are shown:
+        #   1. PRUNE  — drain the queue and drop inputs the model predicts are
+        #               unlikely to pass the scoring threshold (saves GPU time).
+        #   2. ENRICH — add new candidate inputs derived from training output
+        #               (active-learning or model-guided generation).
+        #
+        # Both are no-ops when predictions are unavailable or the queue is empty,
+        # so this block is safe to leave in place even in stub/test runs.
+
+        predictions = getattr(self, "sim_predictions", {})
+
+        # 1. PRUNE: remove low-confidence candidates from the pending queue.
+        #    Drain all items, keep only those whose prediction clears the
+        #    threshold (or those not yet scored — give them the benefit of doubt).
+        if predictions and not self.sim_task_queue.empty():
+            kept = []
+            while not self.sim_task_queue.empty():
+                item = self.sim_task_queue.get_nowait()
+                if item is None:
+                    # Sentinel — will be re-inserted after pruning.
+                    continue
+                sim_idx = item.get("sim_idx")
+                score = predictions.get(sim_idx)
+                if score is None or score >= self.prediction_threshold:
+                    kept.append(item)
+                else:
+                    self.logger.info(
+                        f"Pruning sim {sim_idx} (predicted score {score:.3f} "
+                        f"< threshold {self.prediction_threshold})",
+                        component=self.name,
+                    )
+            for item in kept:
+                await self.sim_task_queue.put(item)
+            # Restore the sentinel so the consumer knows the queue end.
+            await self.sim_task_queue.put(None)
+
+        # 2. ENRICH: inject new candidate inputs for the next iteration.
+        #    In a real campaign these would come from model-guided generation,
+        #    a screening library, or an external oracle.  Here we show the
+        #    pattern — replace `new_candidates` with your actual source.
+        #
+        #    new_candidates = generate_candidates(self.model_filename)
+        #    for candidate in new_candidates:
+        #        sim_idx = candidate["id"]
+        #        self.sim_inputs[sim_idx] = candidate["path"]
+        #        await self.sim_task_queue.put({"sim_idx": sim_idx})
+        #        self.num_inputs += 1   # extend the completion target accordingly
+        # ── End inter-iteration queue management ──────────────────────────────
+
         if n_done >= self.num_inputs:
+            # Defensive cleanup: any sims still registered here are perm-cancelled
+            # tasks whose done-callbacks haven't fired yet.  cancel_sims() now
+            # awaits cancelled tasks before returning, so this branch should not
+            # normally be reached.  If it is (e.g. a non-prediction cancel path
+            # left stragglers), cancel them and wait rather than just warning.
             if self.registered_sims:
-                self.logger.warning(
-                    f"All sim have completed BUT there are still registered sims"
-                    f" {self.registered_sims.keys()}",
-                    component=self.name,
+                straggler_ids = list(self.registered_sims.keys())
+                for sim_idx in straggler_ids:
+                    self._perm_cancelled.add(sim_idx)
+                    task = self.registered_sims[sim_idx]
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(
+                    *self.registered_sims.values(), return_exceptions=True
                 )
-            else:
-                self.shutting_down.set()
-                self.run_workflow = False
-                self.logger.info("All sim have completed...", component=self.name)
+            self.shutting_down.set()
+            self.run_workflow = False
+            self.logger.info("All sim have completed...", component=self.name)
         else:
             if self.debug:
                 self.logger.warning(

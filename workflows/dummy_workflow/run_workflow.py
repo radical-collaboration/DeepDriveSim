@@ -48,7 +48,9 @@ async def run_dummy(config_file: str) -> None:
     # Use campaign replica_id when available; fall back to PID for standalone runs.
     replica_id = cfg.get("replica_id", "")
     _base = replica_id.replace("_", "") if replica_id else f"dummy{os.getpid()}"
-    home_dir = Path(cfg.get("home_dir", Path.home() / "DDSim")).expanduser() / _base
+    # Resolve to an absolute path so Dragon subprocesses (simulation.py,
+    # predict.py) find the same directory regardless of their working dir.
+    home_dir = Path(cfg.get("home_dir", Path.home() / "DDSim")).expanduser().resolve() / _base
 
     def _replica_name(i: int) -> str:
         if num_replicas == 1:
@@ -95,6 +97,11 @@ async def run_dummy(config_file: str) -> None:
             for t in pending:
                 t.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
+
+    print()
+    print("=" * 60)
+    print("  Dummy workflow complete — no errors.")
+    print("=" * 60)
 
 
 if __name__ == "__main__":

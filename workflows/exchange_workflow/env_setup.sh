@@ -141,7 +141,11 @@ echo "── Step 8: Re-pinning critical versions ──"
     "protobuf>=3.20.3,<5.0.0dev" \
     "setuptools<71"
 
-# ── 9. Verify ─────────────────────────────────────────────────────────────────
+# ── 9. Install OpenMM ───────────────────────────────────────────────
+echo "  Installing OpenMM..."
+"${PIP}" install -q "openmm>=8.0"
+
+# ── 10. Verify ─────────────────────────────────────────────────────────────────
 echo ""
 echo "── Verifying installation ──"
 _check() {
