@@ -45,7 +45,7 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          paths: [src]
+          paths: ["."]
           options:
             docstring_style: google
             show_source: true
