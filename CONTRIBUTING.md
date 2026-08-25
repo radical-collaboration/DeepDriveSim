@@ -202,6 +202,7 @@ To create a custom workflow, extend `DDMD_manager`:
 ```python
 from ddmd import DDMD_manager
 
+
 class MyWorkflow(DDMD_manager):
     def __init__(self, asyncflow, **kwargs):
         super().__init__(asyncflow)
@@ -212,20 +213,15 @@ class MyWorkflow(DDMD_manager):
         pass
 
     # Implement required abstract methods
-    def stop_simulation(self, prediction):
-        ...
+    def stop_simulation(self, prediction): ...
 
-    async def init_sim_queue(self):
-        ...
+    async def init_sim_queue(self): ...
 
-    async def check_train_data(self):
-        ...
+    async def check_train_data(self): ...
 
-    async def train_model(self):
-        ...
+    async def train_model(self): ...
 
-    async def clean_sim_data(self, sim_ind):
-        ...
+    async def clean_sim_data(self, sim_ind): ...
 ```
 
 ## Questions?
