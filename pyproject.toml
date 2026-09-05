@@ -41,7 +41,10 @@ requires-python = ">=3.9"
 dependencies = ["rhapsody-py", "pyyaml", "radical.asyncflow>=0.3.0"]
 
 [tool.setuptools.packages.find]
-include = ["ddsim*", "workflows*"]
+# the distribution ships the ddsim library only; the workflows/ tree is
+# repo-level example content (cluster-specific configs and data), used
+# from a checkout
+include = ["ddsim*"]
 
 [project.urls]
 Homepage = "https://github.com/radical-collaboration/DeepDriveSim"
