@@ -114,7 +114,7 @@ class DDMdWrapperWorkflow(BaseWorkflow):
             asyncflow=self.asyncflow,
             config=replica_config_path,
             name=replica_id.replace("_", ""),
-            on_ready=lambda: self._signal_done(),   # ← CM hook
+            on_ready=lambda: self._signal_done(),  # ← CM hook
             policies=self.policies,
             engine_dragon=self.engine_dragon,
         )
