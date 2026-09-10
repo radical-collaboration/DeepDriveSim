@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=69.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "DDSim"
-version = "0.2.0"
+dynamic = ["version", "dependencies"]
 description = "Toolkit for Deep learning-driven Adaptive Simulations"
 license = {text = "MIT"}
 keywords = [
@@ -38,7 +38,9 @@ maintainers = [
 readme = "README.md"
 requires-python = ">=3.9"
 
-dependencies = ["rhapsody-py", "pyyaml", "radical.asyncflow>=0.3.0"]
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+dependencies = {file = "requirements.txt"}
 
 [tool.setuptools.packages.find]
 # the distribution ships the ddsim library only; the workflows/ tree is
