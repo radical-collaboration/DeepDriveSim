@@ -12,3 +12,4 @@ https://github.com/radical-collaboration/DeepDriveSim/issues/
   - conda recipe, ReadTheDocs configuration, ruff formatting fixes
 
   -------------------------------------------------------------
+  -------------------------------------------------------------
