@@ -12,7 +12,6 @@ from workflows.exchange_workflow.exchange_workflow import ExchangeWorkflow
 async def run_exchange(config_file: str) -> None:
     cfg = load_config(config_file)
     backend = os.environ.get("DDSIM_BACKEND", "dragon")
-    num_replicas = cfg.get("num_replicas", 1)
 
     # --- Build backend and asyncflow ---
     if backend == "dragon":
