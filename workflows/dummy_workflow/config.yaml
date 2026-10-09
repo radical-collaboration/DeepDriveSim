@@ -3,7 +3,7 @@
 # =============================================================================
 
 debug: false
-engine:      dragon       # concurrent | dragon
+# engine: dragon  # use DDSIM_BACKEND env var instead
 num_replicas: 2
 home_dir:      "Dummy"
 telemetry:     true
@@ -23,6 +23,6 @@ ddsim_data_ready:         2     # signal inference-ready after this many sims co
 
 # src_dir: ""   # leave empty to use the dummy_workflow/ directory (default)
 
-# Python executable for all tasks — set to the python binary of the target venv,
-# or leave empty to inherit the current interpreter.
-executable: "${VE_HOME}/ddsim/bin/python"
+# Python executable for all tasks — leave empty to inherit the activated venv's
+# interpreter (set by sourcing the venv in delta_cpu_sbatch.sh).
+executable: ""

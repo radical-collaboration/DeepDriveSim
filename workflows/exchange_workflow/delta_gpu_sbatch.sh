@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# MiniApps Workflow — SLURM batch script (Delta HPC / GPU)
+# Exchange Workflow — SLURM batch script (Delta HPC / GPU)
 #
 # Set before calling sbatch:
 #   export SBATCH_ACCOUNT=<project>-delta-gpu
@@ -19,13 +19,13 @@
 #SBATCH --cpus-per-task=64
 #SBATCH --gpus-per-node=4
 #SBATCH --time=00:30:00
-#SBATCH --job-name=miniapp_gpu
+#SBATCH --job-name=exchange_gpu
 #SBATCH --mail-user=<your e-mail>
 #SBATCH --mail-type=ALL
-#SBATCH --output=logs/miniapp_%j.out
-#SBATCH --error=logs/miniapp_%j.err
+#SBATCH --output=logs/exchange_%j.out
+#SBATCH --error=logs/exchange_%j.err
 # NOTE: logs/ must exist before sbatch is called.  Create it once with:
-#   mkdir -p <miniapps_workflow_dir>/logs
+#   mkdir -p <exchange_workflow_dir>/logs
 
 set -euo pipefail
 
@@ -48,28 +48,25 @@ fi
 
 # ── System library paths (Delta-specific, required by Dragon) ─────────────────
 export CUDA_HOME=/opt/nvidia/hpc_sdk/Linux_x86_64/25.3/cuda/12.8
-# MPI: cray-mpich names its library libmpi_gnu_112.so.12 (not libmpi.so.12).
-# delta_env_setup.sh symlinks libmpi.so.12 → libmpi_gnu_112.so.12 inside the
-# venv lib dir; add that dir to LD_LIBRARY_PATH so mpi4py finds the library.
-export MPI_LIB=/opt/cray/pe/mpich/8.1.32/ofi/gnu/11.2/lib
+export MPI_LIB=/opt/cray/pe/mpich/8.1.32/ofi/gnu/11.2/lib-abi-mpich
 export FAB_LIB=/opt/cray/libfabric/1.22.0/lib64
-MINIAPPS_VENV="${MINIAPPS_VENV:-${WORK_DIR}/ve/miniapps}"
-export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${MINIAPPS_VENV}/lib:${MPI_LIB}:${FAB_LIB}:${LD_LIBRARY_PATH:-}
+export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${MPI_LIB}:${FAB_LIB}:${LD_LIBRARY_PATH:-}
 
 # ── Environment ───────────────────────────────────────────────────────────────
 DDSIM_DIR="${DDSIM_DIR:-${WORK_DIR}/DeepDriveSim}"
+EXCHANGE_VENV="${EXCHANGE_VENV:-${WORK_DIR}/ve/exchange}"
 unset SLURM_EXPORT_ENV
 export PYTHONUNBUFFERED=1
-source "${MINIAPPS_VENV}/bin/activate"
+source "${EXCHANGE_VENV}/bin/activate"
 dragon-config add --ofi-runtime-lib="${FAB_LIB}"
 
 # ── Working directory ─────────────────────────────────────────────────────────
-WORKDIR="${DDSIM_DIR}/workflows/miniapps_workflow"
+WORKDIR="${DDSIM_DIR}/workflows/exchange_workflow"
 cd "${WORKDIR}"
 mkdir -p logs
 
 # workflows/ is not installed by pip (pyproject.toml ships ddsim* only);
-# add the repo root so `from workflows.miniapps_workflow...` resolves.
+# add the repo root so `from workflows.exchange_workflow...` resolves.
 export PYTHONPATH="${DDSIM_DIR}:${PYTHONPATH:-}"
 
 echo ""
@@ -78,6 +75,13 @@ echo "asyncflow: $(python -c 'import radical.asyncflow; print(radical.asyncflow.
 echo "rhapsody : $(python -c 'import rhapsody; print(rhapsody.__version__)' 2>/dev/null || echo n/a)"
 echo "dragon   : $(python -c 'import dragon; print(dragon.__version__)' 2>/dev/null || echo n/a)"
 echo ""
+
+# ── Patch config paths to match this installation ────────────────────────────
+WF_DIR="${DDSIM_DIR}/workflows/exchange_workflow"
+sed -i \
+    -e "s|^input:.*|input: ${WF_DIR}/input|" \
+    -e "s|^work_dir:.*|work_dir: ${WF_DIR}/output|" \
+    config.yaml
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 DDSIM_BACKEND="${DDSIM_BACKEND:-dragon}"
@@ -96,11 +100,11 @@ if [ "${DDSIM_BACKEND}" = "dragon" ]; then
         DRAGON_MODE="-s"
     fi
     echo "Running: dragon ${DRAGON_MODE} run_workflow.py  (nodes=${SLURM_NNODES:-1})"
-    dragon ${DRAGON_MODE} run_workflow.py
+    dragon ${DRAGON_MODE} run_workflow.py --config_file config.yaml
 else
     echo "Running: python run_workflow.py  (backend=${DDSIM_BACKEND})"
-    python run_workflow.py
+    python run_workflow.py --config_file config.yaml
 fi
 
 echo ""
-echo "=== MiniApps workflow done: $(date) ==="
+echo "=== Exchange workflow done: $(date) ==="

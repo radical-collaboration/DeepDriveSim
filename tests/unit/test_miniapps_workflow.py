@@ -78,10 +78,6 @@ class TestSimCmd:
         cmd = workflow._sim_cmd(sim_idx=0)
         assert f"--num_step {workflow.num_step}" in cmd
 
-    def test_contains_hdf5_env(self, workflow):
-        env = workflow.task_description["process_template"]["env"]
-        assert env.get("HDF5_USE_FILE_LOCKING") == "FALSE"
-
     def test_contains_simulation_script(self, workflow):
         cmd = workflow._sim_cmd(sim_idx=0)
         assert "simulation.py" in cmd
@@ -123,10 +119,6 @@ class TestTrainingCmd:
         cmd = workflow._training_cmd()
         assert f"--num_epochs {workflow.num_epochs}" in cmd
 
-    def test_contains_hdf5_env(self, workflow):
-        env = workflow.task_description["process_template"]["env"]
-        assert env.get("HDF5_USE_FILE_LOCKING") == "FALSE"
-
     def test_contains_training_script(self, workflow):
         cmd = workflow._training_cmd()
         assert "training.py" in cmd
@@ -151,10 +143,6 @@ class TestPredictionCmd:
         cmd = workflow._prediction_cmd()
         assert "--output_file" in cmd
         assert "predictions.yaml" in cmd
-
-    def test_contains_hdf5_env(self, workflow):
-        env = workflow.task_description["process_template"]["env"]
-        assert env.get("HDF5_USE_FILE_LOCKING") == "FALSE"
 
     def test_contains_agent_script(self, workflow):
         assert "agent.py" in workflow._prediction_cmd()

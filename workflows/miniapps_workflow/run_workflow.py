@@ -1,34 +1,32 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
+import os
 from pathlib import Path
 
 from radical.asyncflow import WorkflowEngine
 
-from ddsim.util import find_gpus, load_config, make_policies
+from ddsim.util import load_config
 from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
 
 
 async def run_miniapps(config_file: str) -> None:
     cfg = load_config(config_file)
     workflow_class = MiniAppsWorkflow
-    backend = cfg.get("engine", "dragon")
+    backend = os.environ.get("DDSIM_BACKEND", "dragon")
     num_replicas = cfg.get("num_replicas", 4)
 
     # --- Build backend and asyncflow ---
-    policies = [None] * num_replicas
-
     if backend == "dragon":
         try:
-            from rhapsody.backends import DragonExecutionBackendV3
+            from rhapsody.backends import DragonExecutionBackend
 
-            engine_dragon = await DragonExecutionBackendV3()
+            engine_dragon = await DragonExecutionBackend()
             asyncflow = await WorkflowEngine.create(engine_dragon)
-            policies = make_policies(find_gpus(), nprocs=num_replicas)
         except ImportError:
             backend = "concurrent"
 
-    else:
+    if backend != "dragon":
         from rhapsody.backends import ConcurrentExecutionBackend
 
         engine_concurrent = await ConcurrentExecutionBackend()
@@ -54,7 +52,6 @@ async def run_miniapps(config_file: str) -> None:
             name=f"min{i + 1}",
             asyncflow=asyncflow,
             home_dir=str(home_dir),
-            policies=[policies[i]] if policies[i] is not None else [],
         )
         for i in range(num_replicas)
     ]

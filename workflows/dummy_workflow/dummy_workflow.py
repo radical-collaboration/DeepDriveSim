@@ -17,10 +17,6 @@ except ModuleNotFoundError:
 
 from ddsim.ddsim_manager import DDSimManager
 
-task_description = {
-    "shell": True,
-}
-
 
 class DummyWorkflow(DDSimManager):
     """Dummy workflow for managing simulations, training, and predictions."""
@@ -104,21 +100,15 @@ class DummyWorkflow(DDSimManager):
         self.ddsim_data_ready = int(cfg.get("ddsim_data_ready", self.num_inputs))
         self._data_ready_signaled = False
 
-        # Default src_dir to the workflow directory so scripts are found
+        # Default src_dir to the workflow directory so scripts are found.
+        # cfg["src_dir"] takes precedence; fall back to this file's directory.
         # regardless of the working directory.  Using `or` ensures an empty
         # string in config also falls back to the default.
         _default_src = str(Path(__file__).parent)
-        self.src_dir = cfg.get("src_dir") or os.getenv("WORK_DIR", _default_src)
+        self.src_dir = cfg.get("src_dir") or _default_src
 
         # Python executable for all tasks; falls back to the current interpreter.
         self.executable = os.path.expandvars(cfg.get("executable") or sys.executable)
-
-        # GPU/CPU affinity policy injected by AsyncCampaignManager.
-        policies = kwargs.get("policies", None)
-        if policies is not None:
-            self.policy = policies[0] if policies else None
-        else:
-            self.policy = kwargs.get("policy", None)
 
         self.model_filename = self.home_dir / "model.pkl"
         self.prediction_file = self.home_dir / "predictions.yml"
@@ -166,19 +156,9 @@ class DummyWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     def register_tasks(self):
         """Register learner tasks: simulation, training, active learning, prediction."""
-        _task_desc = dict(task_description)
-        if self.policy is not None:
-            _task_desc["process_template"] = {"policy": self.policy}
-            self.logger.info(
-                f"Task policy: host={self.policy.host_name} "
-                f"gpu_affinity={self.policy.gpu_affinity}",
-                component=self.name,
-            )
-        else:
-            self.logger.info("Task policy: none (no GPU affinity)", component=self.name)
 
-        @self.flow.executable_task
-        async def simulation(task_description=_task_desc, **kwargs):
+        @self.flow.executable_task(capture_stdio=True)
+        async def simulation(**kwargs):
             sim_idx = kwargs["sim_inputs"]["sim_idx"]
             filename = self.sim_inputs[sim_idx]
             args = (
@@ -194,7 +174,7 @@ class DummyWorkflow(DDSimManager):
         )
 
         @_training_dec
-        async def training(task_description=_task_desc, **kwargs):
+        async def training(**kwargs):
             args = (
                 f"--model_filename {self.model_filename} "
                 f"--sim_output_dir {self.sim_output_dir} "
@@ -211,7 +191,7 @@ class DummyWorkflow(DDSimManager):
         )
 
         @_active_learn_dec
-        async def active_learn(task_description=_task_desc, **kwargs):
+        async def active_learn(**kwargs):
             args = (
                 f"--model_filename {self.model_filename} "
                 f"--train_dir {self.train_dir} "
@@ -221,8 +201,8 @@ class DummyWorkflow(DDSimManager):
 
         self.active_learn = active_learn
 
-        @self.flow.executable_task
-        async def prediction(task_description=_task_desc, **kwargs):
+        @self.flow.executable_task(capture_stdio=True)
+        async def prediction(**kwargs):
             args = (
                 f"--model_filename {self.model_filename} "
                 f"--sim_output_dir {self.sim_output_dir} "
@@ -241,7 +221,7 @@ class DummyWorkflow(DDSimManager):
         )
 
         @_accuracy_dec
-        async def check_accuracy(task_description=_task_desc, **kwargs):
+        async def check_accuracy(**kwargs):
             args = f"--model_filename {self.model_filename} --val_dir {self.val_dir}"
             return f"{self.executable} {self.src_dir}/check_accuracy.py {args}"
 
@@ -261,7 +241,7 @@ class DummyWorkflow(DDSimManager):
         # Example — register a standalone validation task and add it:
         #
         #   @self.flow.executable_task
-        #   async def validate(task_description=_task_desc, **kwargs):
+        #   async def validate(**kwargs):
         #       args = (
         #           f"--model_filename {self.model_filename} "
         #           f"--val_dir {self.val_dir}"

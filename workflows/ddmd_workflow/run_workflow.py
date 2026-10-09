@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
+import os
 
 from radical.asyncflow import WorkflowEngine
 
-from ddsim.util import find_gpus, load_config, make_policies
+from ddsim.util import load_config
 from workflows.ddmd_workflow.ddmd_workflow import DDMdWorkflow
 
 
 async def run_ddmd(config_file: str) -> None:
     cfg = load_config(config_file)
-    backend = cfg.get("engine", "dragon")
+    backend = os.environ.get("DDSIM_BACKEND", "dragon")
     num_replicas = cfg.get("num_replicas", 1)
 
     # --- Build backend and asyncflow ---
-    policies = [None] * num_replicas
-
     if backend == "dragon":
-        from rhapsody.backends import DragonExecutionBackendV3
+        try:
+            from rhapsody.backends import DragonExecutionBackend
 
-        engine_dragon = await DragonExecutionBackendV3()
-        asyncflow = await WorkflowEngine.create(engine_dragon)
-        policies = make_policies(find_gpus(), nprocs=num_replicas)
-    else:  # concurrent
+            engine_dragon = await DragonExecutionBackend()
+            asyncflow = await WorkflowEngine.create(engine_dragon)
+        except ImportError:
+            backend = "concurrent"
+
+    if backend != "dragon":
         from rhapsody.backends import ConcurrentExecutionBackend
 
         engine_concurrent = await ConcurrentExecutionBackend()
@@ -45,7 +47,6 @@ async def run_ddmd(config_file: str) -> None:
             camp_config=config_file,
             name=f"ddmd{i + 1}",
             asyncflow=asyncflow,
-            policies=[policies[i]] if policies[i] is not None else [],
         )
         for i in range(num_replicas)
     ]
