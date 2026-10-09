@@ -43,7 +43,6 @@ class DDMdWorkflow(DDSimManager):
         if self.flow is None:
             raise ValueError("Unable to initiate DDMdWorkflow w/o asyncflow")
 
-
         # Load campaign config and extract workflow parameters.
         camp_cfg = (
             _load_camp_config(kwargs["camp_config"]) if "camp_config" in kwargs else {}
@@ -272,6 +271,7 @@ class DDMdWorkflow(DDSimManager):
 
         # --- Aggregation (optional) ---
         if not self.skip_aggregation:
+
             @self.flow.executable_task(capture_stdio=True)
             async def aggregation():
                 cfg = stage_config["aggregation_stage"]

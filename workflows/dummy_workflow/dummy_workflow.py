@@ -156,6 +156,7 @@ class DummyWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     def register_tasks(self):
         """Register learner tasks: simulation, training, active learning, prediction."""
+
         @self.flow.executable_task(capture_stdio=True)
         async def simulation(**kwargs):
             sim_idx = kwargs["sim_inputs"]["sim_idx"]
