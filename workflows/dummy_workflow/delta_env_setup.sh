@@ -2,80 +2,82 @@
 # =============================================================================
 # Dummy workflow environment setup — Delta HPC (NCSA)
 #
-# Creates a Python 3.11 venv and installs all dependencies.
+# Creates a Python 3.11+ venv and installs all dependencies.
 #
 # Usage:
-#   bash delta_env_setup.sh [--env-dir DIR] [--ddsim-dir DIR]
+#   export WORK_DIR=/work/nvme/bdyk/$USER
+#   bash delta_env_setup.sh [--env-dir DIR] [--ddsim-dir DIR] [--python PATH]
 #
-# Defaults (set SCRATCH to your allocation scratch root, e.g. /scratch/bblj):
-#   ENV_DIR   = /u/$USER/ve/ddsim
-#   DDSIM_DIR = $SCRATCH/$USER/DeepDriveSim
+# Defaults:
+#   ENV_DIR   = $WORK_DIR/ve/ddsim
+#   DDSIM_DIR = $WORK_DIR/DeepDriveSim
+#   python    = auto-detected via `module load python` (Delta default: 3.13+)
 # =============================================================================
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     set -euo pipefail
 fi
 
-# ── Parse optional overrides ──────────────────────────────────────────────────
-ENV_DIR="${ENV_DIR:-/u/${USER}/ve/ddsim}"
-if [[ -z "${SCRATCH:-}" ]]; then
-    echo "ERROR: set the SCRATCH env var to your allocation scratch root, e.g.:"
-    echo "  export SCRATCH=/scratch/<allocation>"
+# ── Initialize lmod (needed when run as non-interactive bash script) ──────────
+if ! declare -f module &>/dev/null; then
+    _lmod_init=/usr/share/lmod/lmod/init/bash
+    [ -f "${_lmod_init}" ] && source "${_lmod_init}"
+fi
+
+# ── Require WORK_DIR ──────────────────────────────────────────────────────────
+if [[ -z "${WORK_DIR:-}" ]]; then
+    echo "ERROR: set WORK_DIR to your nvme work root, e.g.:"
+    echo "  export WORK_DIR=/work/nvme/bdyk/\$USER"
     echo "  bash delta_env_setup.sh"
     exit 1
 fi
-DDSIM_DIR="${DDSIM_DIR:-${SCRATCH}/${USER}/DeepDriveSim}"
+
+# ── Defaults / arg parsing ────────────────────────────────────────────────────
+ENV_DIR="${ENV_DIR:-${WORK_DIR}/ve/ddsim}"
+DDSIM_DIR="${DDSIM_DIR:-${WORK_DIR}/DeepDriveSim}"
+BASE_PY_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --env-dir)   ENV_DIR="$2";   shift 2 ;;
-        --ddsim-dir) DDSIM_DIR="$2"; shift 2 ;;
+        --env-dir)   ENV_DIR="$2";          shift 2 ;;
+        --ddsim-dir) DDSIM_DIR="$2";        shift 2 ;;
+        --python)    BASE_PY_OVERRIDE="$2"; shift 2 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
 
-WORK_DIR="${DDSIM_DIR}/workflows/dummy_workflow"
-PY="${ENV_DIR}/bin/python3.11"
+WF_DIR="${DDSIM_DIR}/workflows/dummy_workflow"
+PY="${ENV_DIR}/bin/python"
 PIP="${ENV_DIR}/bin/pip"
 
 echo "================================================================="
+echo "  WORK_DIR  = ${WORK_DIR}"
 echo "  ENV_DIR   = ${ENV_DIR}"
 echo "  DDSIM_DIR = ${DDSIM_DIR}"
-echo "  WORK_DIR  = ${WORK_DIR}"
+echo "  WF_DIR    = ${WF_DIR}"
 echo "================================================================="
-
-# ── 0. Ensure 'module' is available (needed when run as bash script.sh) ───────
-if ! command -v module &>/dev/null; then
-    source /usr/share/lmod/lmod/init/bash 2>/dev/null || true
-fi
 
 # ── 1. Create venv ────────────────────────────────────────────────────────────
 echo ""
 echo "── Step 1: Creating venv ──"
 
-# Find a Python 3.11 interpreter.  On Delta, 'module load anaconda3' exposes
-# 'python3' (not 'python3.11'), so we try the versioned name first, then load
-# the module and fall back to any python3 that reports version 3.11.x.
-_find_python311() {
-    for candidate in python3.11 python3 python; do
-        local p
-        p=$(command -v "${candidate}" 2>/dev/null) || continue
-        local ver
-        ver=$("${p}" -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>/dev/null) || continue
-        [ "${ver}" = "3.11" ] && echo "${p}" && return 0
-    done
-    return 1
-}
-
-BASE_PY=$(_find_python311 || true)
-if [ -z "${BASE_PY}" ]; then
-    echo "python3.11 not in PATH — loading cray-python/3.11.7 module..."
-    module load cray-python/3.11.7 2>/dev/null || true
-    BASE_PY=$(_find_python311 || true)
-fi
-if [ -z "${BASE_PY}" ]; then
-    echo "ERROR: no Python 3.11 interpreter found."
-    echo "       Try: module load cray-python/3.11.7"
-    exit 1
+if [ -n "${BASE_PY_OVERRIDE}" ]; then
+    BASE_PY="${BASE_PY_OVERRIDE}"
+    echo "Using Python override: ${BASE_PY}"
+else
+    # On Delta, `module load python` gives the default Python 3.13+.
+    module load python 2>/dev/null || true
+    BASE_PY=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)
+    if [ -z "${BASE_PY}" ]; then
+        echo "ERROR: no Python found after 'module load python'."
+        echo "       Pass an explicit interpreter: --python /path/to/python3"
+        exit 1
+    fi
+    ver=$("${BASE_PY}" -c "import sys; v=sys.version_info; print(v.major*100+v.minor)")
+    if [ "${ver}" -lt 311 ]; then
+        echo "ERROR: ${BASE_PY} is Python ${ver} — need 3.11+."
+        echo "       Pass an explicit interpreter: --python /path/to/python3.11"
+        exit 1
+    fi
 fi
 echo "Using Python: ${BASE_PY} ($(${BASE_PY} --version))"
 
@@ -84,13 +86,6 @@ if [ ! -x "${PY}" ]; then
 else
     echo "venv already exists at ${ENV_DIR}"
 fi
-
-# Ensure python3.11 exists in the venv regardless of base interpreter name.
-if [ ! -x "${PY}" ]; then
-    ln -sf "${BASE_PY}" "${ENV_DIR}/bin/python3.11"
-fi
-ln -sf "${ENV_DIR}/bin/python3.11" "${ENV_DIR}/bin/python"  2>/dev/null || true
-ln -sf "${ENV_DIR}/bin/python3.11" "${ENV_DIR}/bin/python3" 2>/dev/null || true
 
 echo "Python: $("${PY}" --version)"
 
@@ -103,18 +98,18 @@ echo "── Step 2: Bootstrapping pip ──"
 # ── 3. Workflow requirements ──────────────────────────────────────────────────
 echo ""
 echo "── Step 3: Workflow requirements ──"
-"${PIP}" install -q -r "${WORK_DIR}/requirements.txt"
+"${PIP}" install -q -r "${WF_DIR}/requirements.txt"
 
 # ── 4. DeepDriveSim + Dragon (editable) ───────────────────────────────────────
 echo ""
 echo "── Step 4: DeepDriveSim [dragon] (editable) ──"
 "${PIP}" install -q -e "${DDSIM_DIR}[dragon]"
 
-# ── 5. radical.asyncflow ──────────────────────────────────────────────────────
+# ── 5. radical.asyncflow + rhapsody ──────────────────────────────────────────
 echo ""
 echo "── Step 5: radical.asyncflow + rhapsody ──"
-"${PIP}" install --force-reinstall "radical.asyncflow>=0.3.0"
-"${PIP}" install --force-reinstall "rhapsody-py>=0.3.0"
+"${PIP}" install -q --force-reinstall "radical.asyncflow>=0.3.0"
+"${PIP}" install -q --force-reinstall "rhapsody-py[dragon,telemetry]>=0.3.0"
 "${PIP}" install -q matplotlib
 
 # ── 6. Verify ─────────────────────────────────────────────────────────────────
@@ -123,10 +118,10 @@ echo "── Verifying installation ──"
 _check() {
     local label="$1"; shift
     if out=$("$@" 2>&1); then
-        echo "${label}: OK  (${out})"
+        echo "  ${label}: OK  (${out})"
     else
-        echo "WARNING: ${label} failed"
-        echo "  ${out}" | head -3
+        echo "  WARNING: ${label} failed"
+        echo "    ${out}" | head -3
     fi
 }
 
@@ -134,7 +129,7 @@ _check "scikit-learn"      "${PY}" -c "import sklearn; print(sklearn.__version__
 _check "pyyaml"            "${PY}" -c "import yaml; print(yaml.__version__)"
 _check "radical.asyncflow" "${PY}" -c "import radical.asyncflow; print('ok')"
 _check "rhapsody"          "${PY}" -c "import rhapsody; print('ok')"
-_check "dragonhpc"         "${PY}" -c "import dragon; print('ok')" 2>/dev/null || echo "dragonhpc: install separately if needed"
+_check "dragonhpc"         "${PY}" -c "import dragon; print('ok')" 2>/dev/null || echo "  dragonhpc: install separately if needed"
 
 echo ""
 echo "================================================================="
@@ -142,4 +137,10 @@ echo "Setup complete."
 echo ""
 echo "Activate with:"
 echo "  source ${ENV_DIR}/bin/activate"
+echo ""
+echo "Run the workflow:"
+echo "  export WORK_DIR=${WORK_DIR}"
+echo "  export SBATCH_ACCOUNT=<project>-delta-cpu"
+echo "  cd ${WF_DIR}"
+echo "  sbatch delta_cpu_sbatch.sh"
 echo "================================================================="

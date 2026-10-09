@@ -3,7 +3,7 @@
 # =============================================================================
 
 debug: true
-engine:      dragon       # concurrent | dragon
+# engine: dragon  # use DDSIM_BACKEND env var instead
 num_replicas: 1
 telemetry:     true
 telemetry_dir: "ala_dipep_output"
@@ -11,8 +11,8 @@ telemetry_dir: "ala_dipep_output"
 # ── MD / Exchange simulation parameters ──────────────────────────────────────
 
 #----Paths----------------
-input: /scratch/bblj/rrishabh/DeepDriveSim/workflows/exchange_workflow/input
-work_dir: /scratch/bblj/rrishabh/DeepDriveSim/workflows/exchange_workflow/output
+input: /work/nvme/bdyk/mgoliyad1/DeepDriveSim/workflows/exchange_workflow/input
+work_dir: /work/nvme/bdyk/mgoliyad1/DeepDriveSim/workflows/exchange_workflow/output
 top_file: ala_dipep.top 
 
 gro_files:
@@ -38,10 +38,10 @@ temperatures:
 #-----Simulation parameters----------------------
 num_init_sims:     8
 start_cycle: 0
-max_equil_steps:   50000
-production_steps:  10000
-exchange_step_interval: 10000
-max_exchange_cycles:   500
+max_equil_steps:   100
+production_steps:  100
+exchange_step_interval: 100
+max_exchange_cycles:   3
 
 # experiment_dir: "exchange_output"   # leave unset to skip experiment dir creation
 
@@ -61,6 +61,6 @@ tasks:
 
 # Python executable for all tasks — set to the python binary of the target venv,
 # or leave empty to inherit the current interpreter.
-executable: "${VE_HOME}/exchange/bin/python"
+executable: ""
 
 

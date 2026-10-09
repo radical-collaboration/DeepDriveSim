@@ -43,29 +43,6 @@ class DDMdWorkflow(DDSimManager):
         if self.flow is None:
             raise ValueError("Unable to initiate DDMdWorkflow w/o asyncflow")
 
-        # Expand a compound policy (multiple GPUs in one policy) into per-GPU
-        # policies so tasks can be distributed across GPUs round-robin.
-        _raw_policies = kwargs.get("policies", []) or []
-        if (
-            len(_raw_policies) == 1
-            and len(getattr(_raw_policies[0], "gpu_affinity", [])) > 1
-        ):
-            try:
-                from dragon.infrastructure.policy import Policy as _Policy
-
-                _p = _raw_policies[0]
-                self.policies = [
-                    _Policy(
-                        placement=_p.placement,
-                        host_name=_p.host_name,
-                        gpu_affinity=[gid],
-                    )
-                    for gid in _p.gpu_affinity
-                ]
-            except Exception:
-                self.policies = _raw_policies
-        else:
-            self.policies = _raw_policies
 
         # Load campaign config and extract workflow parameters.
         camp_cfg = (
@@ -109,7 +86,6 @@ class DDMdWorkflow(DDSimManager):
         self.stage_idx = 0
 
         self._init_experiment_dir()
-        self.task_descriptions = self._generate_task_descriptions()
         self.stage_config = self._generate_stage_config()
 
         # Copy the config YAML into the experiment directory for reproducibility.
@@ -168,26 +144,6 @@ class DDMdWorkflow(DDSimManager):
         return stage_config
 
     # --------------------------------------------------------------------------
-    def _generate_task_descriptions(self):
-        """Build resource-requirement dicts for each workflow stage."""
-        task_descriptions = {}
-        stages = [
-            (
-                "molecular_dynamics_stage",
-                self.experiment_config.molecular_dynamics_stage,
-            ),
-            ("machine_learning_stage", self.experiment_config.machine_learning_stage),
-            ("aggregation_stage", self.experiment_config.aggregation_stage),
-            ("agent_stage", self.experiment_config.agent_stage),
-            ("model_selection_stage", self.experiment_config.model_selection_stage),
-        ]
-        for idx, (name, cfg) in enumerate(stages):
-            task_descriptions[name] = self._generate_task_description(
-                cfg, stage_idx=idx
-            )
-        return task_descriptions
-
-    # --------------------------------------------------------------------------
     def _init_experiment_dir(self) -> None:
         """Create the experiment directory tree for all workflow stages."""
         self.experiment_config.experiment_directory.mkdir(parents=True, exist_ok=True)
@@ -196,22 +152,6 @@ class DDMdWorkflow(DDSimManager):
         self.api.machine_learning_stage.runs_dir.mkdir(parents=True, exist_ok=True)
         self.api.model_selection_stage.runs_dir.mkdir(parents=True, exist_ok=True)
         self.api.agent_stage.runs_dir.mkdir(parents=True, exist_ok=True)
-
-    # --------------------------------------------------------------------------
-    def _generate_task_description(self, config, stage_idx: int = 0):
-        """Build a single task resource description from a stage config.
-
-        GPU policies are applied only to stages that request GPUs; attaching
-        a policy to CPU-only stages can cause long-running tasks to stall.
-        """
-        stage_needs_gpu = config.gpu_reqs.processes > 0
-        task_description = {}
-
-        if self.policies and stage_needs_gpu:
-            policy = self.policies[stage_idx % len(self.policies)]
-            task_description["process_template"] = {"policy": policy}
-
-        return task_description
 
     # --------------------------------------------------------------------------
     async def init_sim_queue(self):
@@ -319,62 +259,21 @@ class DDMdWorkflow(DDSimManager):
         api = self.api
 
         # --- Simulation ---
-        _md_base = {
-            k: v
-            for k, v in self.task_descriptions["molecular_dynamics_stage"].items()
-            if k != "process_template"
-        }
-
-        if self.policies:
-            _sim_fns = []
-            for _gpu_idx, _policy in enumerate(self.policies):
-                _td = {**_md_base, "process_template": {"policy": _policy}}
-                self.logger.info(
-                    f"Registering sim func [{_gpu_idx}] "
-                    f"gpu_affinity={_policy.gpu_affinity}",
-                    component=self.name,
-                )
-
-                @self.flow.executable_task
-                async def _sim_gpu(task_description=_td, **kwargs):
-                    cfg = stage_config["molecular_dynamics_stage"]
-                    sim_idx = kwargs["sim_inputs"]["sim_idx"]
-                    cfg.task_config.pdb_file = self.sim_inputs[sim_idx]
-                    stage_api = api.molecular_dynamics_stage
-                    _, cmd = _update_stage_config(stage_api, cfg, sim_idx)
-                    return cmd
-
-                _sim_fns.append(_sim_gpu)
-
-            _n_gpus = len(_sim_fns)
-
-            def simulation(**kwargs):
-                sim_idx = kwargs["sim_inputs"]["sim_idx"]
-                return _sim_fns[sim_idx % _n_gpus](**kwargs)
-
-        else:
-            self.logger.info(
-                f"Using task_description {_md_base} for sim (no GPU policy)",
-                component=self.name,
-            )
-
-            @self.flow.executable_task
-            async def simulation(task_description=_md_base, **kwargs):
-                cfg = stage_config["molecular_dynamics_stage"]
-                sim_idx = kwargs["sim_inputs"]["sim_idx"]
-                cfg.task_config.pdb_file = self.sim_inputs[sim_idx]
-                stage_api = api.molecular_dynamics_stage
-                _, cmd = _update_stage_config(stage_api, cfg, sim_idx)
-                return cmd
+        @self.flow.executable_task(capture_stdio=True)
+        async def simulation(**kwargs):
+            cfg = stage_config["molecular_dynamics_stage"]
+            sim_idx = kwargs["sim_inputs"]["sim_idx"]
+            cfg.task_config.pdb_file = self.sim_inputs[sim_idx]
+            stage_api = api.molecular_dynamics_stage
+            _, cmd = _update_stage_config(stage_api, cfg, sim_idx)
+            return cmd
 
         self.simulation = simulation
 
         # --- Aggregation (optional) ---
         if not self.skip_aggregation:
-            task_description = self.task_descriptions["aggregation_stage"]
-
-            @self.flow.executable_task
-            async def aggregation(task_description=task_description):
+            @self.flow.executable_task(capture_stdio=True)
+            async def aggregation():
                 cfg = stage_config["aggregation_stage"]
                 stage_api = api.aggregation_stage
                 _, cmd = _update_stage_config(stage_api, cfg, task_idx=0)
@@ -440,10 +339,8 @@ class DDMdWorkflow(DDSimManager):
         self.evaluate_simulations = agent_stage
 
         # --- Model selection ---
-        task_description = self.task_descriptions["model_selection_stage"]
-
-        @self.flow.executable_task
-        async def selection(task_description=task_description):
+        @self.flow.executable_task(capture_stdio=True)
+        async def selection():
             cfg = stage_config["model_selection_stage"]
             stage_api = api.model_selection_stage
             _, cmd = _update_stage_config(stage_api, cfg, task_idx=0)

@@ -1,47 +1,4 @@
-"""
-miniapps_workflow_asyncflow.py — Decorator-based variant for asyncflow developer review.
-
-This file shows the INTENDED design using @self.flow.executable_task /
-@self.flow.function_task decorators for simulation, training, and prediction.
-It is NOT the production version (see miniapps_workflow.py for the working
-workaround).
-
-ISSUES OBSERVED on Dragon backend V3 (DragonExecutionBackendV3):
-------------------------------------------------------------------------
-
-1. executable_task for simulation/training/prediction (the natural design):
-   Dragon Batch worker subprocesses silently hang when the subprocess uses
-   cupy/wfMiniAPI GPU operations, even when:
-     - CUDA_VISIBLE_DEVICES is set via process_template → env
-       (per asyncflow 06-dragon_execution_backend.py example)
-     - CUDA_VISIBLE_DEVICES is also set explicitly in the shell command
-     - The head process has correct CUDA_HOME / LD_LIBRARY_PATH (from sbatch)
-   The subprocess never returns; no error is raised.
-
-2. function_task for simulation (to run asyncio.create_subprocess_shell inside):
-   Dragon must pickle the entire function closure to send to a worker.
-   The closure captures `self`, which holds `self.flow` — the asyncflow
-   WorkflowEngine — which contains non-picklable asyncio.Future objects.
-   Error: "cannot pickle '_asyncio.Future' object"
-
-3. function_task with no task_description:
-   All tasks are immediately cancelled (t.cancelled() == True), causing
-   DDSimManager._on_sim_done() to re-queue them in an infinite loop.
-   Root cause: asyncflow/Dragon cannot schedule a task with no resource spec.
-
-WORKING WORKAROUND (miniapps_workflow.py):
-   All three tasks run as asyncio.create_subprocess_shell() on the head-process
-   event loop, bypassing Dragon workers.  simulation wraps the coroutine in
-   asyncio.ensure_future() so submit_sims() can call add_done_callback() on the
-   returned asyncio.Task.  training and prediction are plain async functions
-   awaited directly in train_model() / evaluate_simulations().
-
-ENVIRONMENT:
-   Platform  : Bridges-2 (PSC), 4x V100 GPUs per node
-   Dragon    : HPE Dragon HPC runtime
-   Backend   : DragonExecutionBackendV3
-   asyncflow : radical.asyncflow / rhapsody
-"""
+"""MiniApps workflow — Dragon/asyncflow backend, Delta HPC."""
 
 import asyncio
 import os
@@ -56,13 +13,7 @@ from ddsim.ddsim_manager import DDSimManager
 
 
 class MiniAppsWorkflow(DDSimManager):
-    """
-    Decorator-based MiniAppsWorkflow for asyncflow developer review.
-
-    Identical to MiniAppsWorkflow except register_tasks() uses
-    @self.flow.executable_task / @self.flow.function_task as intended.
-    See module docstring for observed failure modes.
-    """
+    """MiniApps workflow — Dragon/asyncflow backend."""
 
     def __init__(self, config: dict = None, **kwargs):
         cfg = config or {}
@@ -83,7 +34,7 @@ class MiniAppsWorkflow(DDSimManager):
         self.sim_output_dir = self._ensure_dir(self.home_dir / "sim_output")
 
         _default_src = str(Path(__file__).parent)
-        self.src_dir = cfg.get("src_dir") or os.getenv("WORK_DIR", _default_src)
+        self.src_dir = cfg.get("src_dir") or _default_src
 
         _default_exe = os.path.expandvars(cfg.get("executable") or "") or sys.executable
 
@@ -117,63 +68,6 @@ class MiniAppsWorkflow(DDSimManager):
         self.sim_predictions = {}
 
         self.clean_unregistered_sims = bool(cfg.get("clean_unregistered_sims", False))
-
-        policies = kwargs.get("policies", None)
-        if policies is not None:
-            self.policy = policies[0] if policies else None
-        else:
-            self.policy = kwargs.get("policy", None)
-
-        # ── task_description ──────────────────────────────────────────────────
-        # Per asyncflow Dragon backend example (06-dragon_execution_backend.py),
-        # the correct format is simply {"process_template": {...}} at top level —
-        # no ranks/cores_per_rank/gpus_per_rank/shell/task_backend_specific_kwargs.
-        #
-        #   task_description = {
-        #       "process_template": {
-        #           "policy": <Policy>,
-        #           "env": {
-        #               "CUDA_VISIBLE_DEVICES": "0",
-        #               "HDF5_USE_FILE_LOCKING": "FALSE",
-        #           },
-        #       }
-        #   }
-        #
-        # OBSERVED FAILURE: even with correct structure, executable_task worker
-        # subprocesses hang when running cupy GPU ops.  See module docstring.
-        _gpu_id = self.policy.gpu_affinity[0] if self.policy else None
-
-        # Pass LD_LIBRARY_PATH from the parent process so Dragon subprocess tasks
-        # can find libmpi.so.12 (Cray MPICH, needed by mpi4py).  Dragon's env dict
-        # may replace rather than merge the subprocess environment, so we must
-        # include any library paths the subprocess needs.
-        _env = {
-            "HDF5_USE_FILE_LOCKING": "FALSE",
-            "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH", ""),
-            "PATH": os.environ.get("PATH", ""),
-        }
-        if _gpu_id is not None:
-            _env["CUDA_VISIBLE_DEVICES"] = str(_gpu_id)
-
-        _process_template = {"env": _env}
-        if self.policy is not None:
-            _process_template["policy"] = self.policy
-
-        self.task_description = {"process_template": _process_template}
-
-        if self.policy is not None:
-            self.logger.info(
-                f"Task policy: host={self.policy.host_name} "
-                f"gpu_affinity={self.policy.gpu_affinity} "
-                f"CUDA_VISIBLE_DEVICES={_gpu_id}",
-                component=self.name,
-            )
-        else:
-            self.logger.info("Task policy: none (no GPU affinity)", component=self.name)
-
-        self.logger.info(
-            f"Task description: {self.task_description}", component=self.name
-        )
 
         self.register_tasks()
         self.sim_inputs = {}
@@ -232,62 +126,29 @@ class MiniAppsWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     def register_tasks(self):
-        """
-        INTENDED design: all tasks use @self.flow.executable_task with a
-        task_description that sets CUDA_VISIBLE_DEVICES via:
-          {"process_template": {"policy": <Policy>,
-           "env": {"CUDA_VISIBLE_DEVICES": "0", ...}}}
-
-        FAILURE MODE for simulation/training/prediction:
-          Dragon Batch worker subprocesses hang when the subprocess uses cupy GPU
-          ops, even with correct task_description (process_template → env →
-          CUDA_VISIBLE_DEVICES set, policy.gpu_affinity set).
-          The head-process sbatch environment (CUDA_HOME, LD_LIBRARY_PATH) appears to
-          reach Dragon workers (docs: "inherits parent environment"), but something in
-          Dragon's worker sandbox prevents cupy from successfully initialising the GPU.
-          No error is raised — the subprocess simply never exits.
-
-        FAILURE MODE for simulation with function_task:
-          Dragon must pickle the closure to send to a worker.  The closure captures
-          `self` → `self.flow` (asyncflow WorkflowEngine) → asyncio.Future objects
-          which are not picklable.
-          Error: "cannot pickle '_asyncio.Future' object"
-
-        FAILURE MODE for function_task with no task_description:
-          asyncflow/Dragon immediately cancels all tasks (t.cancelled() == True)
-          because there is no resource specification to schedule against.
-        """
-
         # ── Simulation ────────────────────────────────────────────────────────
-        # ISSUE: hangs — Dragon worker subprocess cannot run cupy GPU ops.
-        # CUDA_VISIBLE_DEVICES is set via process_template → env, but the
-        # subprocess still hangs on cupy GPU init.
-        @self.flow.executable_task
-        async def simulation(task_description=self.task_description, **kwargs):
+        @self.flow.executable_task(capture_stdio=True)
+        async def simulation(**kwargs):
             sim_idx = kwargs["sim_inputs"]["sim_idx"]
             return self._sim_cmd(sim_idx)
 
         self.simulation = simulation
 
         # ── Training ──────────────────────────────────────────────────────────
-        # ISSUE: same hang — training.py uses wfMiniAPI cupy GPU ops.
-        @self.flow.executable_task
-        async def training(task_description=self.task_description):
+        @self.flow.executable_task(capture_stdio=True)
+        async def training():
             return self._training_cmd()
 
         self.training = training
 
         # ── Prediction ────────────────────────────────────────────────────────
-        # ISSUE: same hang — agent.py uses wfMiniAPI cupy GPU ops.
-        @self.flow.executable_task
-        async def prediction(task_description=self.task_description):
+        @self.flow.executable_task(capture_stdio=True)
+        async def prediction():
             return self._prediction_cmd()
 
         self.prediction = prediction
 
         # ── Selection ─────────────────────────────────────────────────────────
-        # No GPU ops — function_task works here (no cupy, no pickling issue
-        # since selection() is awaited, not used with add_done_callback).
         @self.flow.function_task
         async def selection(*args, **kwargs):
             return self._selection_cmd()

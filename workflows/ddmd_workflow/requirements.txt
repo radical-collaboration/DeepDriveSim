@@ -1,4 +1,4 @@
-gsd<2.0
+gsd
 PyYAML
 pydantic
 pydantic-settings
@@ -8,6 +8,6 @@ pathos
 pandas
 matplotlib
 scikit-learn
-tensorflow[and-cuda]==2.16.1
-nvidia-cudnn-cu12==8.9.7.29
-keras==3.0.5
+tensorflow[and-cuda]>=2.20.0
+keras>=3.4.0
+protobuf>=6.31.1

@@ -2,8 +2,8 @@
 # =============================================================================
 # DDMd workflow environment setup — Delta HPC (NCSA)
 #
-# Creates three Python 3.11 venvs mirroring the three conda envs in env_setup.sh:
-#   1. ve/ddmd        — DeepDriveSim + Dragon  (orchestration, simulation cmd, selection, agent)
+# Creates three Python 3.11 venvs:
+#   1. ve/ddmd        — DeepDriveSim + Dragon  (orchestration, simulation, selection, agent)
 #   2. ve/ddmd-openmm — OpenMM + MD-tools       (GPU-accelerated MD)
 #   3. ve/ddmd-keras  — TensorFlow/Keras         (training / inference)
 #
@@ -13,91 +13,95 @@
 #               installed as: pip install .[dragon]  then  pip install .[telemetry]
 #
 # Usage:
-#   bash delta_env_setup.sh [--ve-home DIR] [--ddsim-dir DIR] [--base-dir DIR]
+#   export WORK_DIR=/work/nvme/bdyk/$USER
+#   bash delta_env_setup.sh [--ve-home DIR] [--ddsim-dir DIR] [--base-dir DIR] [--python PATH]
 #
 # Defaults:
-#   VE_HOME   = /u/$USER/ve
-#   DDSIM_DIR = /scratch/bblj/$USER/DeepDriveSim
-#   BASE_DIR  = /scratch/bblj/$USER
+#   VE_HOME   = $WORK_DIR/ve
+#   DDSIM_DIR = $WORK_DIR/DeepDriveSim
+#   BASE_DIR  = $WORK_DIR
+#   python    = auto-detected via `module load python` (Delta default: 3.13+)
 # =============================================================================
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     set -euo pipefail
 fi
 
+# ── Initialize lmod (needed when run as non-interactive bash script) ──────────
+if ! declare -f module &>/dev/null; then
+    _lmod_init=/usr/share/lmod/lmod/init/bash
+    [ -f "${_lmod_init}" ] && source "${_lmod_init}"
+fi
+
+# ── Require WORK_DIR ──────────────────────────────────────────────────────────
+if [[ -z "${WORK_DIR:-}" ]]; then
+    echo "ERROR: set WORK_DIR to your nvme work root, e.g.:"
+    echo "  export WORK_DIR=/work/nvme/bdyk/\$USER"
+    echo "  bash delta_env_setup.sh"
+    exit 1
+fi
+
 # ── Parse optional overrides ──────────────────────────────────────────────────
-VE_HOME="${VE_HOME:-/u/${USER}/ve}"
-DDSIM_DIR="${DDSIM_DIR:-/scratch/bblj/${USER}/DeepDriveSim}"
-BASE_DIR="${BASE_DIR:-/scratch/bblj/${USER}}"
+VE_HOME="${VE_HOME:-${WORK_DIR}/ve}"
+DDSIM_DIR="${DDSIM_DIR:-${WORK_DIR}/DeepDriveSim}"
+BASE_DIR="${BASE_DIR:-${WORK_DIR}}"
+BASE_PY_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --ve-home)   VE_HOME="$2";   shift 2 ;;
-        --ddsim-dir) DDSIM_DIR="$2"; shift 2 ;;
-        --base-dir)  BASE_DIR="$2";  shift 2 ;;
+        --ve-home)   VE_HOME="$2";          shift 2 ;;
+        --ddsim-dir) DDSIM_DIR="$2";        shift 2 ;;
+        --base-dir)  BASE_DIR="$2";         shift 2 ;;
+        --python)    BASE_PY_OVERRIDE="$2"; shift 2 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
 
-WORK_DIR="${DDSIM_DIR}/workflows/ddmd_workflow"
+WF_DIR="${DDSIM_DIR}/workflows/ddmd_workflow"
 ASYNCFLOW_DIR="${BASE_DIR}/radical.asyncflow"
 RHAPSODY_DIR="${BASE_DIR}/rhapsody"
 
 echo "================================================================="
+echo "  WORK_DIR      = ${WORK_DIR}"
 echo "  VE_HOME       = ${VE_HOME}"
 echo "  DDSIM_DIR     = ${DDSIM_DIR}"
 echo "  BASE_DIR      = ${BASE_DIR}"
-echo "  WORK_DIR      = ${WORK_DIR}"
+echo "  WF_DIR        = ${WF_DIR}"
 echo "  ASYNCFLOW_DIR = ${ASYNCFLOW_DIR}"
 echo "  RHAPSODY_DIR  = ${RHAPSODY_DIR}"
 echo "================================================================="
 
-# ── 0. Ensure 'module' is available (needed when run as bash script.sh) ───────
-if ! command -v module &>/dev/null; then
-    source /usr/share/lmod/lmod/init/bash 2>/dev/null || true
-fi
-
-# ── Helper: find Python 3.11, loading cray-python/3.11.7 if needed ───────────
-# On Delta, 'module load cray-python/3.11.7' exposes 'python3.11'.
-_find_python311() {
-    for candidate in python3.11 python3 python; do
-        local p
-        p=$(command -v "${candidate}" 2>/dev/null) || continue
-        local ver
-        ver=$("${p}" -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>/dev/null) || continue
-        [ "${ver}" = "3.11" ] && echo "${p}" && return 0
-    done
-    return 1
-}
-
-BASE_PY=$(_find_python311 || true)
-if [ -z "${BASE_PY}" ]; then
-    echo "python3.11 not in PATH — loading cray-python/3.11.7 module..."
-    module load cray-python/3.11.7 2>/dev/null || true
-    BASE_PY=$(_find_python311 || true)
-fi
-if [ -z "${BASE_PY}" ]; then
-    echo "ERROR: no Python 3.11 interpreter found."
-    echo "       Try: module load cray-python/3.11.7"
-    exit 1
+# ── Find Python 3.11+ ─────────────────────────────────────────────────────────
+if [ -n "${BASE_PY_OVERRIDE}" ]; then
+    BASE_PY="${BASE_PY_OVERRIDE}"
+    echo "Using Python override: ${BASE_PY}"
+else
+    # On Delta, `module load python` gives the default Python 3.13+.
+    module load python 2>/dev/null || true
+    BASE_PY=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)
+    if [ -z "${BASE_PY}" ]; then
+        echo "ERROR: no Python found after 'module load python'."
+        echo "       Pass an explicit interpreter: --python /path/to/python3"
+        exit 1
+    fi
+    ver=$("${BASE_PY}" -c "import sys; v=sys.version_info; print(v.major*100+v.minor)")
+    if [ "${ver}" -lt 311 ]; then
+        echo "ERROR: ${BASE_PY} is Python ${ver} — need 3.11+."
+        echo "       Pass an explicit interpreter: --python /path/to/python3.11"
+        exit 1
+    fi
 fi
 echo "Using Python: ${BASE_PY} ($(${BASE_PY} --version))"
 
 # ── Helper: create a venv and bootstrap pip ───────────────────────────────────
 _make_venv() {
     local env_dir="$1"
-    local py="${env_dir}/bin/python3.11"
+    local py="${env_dir}/bin/python"
     local pip="${env_dir}/bin/pip"
 
     echo ""
     echo "── Creating venv: ${env_dir} ──"
     if [ ! -x "${py}" ]; then
         "${BASE_PY}" -m venv "${env_dir}"
-        # Ensure python3.11 symlink exists regardless of base interpreter name.
-        if [ ! -x "${py}" ]; then
-            ln -sf "${BASE_PY}" "${py}"
-        fi
-        ln -sf "${py}" "${env_dir}/bin/python"  2>/dev/null || true
-        ln -sf "${py}" "${env_dir}/bin/python3" 2>/dev/null || true
     else
         echo "  venv already exists at ${env_dir}"
     fi
@@ -122,17 +126,15 @@ _check() {
 _install_asyncflow() {
     local pip="$1"
     echo "  Installing radical.asyncflow (prototype/telemetry)..."
-    "${pip}" install -q -e "${ASYNCFLOW_DIR}[telemetry]"
+    "${pip}" install -q -e "${ASYNCFLOW_DIR}"
 }
 
 # ── Helper: install rhapsody from the feature/telemetry branch ───────────────
 # Must be installed in two passes: .[dragon] first, then .[telemetry].
 _install_rhapsody() {
     local pip="$1"
-    echo "  Installing rhapsody [dragon] (feature/telemetry)..."
-    "${pip}" install -q -e "${RHAPSODY_DIR}[dragon]"
-    echo "  Installing rhapsody [telemetry] (feature/telemetry)..."
-    "${pip}" install -q -e "${RHAPSODY_DIR}[telemetry]"
+    echo "  Installing rhapsody [dragon,telemetry] (feature/telemetry)..."
+    "${pip}" install -q -e "${RHAPSODY_DIR}[dragon,telemetry]"
 }
 
 # ── Clone / update dependency repos ──────────────────────────────────────────
@@ -162,19 +164,18 @@ fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. ve/ddmd — main workflow env (DeepDriveSim + Dragon)
-#    Equivalent to conda env 'deepdrivesim'.
 #    Used by: workflow orchestrator (dragon), simulation cmd, model selection, agent.
 # ══════════════════════════════════════════════════════════════════════════════
 echo ""
 echo "══ Env 1/3: ve/ddmd ══════════════════════════════════════════════"
 ENV1="${VE_HOME}/ddmd"
-PY1="${ENV1}/bin/python3.11"
+PY1="${ENV1}/bin/python"
 PIP1="${ENV1}/bin/pip"
 
 _make_venv "${ENV1}"
 
 echo "  Installing workflow requirements..."
-"${PIP1}" install -q -r "${WORK_DIR}/requirements.txt"
+"${PIP1}" install -q -r "${WF_DIR}/requirements.txt"
 
 echo "  Installing DeepDriveSim [dev,dragon] (editable)..."
 "${PIP1}" install -q -e "${DDSIM_DIR}[dev,dragon]"
@@ -184,7 +185,7 @@ _install_rhapsody  "${PIP1}"
 
 echo "  Re-pinning critical versions..."
 "${PIP1}" install -q --force-reinstall \
-    "protobuf>=3.20.3,<5.0.0dev" \
+    "protobuf>=6.31.1" \
     "setuptools<71"
 
 echo ""
@@ -198,13 +199,12 @@ _check "${PY1}" "rhapsody"          "import rhapsody; print('ok')"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. ve/ddmd-openmm — OpenMM + MD-tools env
-#    Equivalent to conda env 'conda-openmm'.
 #    Used by: MD simulation stage (GPU-accelerated OpenMM).
 # ══════════════════════════════════════════════════════════════════════════════
 echo ""
 echo "══ Env 2/3: ve/ddmd-openmm ═══════════════════════════════════════"
 ENV2="${VE_HOME}/ddmd-openmm"
-PY2="${ENV2}/bin/python3.11"
+PY2="${ENV2}/bin/python"
 PIP2="${ENV2}/bin/pip"
 
 _make_venv "${ENV2}"
@@ -213,7 +213,7 @@ echo "  Installing OpenMM..."
 "${PIP2}" install -q "openmm>=8.0"
 
 echo "  Installing workflow requirements..."
-"${PIP2}" install -q -r "${WORK_DIR}/requirements.txt"
+"${PIP2}" install -q -r "${WF_DIR}/requirements.txt"
 
 echo "  Installing DeepDriveSim [dev,dragon] (editable)..."
 "${PIP2}" install -q -e "${DDSIM_DIR}[dev,dragon]"
@@ -225,7 +225,7 @@ if [ ! -d "${MDTOOLS_DIR}" ]; then
     git clone https://github.com/braceal/MD-tools.git "${MDTOOLS_DIR}"
 fi
 echo "  Applying MD-tools_fix patches..."
-cp -r "${WORK_DIR}/MD-tools_fix/." "${MDTOOLS_DIR}/"
+cp -r "${WF_DIR}/MD-tools_fix/." "${MDTOOLS_DIR}/"
 "${PIP2}" install -q -e "${MDTOOLS_DIR}"
 
 _install_asyncflow "${PIP2}"
@@ -233,7 +233,7 @@ _install_rhapsody  "${PIP2}"
 
 echo "  Re-pinning critical versions..."
 "${PIP2}" install -q --force-reinstall \
-    "protobuf>=3.20.3,<5.0.0dev" \
+    "protobuf>=6.31.1" \
     "setuptools<71"
 
 echo ""
@@ -246,26 +246,25 @@ _check "${PY2}" "rhapsody"          "import rhapsody; print('ok')"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 3. ve/ddmd-keras — TensorFlow / Keras env
-#    Equivalent to conda env 'conda-keras'.
 #    Used by: delta_tf_gpu_wrapper.sh (training) and delta_tf_cpu_wrapper.sh (agent/LOF).
-#    cuDNN 8.9.7.29 for A40 compatibility (same as Bridges2 V100 fix).
+#    cuDNN 8.9.7.29 for A40 compatibility.
 # ══════════════════════════════════════════════════════════════════════════════
 echo ""
 echo "══ Env 3/3: ve/ddmd-keras ════════════════════════════════════════"
 ENV3="${VE_HOME}/ddmd-keras"
-PY3="${ENV3}/bin/python3.11"
+PY3="${ENV3}/bin/python"
 PIP3="${ENV3}/bin/pip"
 
 _make_venv "${ENV3}"
 
-echo "  Installing TensorFlow 2.16.1 + Keras + cuDNN 8.9.7.29..."
+echo "  Installing TensorFlow + Keras..."
 "${PIP3}" install -q \
-    "tensorflow[and-cuda]==2.16.1" \
-    "nvidia-cudnn-cu12==8.9.7.29" \
-    "keras==3.0.5"
+    "tensorflow[and-cuda]>=2.20.0" \
+    "keras>=3.4.0" \
+    "protobuf>=6.31.1"
 
 echo "  Installing workflow requirements..."
-"${PIP3}" install -q -r "${WORK_DIR}/requirements.txt"
+"${PIP3}" install -q -r "${WF_DIR}/requirements.txt"
 
 echo "  Installing DeepDriveSim [dev,dragon] (editable)..."
 "${PIP3}" install -q -e "${DDSIM_DIR}[dev,dragon]"
@@ -275,7 +274,7 @@ _install_rhapsody  "${PIP3}"
 
 echo "  Re-pinning critical versions..."
 "${PIP3}" install -q --force-reinstall \
-    "protobuf>=3.20.3,<5.0.0dev" \
+    "protobuf>=6.31.1" \
     "setuptools<71"
 
 echo ""
@@ -298,4 +297,10 @@ echo "  ${VE_HOME}/ddmd-keras  — TensorFlow/Keras (training / inference)"
 echo ""
 echo "Activate the main env with:"
 echo "  source ${VE_HOME}/ddmd/bin/activate"
+echo ""
+echo "Run the workflow:"
+echo "  export WORK_DIR=${WORK_DIR}"
+echo "  export SBATCH_ACCOUNT=<project>-delta-gpu"
+echo "  cd ${WF_DIR}"
+echo "  sbatch delta_gpu_sbatch.sh"
 echo "================================================================="

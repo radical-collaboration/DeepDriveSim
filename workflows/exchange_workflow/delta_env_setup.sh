@@ -1,17 +1,19 @@
 #!/bin/bash
 # =============================================================================
-# MiniApps workflow environment setup — Delta HPC (NCSA)
+# Exchange workflow environment setup — Delta HPC (NCSA)
 #
 # Creates a Python 3.11+ venv and installs all dependencies.
-# Requires OpenMPI to be loaded before running (for mpi4py).
+#
+# radical.asyncflow and rhapsody are installed from specific development branches:
+#   AsyncFlow : https://github.com/radical-cybertools/radical.asyncflow  (prototype/telemetry)
+#   Rhapsody  : https://github.com/radical-cybertools/rhapsody            (feature/telemetry)
 #
 # Usage:
 #   export WORK_DIR=/work/nvme/bdyk/$USER
-#   module load openmpi
 #   bash delta_env_setup.sh [--env-dir DIR] [--ddsim-dir DIR] [--base-dir DIR] [--python PATH]
 #
 # Defaults:
-#   ENV_DIR   = $WORK_DIR/ve/miniapps
+#   ENV_DIR   = $WORK_DIR/ve/exchange
 #   DDSIM_DIR = $WORK_DIR/DeepDriveSim
 #   BASE_DIR  = $WORK_DIR
 #   python    = auto-detected via `module load python` (Delta default: 3.13+)
@@ -35,7 +37,7 @@ if [[ -z "${WORK_DIR:-}" ]]; then
 fi
 
 # ── Defaults / arg parsing ────────────────────────────────────────────────────
-ENV_DIR="${ENV_DIR:-${WORK_DIR}/ve/miniapps}"
+ENV_DIR="${ENV_DIR:-${WORK_DIR}/ve/exchange}"
 DDSIM_DIR="${DDSIM_DIR:-${WORK_DIR}/DeepDriveSim}"
 BASE_DIR="${BASE_DIR:-${WORK_DIR}}"
 BASE_PY_OVERRIDE=""
@@ -50,16 +52,19 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-WF_DIR="${DDSIM_DIR}/workflows/miniapps_workflow"
+WF_DIR="${DDSIM_DIR}/workflows/exchange_workflow"
+ASYNCFLOW_DIR="${BASE_DIR}/radical.asyncflow"
+RHAPSODY_DIR="${BASE_DIR}/rhapsody"
 PY="${ENV_DIR}/bin/python"
 PIP="${ENV_DIR}/bin/pip"
 
 echo "================================================================="
-echo "  WORK_DIR  = ${WORK_DIR}"
-echo "  ENV_DIR   = ${ENV_DIR}"
-echo "  DDSIM_DIR = ${DDSIM_DIR}"
-echo "  BASE_DIR  = ${BASE_DIR}"
-echo "  WF_DIR    = ${WF_DIR}"
+echo "  WORK_DIR      = ${WORK_DIR}"
+echo "  ENV_DIR       = ${ENV_DIR}"
+echo "  DDSIM_DIR     = ${DDSIM_DIR}"
+echo "  BASE_DIR      = ${BASE_DIR}"
+echo "  ASYNCFLOW_DIR = ${ASYNCFLOW_DIR}"
+echo "  RHAPSODY_DIR  = ${RHAPSODY_DIR}"
 echo "================================================================="
 
 # ── 1. Create venv ────────────────────────────────────────────────────────────
@@ -90,9 +95,9 @@ echo "Using Python: ${BASE_PY} ($(${BASE_PY} --version))"
 if [ ! -x "${PY}" ]; then
     "${BASE_PY}" -m venv "${ENV_DIR}"
 else
-    echo "venv already exists at ${ENV_DIR}"
+    echo "  venv already exists at ${ENV_DIR}"
 fi
-echo "Python: $("${PY}" --version)"
+echo "  Python: $("${PY}" --version)"
 
 # ── 2. Bootstrap pip ──────────────────────────────────────────────────────────
 echo ""
@@ -105,83 +110,53 @@ echo ""
 echo "── Step 3: Workflow requirements ──"
 "${PIP}" install -q -r "${WF_DIR}/requirements.txt"
 
-# ── 4. mpi4py (cray-mpich) ───────────────────────────────────────────────────
-# mpi4py 4.x uses runtime ABI discovery (_mpiabi.py): it searches for libmpi.so
-# in {venv}/lib/ before LD_LIBRARY_PATH.  Build from source so the extension
-# links against cray-mpich, then symlink libmpi.so into the venv lib dir so
-# the ABI loader finds it at import time without needing LD_LIBRARY_PATH set.
+# ── 4. DeepDriveSim + Dragon (editable) ──────────────────────────────────────
 echo ""
-echo "── Step 4: mpi4py (cray-mpich) ──"
-if ! command -v mpicc &>/dev/null; then
-    module load cray-mpich 2>/dev/null || true
-fi
-if command -v mpicc &>/dev/null; then
-    # Extract the -L library dir from mpicc -show
-    MPI_LIB_DIR=$(mpicc -show 2>/dev/null | grep -oP '(?<=-L)\S+' | head -1 || true)
-    echo "  mpicc: $(which mpicc)"
-    echo "  MPI_LIB_DIR: ${MPI_LIB_DIR}"
-
-    # Build from source so mpi4py links against the loaded cray-mpich.
-    MPICC="$(which mpicc)" "${PIP}" install -q --no-binary mpi4py mpi4py
-
-    # Symlink MPI shared libs into the venv lib dir.
-    if [ -n "${MPI_LIB_DIR}" ] && [ -d "${MPI_LIB_DIR}" ]; then
-        [ -f "${MPI_LIB_DIR}/libmpi.so" ] && \
-            ln -sf "${MPI_LIB_DIR}/libmpi.so" "${ENV_DIR}/lib/libmpi.so" 2>/dev/null || true
-        for suffix in 12 40; do
-            for src in "libmpi_gnu_112.so.${suffix}" "libmpi.so.${suffix}"; do
-                if [ -f "${MPI_LIB_DIR}/${src}" ]; then
-                    ln -sf "${MPI_LIB_DIR}/${src}" "${ENV_DIR}/lib/libmpi.so.${suffix}" 2>/dev/null || true
-                    break
-                fi
-            done
-        done
-        echo "  libmpi.so.* symlinked from ${MPI_LIB_DIR} into ${ENV_DIR}/lib/"
-
-        ACTIVATE="${ENV_DIR}/bin/activate"
-        if ! grep -q "cray-mpich" "${ACTIVATE}" 2>/dev/null; then
-            cat >> "${ACTIVATE}" << ACTIVATE_EOF
-
-# ── Added by delta_env_setup.sh: cray-mpich for mpi4py ───────────────────────
-export LD_LIBRARY_PATH="${ENV_DIR}/lib:${MPI_LIB_DIR}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
-ACTIVATE_EOF
-            echo "  LD_LIBRARY_PATH hook added to ${ACTIVATE}"
-        else
-            echo "  LD_LIBRARY_PATH hook already present in activate script"
-        fi
-    fi
-else
-    echo "WARNING: mpicc not found — load cray-mpich module first, then re-run."
-    echo "  module load cray-mpich && bash delta_env_setup.sh"
-fi
-
-# ── 5. workflow-mini-apps ─────────────────────────────────────────────────────
-echo ""
-echo "── Step 5: workflow-mini-apps ──"
-MINIAPPS_DIR="${BASE_DIR}/workflow-mini-apps"
-if [ ! -d "${MINIAPPS_DIR}" ]; then
-    echo "Cloning workflow-mini-apps → ${MINIAPPS_DIR}"
-    git clone -b Tutorial_reprod \
-        https://github.com/radical-cybertools/workflow-mini-apps.git \
-        "${MINIAPPS_DIR}"
-else
-    echo "workflow-mini-apps already cloned at ${MINIAPPS_DIR}"
-fi
-"${PIP}" install -q -e "${MINIAPPS_DIR}/wfMiniAPI"
-
-# ── 6. DeepDriveSim + Dragon (editable) ───────────────────────────────────────
-echo ""
-echo "── Step 6: DeepDriveSim [dragon] (editable) ──"
+echo "── Step 4: DeepDriveSim [dragon] (editable) ──"
 "${PIP}" install -q -e "${DDSIM_DIR}[dragon]"
 
-# ── 7. radical.asyncflow + rhapsody ──────────────────────────────────────────
+# ── 5. Clone / update radical.asyncflow (prototype/telemetry) ────────────────
 echo ""
-echo "── Step 7: radical.asyncflow + rhapsody ──"
-"${PIP}" install -q "radical.asyncflow>=0.3.0"
-"${PIP}" install -q "rhapsody-py[dragon,telemetry]>=0.3.0"
+echo "── Step 5: radical.asyncflow ──"
+if [ ! -d "${ASYNCFLOW_DIR}/.git" ]; then
+    echo "  Cloning radical.asyncflow (prototype/telemetry) → ${ASYNCFLOW_DIR}"
+    git clone -b prototype/telemetry \
+        https://github.com/radical-cybertools/radical.asyncflow.git \
+        "${ASYNCFLOW_DIR}"
+else
+    echo "  Updating radical.asyncflow..."
+    git -C "${ASYNCFLOW_DIR}" pull --ff-only
+fi
+"${PIP}" install -q -e "${ASYNCFLOW_DIR}"
+
+# ── 6. Clone / update rhapsody (feature/telemetry) ───────────────────────────
+echo ""
+echo "── Step 6: rhapsody ──"
+if [ ! -d "${RHAPSODY_DIR}/.git" ]; then
+    echo "  Cloning rhapsody (feature/telemetry) → ${RHAPSODY_DIR}"
+    git clone -b feature/telemetry \
+        https://github.com/radical-cybertools/rhapsody.git \
+        "${RHAPSODY_DIR}"
+else
+    echo "  Updating rhapsody..."
+    git -C "${RHAPSODY_DIR}" pull --ff-only
+fi
+"${PIP}" install -q -e "${RHAPSODY_DIR}[dragon,telemetry]"
+
+# ── 7. Re-pin critical versions ───────────────────────────────────────────────
+echo ""
+echo "── Step 7: Re-pinning critical versions ──"
+"${PIP}" install -q --force-reinstall \
+    "protobuf>=3.20.3,<5.0.0dev" \
+    "setuptools<71"
+
+# ── 8. OpenMM + matplotlib ───────────────────────────────────────────────────
+echo ""
+echo "── Step 8: OpenMM + matplotlib ──"
+"${PIP}" install -q "openmm>=8.0"
 "${PIP}" install -q matplotlib
 
-# ── 8. Verify ─────────────────────────────────────────────────────────────────
+# ── 9. Verify ────────────────────────────────────────────────────────────────
 echo ""
 echo "── Verifying installation ──"
 _check() {
@@ -194,12 +169,12 @@ _check() {
     fi
 }
 
-_check "cupy"              "${PY}" -c "import cupy; print(cupy.__version__)"
-_check "h5py"              "${PY}" -c "import h5py; print(h5py.__version__)"
-_check "mpi4py"            "${PY}" -c "import mpi4py; print(mpi4py.__version__)"
+_check "pyyaml"            "${PY}" -c "import yaml; print(yaml.__version__)"
+_check "openmm"            "${PY}" -c "import openmm; print(openmm.__version__)"
 _check "radical.asyncflow" "${PY}" -c "import radical.asyncflow; print('ok')"
 _check "rhapsody"          "${PY}" -c "import rhapsody; print('ok')"
-_check "dragonhpc"         "${PY}" -c "import dragon; print('ok')" 2>/dev/null || echo "  dragonhpc: install separately if needed"
+_check "matplotlib"        "${PY}" -c "import matplotlib; print(matplotlib.__version__)"
+_check "dragonhpc"         "${PY}" -c "import dragon; print('ok')"
 
 echo ""
 echo "================================================================="

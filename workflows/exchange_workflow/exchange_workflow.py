@@ -76,7 +76,6 @@ class ExchangeWorkflow(DDSimManager):
         self.workflow_id = "exchange_workflow"
 
         self.task_types = list(self.config["tasks"].keys())
-        self.task_descriptions = self._generate_task_description(self.config)
 
         # One long-running task per replica; no resource competition with exchange.
         self.sim_batch_size = float("inf")
@@ -136,7 +135,6 @@ class ExchangeWorkflow(DDSimManager):
         """Register md_simulation as a @flow.function_task (tracked by DDSimManager).
         The exchange loop is a plain async method — see _run_exchange_loop."""
 
-        task_desc_md = self.task_descriptions["MD"]
         replica_gro = self.replica_gro
         replica_temps = self.replica_temps
         top_file = self.top_file
@@ -149,7 +147,7 @@ class ExchangeWorkflow(DDSimManager):
         resume_events = self.resume_events
 
         @self.flow.function_task
-        async def md_simulation(task_description=task_desc_md, **kwargs):
+        async def md_simulation(**kwargs):
             """
             One long-running task per replica.
             Submitted ONCE; loops internally over all exchange cycles.
@@ -358,19 +356,6 @@ class ExchangeWorkflow(DDSimManager):
     # ──────────────────────────────────────────────────────────────────────────
     # Helpers
     # ──────────────────────────────────────────────────────────────────────────
-
-    def _generate_task_description(self, config: dict) -> dict:
-        task_description = {}
-        for t in self.task_types:
-            cfg = config["tasks"][t]
-            task_description[t] = {
-                "ranks": 1,
-                "cores_per_rank": cfg.get("cpu_reqs", 1),
-                "gpus_per_rank": cfg.get("gpu_reqs", 0),
-                "pre_exec": cfg.get("pre_exec", []),
-                "shell": True,
-            }
-        return task_description
 
     async def close(self):
         await self.flow.shutdown()
