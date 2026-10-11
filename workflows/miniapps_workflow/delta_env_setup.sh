@@ -178,7 +178,7 @@ echo "── Step 6: DeepDriveSim [dragon] (editable) ──"
 echo ""
 echo "── Step 7: radical.asyncflow + rhapsody ──"
 "${PIP}" install -q "radical.asyncflow>=0.3.0"
-"${PIP}" install -q "rhapsody-py[dragon,telemetry]>=0.3.0"
+"${PIP}" install -q "rhapsody-py[dragon,telemetry]"
 "${PIP}" install -q matplotlib
 
 # ── 8. Verify ─────────────────────────────────────────────────────────────────
