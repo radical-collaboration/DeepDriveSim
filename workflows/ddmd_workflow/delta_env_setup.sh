@@ -7,10 +7,9 @@
 #   2. ve/ddmd-openmm — OpenMM + MD-tools       (GPU-accelerated MD)
 #   3. ve/ddmd-keras  — TensorFlow/Keras         (training / inference)
 #
-# radical.asyncflow and rhapsody are installed from specific development branches:
+# radical.asyncflow is installed from a specific development branch:
 #   AsyncFlow : https://github.com/radical-cybertools/radical.asyncflow  (prototype/telemetry)
-#   Rhapsody  : https://github.com/radical-cybertools/rhapsody            (feature/telemetry)
-#               installed as: pip install .[dragon]  then  pip install .[telemetry]
+# rhapsody is installed from PyPI: rhapsody-py[dragon,telemetry]
 #
 # Usage:
 #   export WORK_DIR=/work/nvme/bdyk/$USER
@@ -58,7 +57,6 @@ done
 
 WF_DIR="${DDSIM_DIR}/workflows/ddmd_workflow"
 ASYNCFLOW_DIR="${BASE_DIR}/radical.asyncflow"
-RHAPSODY_DIR="${BASE_DIR}/rhapsody"
 
 echo "================================================================="
 echo "  WORK_DIR      = ${WORK_DIR}"
@@ -67,7 +65,6 @@ echo "  DDSIM_DIR     = ${DDSIM_DIR}"
 echo "  BASE_DIR      = ${BASE_DIR}"
 echo "  WF_DIR        = ${WF_DIR}"
 echo "  ASYNCFLOW_DIR = ${ASYNCFLOW_DIR}"
-echo "  RHAPSODY_DIR  = ${RHAPSODY_DIR}"
 echo "================================================================="
 
 # ── Find Python 3.11+ ─────────────────────────────────────────────────────────
@@ -129,12 +126,11 @@ _install_asyncflow() {
     "${pip}" install -q -e "${ASYNCFLOW_DIR}"
 }
 
-# ── Helper: install rhapsody from the feature/telemetry branch ───────────────
-# Must be installed in two passes: .[dragon] first, then .[telemetry].
+# ── Helper: install rhapsody from PyPI ───────────────────────────────────────
 _install_rhapsody() {
     local pip="$1"
-    echo "  Installing rhapsody [dragon,telemetry] (feature/telemetry)..."
-    "${pip}" install -q -e "${RHAPSODY_DIR}[dragon,telemetry]"
+    echo "  Installing rhapsody-py[dragon,telemetry]..."
+    "${pip}" install -q "rhapsody-py[dragon,telemetry]"
 }
 
 # ── Clone / update dependency repos ──────────────────────────────────────────
@@ -149,16 +145,6 @@ if [ ! -d "${ASYNCFLOW_DIR}/.git" ]; then
 else
     echo "  Updating radical.asyncflow..."
     git -C "${ASYNCFLOW_DIR}" pull --ff-only
-fi
-
-if [ ! -d "${RHAPSODY_DIR}/.git" ]; then
-    echo "  Cloning rhapsody (feature/telemetry) → ${RHAPSODY_DIR}"
-    git clone -b feature/telemetry \
-        https://github.com/radical-cybertools/rhapsody.git \
-        "${RHAPSODY_DIR}"
-else
-    echo "  Updating rhapsody..."
-    git -C "${RHAPSODY_DIR}" pull --ff-only
 fi
 
 

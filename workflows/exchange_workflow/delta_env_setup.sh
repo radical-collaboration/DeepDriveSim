@@ -4,9 +4,9 @@
 #
 # Creates a Python 3.11+ venv and installs all dependencies.
 #
-# radical.asyncflow and rhapsody are installed from specific development branches:
+# radical.asyncflow is installed from a specific development branch:
 #   AsyncFlow : https://github.com/radical-cybertools/radical.asyncflow  (prototype/telemetry)
-#   Rhapsody  : https://github.com/radical-cybertools/rhapsody            (feature/telemetry)
+# rhapsody is installed from PyPI: rhapsody-py[dragon,telemetry]
 #
 # Usage:
 #   export WORK_DIR=/work/nvme/bdyk/$USER
@@ -54,7 +54,6 @@ done
 
 WF_DIR="${DDSIM_DIR}/workflows/exchange_workflow"
 ASYNCFLOW_DIR="${BASE_DIR}/radical.asyncflow"
-RHAPSODY_DIR="${BASE_DIR}/rhapsody"
 PY="${ENV_DIR}/bin/python"
 PIP="${ENV_DIR}/bin/pip"
 
@@ -64,7 +63,6 @@ echo "  ENV_DIR       = ${ENV_DIR}"
 echo "  DDSIM_DIR     = ${DDSIM_DIR}"
 echo "  BASE_DIR      = ${BASE_DIR}"
 echo "  ASYNCFLOW_DIR = ${ASYNCFLOW_DIR}"
-echo "  RHAPSODY_DIR  = ${RHAPSODY_DIR}"
 echo "================================================================="
 
 # ── 1. Create venv ────────────────────────────────────────────────────────────
@@ -129,19 +127,10 @@ else
 fi
 "${PIP}" install -q -e "${ASYNCFLOW_DIR}"
 
-# ── 6. Clone / update rhapsody (feature/telemetry) ───────────────────────────
+# ── 6. rhapsody ──────────────────────────────────────────────────────────────
 echo ""
-echo "── Step 6: rhapsody ──"
-if [ ! -d "${RHAPSODY_DIR}/.git" ]; then
-    echo "  Cloning rhapsody (feature/telemetry) → ${RHAPSODY_DIR}"
-    git clone -b feature/telemetry \
-        https://github.com/radical-cybertools/rhapsody.git \
-        "${RHAPSODY_DIR}"
-else
-    echo "  Updating rhapsody..."
-    git -C "${RHAPSODY_DIR}" pull --ff-only
-fi
-"${PIP}" install -q -e "${RHAPSODY_DIR}[dragon,telemetry]"
+echo "── Step 6: rhapsody-py[dragon,telemetry] ──"
+"${PIP}" install -q "rhapsody-py[dragon,telemetry]"
 
 # ── 7. Re-pin critical versions ───────────────────────────────────────────────
 echo ""
