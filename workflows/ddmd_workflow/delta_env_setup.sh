@@ -7,9 +7,7 @@
 #   2. ve/ddmd-openmm — OpenMM + MD-tools       (GPU-accelerated MD)
 #   3. ve/ddmd-keras  — TensorFlow/Keras         (training / inference)
 #
-# radical.asyncflow is installed from a specific development branch:
-#   AsyncFlow : https://github.com/radical-cybertools/radical.asyncflow  (prototype/telemetry)
-# rhapsody is installed from PyPI: rhapsody-py[dragon,telemetry]
+# radical.asyncflow and rhapsody are both installed from PyPI: rhapsody-py[dragon,telemetry]
 #
 # Usage:
 #   export WORK_DIR=/work/nvme/bdyk/$USER
@@ -56,7 +54,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 WF_DIR="${DDSIM_DIR}/workflows/ddmd_workflow"
-ASYNCFLOW_DIR="${BASE_DIR}/radical.asyncflow"
 
 echo "================================================================="
 echo "  WORK_DIR      = ${WORK_DIR}"
@@ -64,7 +61,6 @@ echo "  VE_HOME       = ${VE_HOME}"
 echo "  DDSIM_DIR     = ${DDSIM_DIR}"
 echo "  BASE_DIR      = ${BASE_DIR}"
 echo "  WF_DIR        = ${WF_DIR}"
-echo "  ASYNCFLOW_DIR = ${ASYNCFLOW_DIR}"
 echo "================================================================="
 
 # ── Find Python 3.11+ ─────────────────────────────────────────────────────────
@@ -119,34 +115,12 @@ _check() {
     fi
 }
 
-# ── Helper: install radical.asyncflow from the prototype/telemetry branch ────
-_install_asyncflow() {
-    local pip="$1"
-    echo "  Installing radical.asyncflow (prototype/telemetry)..."
-    "${pip}" install -q -e "${ASYNCFLOW_DIR}"
-}
-
 # ── Helper: install rhapsody from PyPI ───────────────────────────────────────
 _install_rhapsody() {
     local pip="$1"
     echo "  Installing rhapsody-py[dragon,telemetry]..."
     "${pip}" install -q "rhapsody-py[dragon,telemetry]"
 }
-
-# ── Clone / update dependency repos ──────────────────────────────────────────
-echo ""
-echo "── Cloning/updating dependency repos ──"
-
-if [ ! -d "${ASYNCFLOW_DIR}/.git" ]; then
-    echo "  Cloning radical.asyncflow (prototype/telemetry) → ${ASYNCFLOW_DIR}"
-    git clone -b prototype/telemetry \
-        https://github.com/radical-cybertools/radical.asyncflow.git \
-        "${ASYNCFLOW_DIR}"
-else
-    echo "  Updating radical.asyncflow..."
-    git -C "${ASYNCFLOW_DIR}" pull --ff-only
-fi
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. ve/ddmd — main workflow env (DeepDriveSim + Dragon)
@@ -166,7 +140,6 @@ echo "  Installing workflow requirements..."
 echo "  Installing DeepDriveSim [dev,dragon] (editable)..."
 "${PIP1}" install -q -e "${DDSIM_DIR}[dev,dragon]"
 
-_install_asyncflow "${PIP1}"
 _install_rhapsody  "${PIP1}"
 
 echo "  Re-pinning critical versions..."
@@ -214,7 +187,6 @@ echo "  Applying MD-tools_fix patches..."
 cp -r "${WF_DIR}/MD-tools_fix/." "${MDTOOLS_DIR}/"
 "${PIP2}" install -q -e "${MDTOOLS_DIR}"
 
-_install_asyncflow "${PIP2}"
 _install_rhapsody  "${PIP2}"
 
 echo "  Re-pinning critical versions..."
@@ -255,7 +227,6 @@ echo "  Installing workflow requirements..."
 echo "  Installing DeepDriveSim [dev,dragon] (editable)..."
 "${PIP3}" install -q -e "${DDSIM_DIR}[dev,dragon]"
 
-_install_asyncflow "${PIP3}"
 _install_rhapsody  "${PIP3}"
 
 echo "  Re-pinning critical versions..."
