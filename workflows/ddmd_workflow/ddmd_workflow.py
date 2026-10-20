@@ -376,13 +376,7 @@ class DDMdWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def close(self):
-        # Temporary cleanup to test campaign manager and aid Disk quota exceeded.
-        exp_dir = self.experiment_config.experiment_directory
-        if exp_dir.exists():
-            shutil.rmtree(exp_dir, ignore_errors=True)
-            self.logger.info(
-                f"Removed experiment directory: {exp_dir}", component=self.name
-            )
+        pass
 
     # --------------------------------------------------------------------------
     async def stop(self):
