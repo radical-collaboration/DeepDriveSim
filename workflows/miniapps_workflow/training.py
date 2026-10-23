@@ -95,11 +95,12 @@ def main():
 
     device = args.device
 
-    # try:
-    #     import cupy
-    device = "gpu"
-    # except ImportError:
-    #     device = "cpu"
+    try:
+        import cupy
+        cupy.cuda.runtime.getDevice()
+        device = "gpu"
+    except Exception:
+        device = "cpu"
 
     wf.readNonMPI(args.read_size, root_path, args.instance_index)
     wf.sleep(args.preprocess_time)
