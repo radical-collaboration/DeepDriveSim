@@ -5,11 +5,28 @@ import os
 import random
 import shutil
 import sys
+import time
 from pathlib import Path
 
 import yaml
 
 from ddsim.ddsim_manager import DDSimManager
+
+try:
+    from rhapsody.telemetry import define_event
+    from rhapsody.telemetry.events import make_event
+
+    MiniAppsStageTimer = define_event(
+        "ddsim.MiniAppsStageTimer",
+        replica=str,
+        stage=str,
+        iteration=int,
+        duration_ms=float,
+    )
+except ImportError:
+    define_event = None
+    make_event = None
+    MiniAppsStageTimer = None
 
 
 class MiniAppsWorkflow(DDSimManager):
@@ -21,6 +38,7 @@ class MiniAppsWorkflow(DDSimManager):
         self.debug = config.get("debug", False)
 
         self.flow = kwargs.get("asyncflow", None)
+        self.telemetry = kwargs.get("telemetry", None)
         self._on_ready = kwargs.get("on_ready", None)
         self._data_ready_signaled = False
         self.miniapps_data_ready = int(cfg.get("miniapps_data_ready", 3))
@@ -68,6 +86,7 @@ class MiniAppsWorkflow(DDSimManager):
         self.sim_predictions = {}
 
         self.clean_unregistered_sims = bool(cfg.get("clean_unregistered_sims", False))
+        self.engine = cfg.get("engine", "concurrent")
 
         self.register_tasks()
         self.sim_inputs = {}
@@ -84,6 +103,21 @@ class MiniAppsWorkflow(DDSimManager):
         dir_path = Path(dir_name)
         if dir_path.exists() and dir_path.is_dir():
             shutil.rmtree(dir_path)
+
+    def _emit_stage(self, stage: str, duration_ms: float) -> None:
+        if self.telemetry is None or MiniAppsStageTimer is None:
+            return
+        self.telemetry.emit(
+            make_event(
+                MiniAppsStageTimer,
+                session_id=self.telemetry.session_id,
+                backend=self.engine,
+                replica=self.name,
+                stage=stage,
+                iteration=self.iteration,
+                duration_ms=duration_ms,
+            )
+        )
 
     # --------------------------------------------------------------------------
     def _sim_cmd(self, sim_idx: int) -> str:
@@ -126,9 +160,21 @@ class MiniAppsWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     def register_tasks(self):
+        # Build engine-specific task descriptions for R1 telemetry.
+        # Dragon uses process_templates (ranks + cores/gpus per rank);
+        # concurrent uses direct cpus/gpus keys.
+        if self.engine == "dragon":
+            _sim_desc   = {"process_templates": [[1]], "cores_per_rank": 1,                    "gpus_per_rank": 0}
+            _train_desc = {"process_templates": [[1]], "cores_per_rank": self.training_cores,  "gpus_per_rank": 1}
+            _pred_desc  = {"process_templates": [[1]], "cores_per_rank": 1,                    "gpus_per_rank": 0}
+        else:
+            _sim_desc   = {"cpus": 1}
+            _train_desc = {"cpus": self.training_cores, "gpus": 1}
+            _pred_desc  = {"cpus": 1}
+
         # ── Simulation ────────────────────────────────────────────────────────
         @self.flow.executable_task(capture_stdio=True)
-        async def simulation(**kwargs):
+        async def simulation(task_description=_sim_desc, **kwargs):
             sim_idx = kwargs["sim_inputs"]["sim_idx"]
             return self._sim_cmd(sim_idx)
 
@@ -136,14 +182,14 @@ class MiniAppsWorkflow(DDSimManager):
 
         # ── Training ──────────────────────────────────────────────────────────
         @self.flow.executable_task(capture_stdio=True)
-        async def training():
+        async def training(task_description=_train_desc):
             return self._training_cmd()
 
         self.training = training
 
         # ── Prediction ────────────────────────────────────────────────────────
         @self.flow.executable_task(capture_stdio=True)
-        async def prediction():
+        async def prediction(task_description=_pred_desc):
             return self._prediction_cmd()
 
         self.prediction = prediction
@@ -157,7 +203,9 @@ class MiniAppsWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def evaluate_simulations(self):
+        t = time.time()
         await self.prediction()
+        self._emit_stage("prediction", (time.time() - t) * 1000)
         with open(self.prediction_file) as f:
             predictions = yaml.safe_load(f)
         self.sim_predictions = predictions
@@ -232,7 +280,9 @@ class MiniAppsWorkflow(DDSimManager):
                 f"{len(self.registered_sims)} simulation(s) running....",
                 component=self.name,
             )
+        t = time.time()
         await self.training()
+        self._emit_stage("training", (time.time() - t) * 1000)
         if self.debug:
             self.logger.task_completed("Training Completed", component=self.name)
 

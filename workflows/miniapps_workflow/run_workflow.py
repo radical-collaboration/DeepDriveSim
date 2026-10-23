@@ -51,6 +51,7 @@ async def run_miniapps(config_file: str) -> None:
             config=cfg,
             name=f"min{i + 1}",
             asyncflow=asyncflow,
+            telemetry=telemetry,
             home_dir=str(home_dir),
         )
         for i in range(num_replicas)
