@@ -10,6 +10,11 @@ try:
 except Exception:
     wf = None
 
+try:  # optional: report data handoffs to the workflow (no-op when not launched by it)
+    from ddsim import task_telemetry
+except Exception:  # pragma: no cover - telemetry must never break the task
+    task_telemetry = None
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Exalearn_miniapp_simulation")
@@ -105,7 +110,11 @@ def main():
     # if os.path.exists(filename):
     #     os.remove(filename)
 
+    data_file = os.path.join(root_path, f"data_0_{args.instance_index}.h5")
+    t_write = time.time()
     wf.writeNonMPI(args.write_size, root_path, args.instance_index)
+    if task_telemetry:
+        task_telemetry.data_written(data_file, args.write_size, t_write)
 
     # # --- WAIT until file is fully written ---
     # while True:
@@ -114,7 +123,11 @@ def main():
     #     time.sleep(0.1)
 
     # --- READ ---
+    t_read = time.time()
+    version = task_telemetry.file_version(data_file) if task_telemetry else ""
     wf.readNonMPI(args.read_size, root_path, args.instance_index)
+    if task_telemetry:
+        task_telemetry.data_read(data_file, args.read_size, t_read, version)
     end_time = time.time()
     print(f"Total simulation time is {end_time - start_time} seconds")
 

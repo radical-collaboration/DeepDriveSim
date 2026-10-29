@@ -10,6 +10,11 @@ import time
 import wfMiniAPI.kernel as wf
 import yaml
 
+try:  # optional: report data handoffs to the workflow (no-op when not launched by it)
+    from ddsim import task_telemetry
+except Exception:  # pragma: no cover - telemetry must never break the task
+    task_telemetry = None
+
 default_device = "gpu" if importlib.util.find_spec("cupy") is not None else "cpu"
 
 
@@ -115,7 +120,12 @@ def main():
         device = "cpu"
 
     wf.sleep(args.preprocess_time)
+    data_file = os.path.join(root_path, f"data_0_{args.instance_index}.h5")
+    t_read = time.time()
+    version = task_telemetry.file_version(data_file) if task_telemetry else ""
     wf.readNonMPI(args.read_size, root_path, args.instance_index)
+    if task_telemetry:
+        task_telemetry.data_read(data_file, args.read_size, t_read, version)
     wf.generateRandomNumber(device, args.num_sample * args.dense_dim_in)
     wf.generateRandomNumber(device, args.dense_dim_in * args.dense_dim_out)
     if device == "gpu":
@@ -144,15 +154,23 @@ def main():
             )
             wf.axpy(device, args.dense_dim_in * args.dense_dim_out)
 
+    t_write = time.time()
     wf.writeNonMPI(args.write_size, root_path, args.instance_index)
+    # 3rd version of the shared data file; recorded for version/writer tracking
+    if task_telemetry:
+        task_telemetry.data_written(data_file, args.write_size, t_write)
 
     results = {}
     for filename in os.listdir(root_path):
         sim_tag = int(filename.split(".")[0].split("_")[-1])
         results[int(sim_tag)] = random.random()
 
+    t_write = time.time()
     with open(args.output_file, "w") as f:
         yaml.dump(results, f, sort_keys=True)
+    if task_telemetry:
+        out_bytes = os.path.getsize(args.output_file)
+        task_telemetry.data_written(args.output_file, out_bytes, t_write)
     end_time = time.time()
     print(f"Total running time is {end_time - start_time} seconds")
 
