@@ -165,19 +165,24 @@ class MiniAppsWorkflow(DDSimManager):
         # concurrent uses direct cpus/gpus keys.
         if self.engine == "dragon":
             _sim_desc = {
-                "process_templates": [[1]], "cores_per_rank": 1, "gpus_per_rank": 0,
+                "process_templates": [[1]],
+                "cores_per_rank": 1,
+                "gpus_per_rank": 0,
             }
             _train_desc = {
                 "process_templates": [[1]],
-                "cores_per_rank": self.training_cores, "gpus_per_rank": 1,
+                "cores_per_rank": self.training_cores,
+                "gpus_per_rank": 1,
             }
             _pred_desc = {
-                "process_templates": [[1]], "cores_per_rank": 1, "gpus_per_rank": 0,
+                "process_templates": [[1]],
+                "cores_per_rank": 1,
+                "gpus_per_rank": 0,
             }
         else:
-            _sim_desc   = {"cpus": 1}
+            _sim_desc = {"cpus": 1}
             _train_desc = {"cpus": self.training_cores, "gpus": 1}
-            _pred_desc  = {"cpus": 1}
+            _pred_desc = {"cpus": 1}
 
         # ── Simulation ────────────────────────────────────────────────────────
         @self.flow.executable_task(capture_stdio=True)

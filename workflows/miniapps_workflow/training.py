@@ -97,6 +97,7 @@ def main():
 
     try:
         import cupy
+
         cupy.cuda.runtime.getDevice()
         device = "gpu"
     except Exception:
