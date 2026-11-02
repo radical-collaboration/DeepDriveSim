@@ -115,6 +115,7 @@ class DummyWorkflow(DDSimManager):
 
         self.register_tasks()
         self.sim_inputs = {}
+        self._generate_sim_inputs(self.sim_inputs_dir, self.num_inputs)
 
     # --------------------------------------------------------------------------
     async def _signal_ready(self) -> None:

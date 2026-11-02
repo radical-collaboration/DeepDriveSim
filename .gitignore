@@ -35,6 +35,16 @@ workflows/*/slurm*
 workflows/*/*telemetry*
 workflows/*/*experiment*
 workflows/plots
+workflows/*/logs/
+logs/
+
+# asyncflow / rhapsody runtime artifacts
+asyncflow.session.*/
+telemetry-output/
+
+# Workflow run outputs
+workflows/exchange_workflow/ala_dipep_output/
+workflows/exchange_workflow/output/
 
 # OS
 .DS_Store
