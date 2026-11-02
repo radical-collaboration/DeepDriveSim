@@ -42,7 +42,7 @@ echo "Nodes    : ${SLURM_JOB_NUM_NODES:-?} (${SLURM_JOB_NODELIST:-?})"
 
 if [ -z "${WORK_DIR:-}" ]; then
     echo "ERROR: WORK_DIR is not set."
-    echo "       export WORK_DIR=/work/nvme/bdyk/\$USER && sbatch delta_gpu_sbatch.sh"
+    echo "       export WORK_DIR=<your_work_dir> && sbatch delta_gpu_sbatch.sh"
     exit 1
 fi
 
