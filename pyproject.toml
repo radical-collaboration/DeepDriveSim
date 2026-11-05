@@ -131,6 +131,10 @@ minversion = "6.0"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 timeout = 30
+filterwarnings = [
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20:rose.*",
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20:pydantic.*",
+]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",

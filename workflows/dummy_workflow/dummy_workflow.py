@@ -70,6 +70,7 @@ class DummyWorkflow(DDSimManager):
         self.max_sim_batch = int(_get("max_sim_batch", 4))
         self.training_cores = int(_get("training_cores", 1))
         self.sim_batch_size = self.max_sim_batch + self.training_cores
+        self.max_retries = int(_get("max_retries", 2))
         self.training_threshold = float(_get("training_threshold", 0.5))
         self.prediction_threshold = float(_get("prediction_threshold", 0.5))
         self.start_training_threshold = int(_get("start_training_threshold", 1))
@@ -377,7 +378,7 @@ class DummyWorkflow(DDSimManager):
     async def train_model(self):
         """Train until accuracy threshold is met or epochs are exhausted."""
         # Skip training if all sims are already done; no new data will appear.
-        if len(self.completed_sims) >= self.num_inputs:
+        if len(self.completed_sims) + len(self.failed_sims) >= self.num_inputs:
             return
 
         self.iteration += 1
@@ -429,7 +430,7 @@ class DummyWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def finalize_results(self):
-        n_done = len(self.completed_sims)
+        n_done = len(self.completed_sims) + len(self.failed_sims)
 
         # Signal dependents (e.g. inference) when enough data is produced.
         if not self._data_ready_signaled and n_done >= self.ddsim_data_ready:

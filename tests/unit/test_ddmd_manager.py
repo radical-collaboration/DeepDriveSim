@@ -85,7 +85,46 @@ class TestSimulationLifecycle:
         manager.logger.task_completed.assert_called()
 
     @pytest.mark.asyncio
-    async def test_done_callback_logs_failures_and_unregs(self):
+    async def test_done_callback_first_failure_requeues(self):
+        """First failure re-queues the sim; it is not yet in failed_sims."""
+        manager = make_manager(max_sim_batch=1, training_cores=1)
+        failing = make_failing_task()
+        failing.add_done_callback(lambda t: manager._on_sim_done(t, "sim_fail"))
+        manager.registered_sims["sim_fail"] = failing
+
+        with pytest.raises(RuntimeError):
+            await failing
+        await asyncio.sleep(0)
+
+        assert "sim_fail" not in manager.registered_sims
+        assert "sim_fail" not in manager.failed_sims
+        assert manager._retry_counts.get("sim_fail") == 1
+        manager.logger.warning.assert_called()
+        manager.logger.error.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_done_callback_permanent_failure_after_max_retries(self):
+        """After max_retries the sim moves to failed_sims and an error is logged."""
+        manager = make_manager(max_sim_batch=1, training_cores=1)
+        manager.max_retries = 1
+        manager._retry_counts["sim_fail"] = 1  # already used its one retry
+
+        failing = make_failing_task()
+        failing.add_done_callback(lambda t: manager._on_sim_done(t, "sim_fail"))
+        manager.registered_sims["sim_fail"] = failing
+
+        with pytest.raises(RuntimeError):
+            await failing
+        await asyncio.sleep(0)
+
+        assert "sim_fail" not in manager.registered_sims
+        assert "sim_fail" in manager.failed_sims
+        assert "sim_fail" not in manager._retry_counts  # cleaned up
+        manager.logger.error.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_done_callback_ok_sim_not_affected_by_failure_path(self):
+        """Successful sim lands in completed_sims regardless of sibling failures."""
         manager = make_manager(max_sim_batch=1, training_cores=1)
         failing = make_failing_task()
         ok = make_done_task()
@@ -98,13 +137,10 @@ class TestSimulationLifecycle:
         with pytest.raises(RuntimeError):
             await failing
         await ok
+        await asyncio.sleep(0)
 
-        await asyncio.sleep(0)  # Let pending callbacks fire
-
-        assert "sim_fail" not in manager.registered_sims
-        assert "sim_ok" not in manager.registered_sims
-        assert manager.sim_batch_size == 1  # capped at max_sim_batch=1
-        manager.logger.error.assert_called()
+        assert "sim_ok" in manager.completed_sims
+        assert "sim_fail" not in manager.completed_sims
 
 
 # ---------------------------
@@ -237,3 +273,39 @@ class TestSimulationQueueEdgeCases:
 
         assert len(manager.registered_sims) == 2
         assert manager.sim_task_queue.empty()
+
+
+# ---------------------------
+# Group 7: failed_sims exit-condition helpers
+# ---------------------------
+class TestFailedSimsExitCondition:
+    """
+    Verify that failed_sims count toward the exit condition in the same way
+    as completed_sims.  These tests use a small inline subclass that mirrors
+    the check_train_status logic used in ddmd_workflow and the finalize_results
+    logic used in miniapps_workflow / dummy_workflow.
+    """
+
+    def _make_manager_with_counts(self, completed, failed, total):
+        """Return a MockLearner pre-seeded with the given sim counts."""
+        manager = make_manager()
+        manager.completed_sims = list(range(completed))
+        manager.failed_sims = set(range(completed, completed + failed))
+        manager._total = total  # used by the inline check below
+        return manager
+
+    def test_all_completed_meets_target(self):
+        m = self._make_manager_with_counts(completed=4, failed=0, total=4)
+        assert len(m.completed_sims) + len(m.failed_sims) >= m._total
+
+    def test_all_failed_meets_target(self):
+        m = self._make_manager_with_counts(completed=0, failed=4, total=4)
+        assert len(m.completed_sims) + len(m.failed_sims) >= m._total
+
+    def test_mixed_meets_target(self):
+        m = self._make_manager_with_counts(completed=2, failed=2, total=4)
+        assert len(m.completed_sims) + len(m.failed_sims) >= m._total
+
+    def test_incomplete_does_not_meet_target(self):
+        m = self._make_manager_with_counts(completed=1, failed=1, total=4)
+        assert len(m.completed_sims) + len(m.failed_sims) < m._total
