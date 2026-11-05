@@ -93,6 +93,7 @@ class DDMdWorkflow(DDSimManager):
         self.num_sims = self.experiment_config.molecular_dynamics_stage.num_tasks
         self.max_sim_batch = self.num_sims
         self.sim_batch_size = self.max_sim_batch
+        self.max_retries = 2  # re-queue failed sims up to this many times
 
         self.free_resources_for_train = False
         self.call_cancel_simulations = False
@@ -218,7 +219,9 @@ class DDMdWorkflow(DDSimManager):
     # --------------------------------------------------------------------------
     async def check_train_status(self):
         """Return True when all simulations for the current iteration have finished."""
-        return len(self.completed_sims) == self.num_sims * (self.stage_idx + 1)
+        return len(self.completed_sims) + len(self.failed_sims) >= self.num_sims * (
+            self.stage_idx + 1
+        )
 
     # --------------------------------------------------------------------------
     def _init_update_config(self, cfg):
