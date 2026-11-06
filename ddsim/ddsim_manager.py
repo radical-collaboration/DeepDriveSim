@@ -64,6 +64,12 @@ class DDSimManager:
         # from a resource-freeing cancel (re-queue).
         self._perm_cancelled: set = set()
 
+        # Failed-sim tracking — sims that exhausted retries without succeeding.
+        # Counts toward the exit condition alongside completed_sims.
+        self.failed_sims: set = set()
+        self.max_retries: int = 2
+        self._retry_counts: dict = {}
+
         self.shutting_down = asyncio.Event()
         self.logger.separator(f"{self.name} MANAGER STARTING")
 
@@ -122,9 +128,23 @@ class DDSimManager:
         else:
             exc = task.exception()
             if exc:
-                self.logger.error(
-                    f"Sim {sim_idx} failed: {exc}", component=f"{self.name}-sim"
-                )
+                retries = self._retry_counts.get(sim_idx, 0)
+                if retries < self.max_retries:
+                    self._retry_counts[sim_idx] = retries + 1
+                    self.logger.warning(
+                        f"Sim {sim_idx} failed (attempt {retries + 1}"
+                        f"/{self.max_retries}, re-queuing): {exc}",
+                        component=f"{self.name}-sim",
+                    )
+                    asyncio.ensure_future(self.add_sims_to_queue([sim_idx]))
+                else:
+                    self._retry_counts.pop(sim_idx, None)
+                    self.failed_sims.add(sim_idx)
+                    self.logger.error(
+                        f"Sim {sim_idx} permanently failed after {self.max_retries}"
+                        f" retries: {exc}",
+                        component=f"{self.name}-sim",
+                    )
             else:
                 self.completed_sims.append(sim_idx)
                 if self.debug:
