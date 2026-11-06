@@ -91,6 +91,8 @@ class MiniAppsWorkflow(DDSimManager):
 
         self.flow = kwargs.get("asyncflow", None)
         self.telemetry = kwargs.get("telemetry", None)
+        # Optional ddsim.otel_export.OtelExporter: also post metrics to an OTLP endpoint
+        self.otel = kwargs.get("otel", None)
         self._on_ready = kwargs.get("on_ready", None)
         self._data_ready_signaled = False
         self.miniapps_data_ready = int(cfg.get("miniapps_data_ready", 3))
@@ -288,9 +290,8 @@ class MiniAppsWorkflow(DDSimManager):
         w = self._writes.get((read["object_id"], read["version"]))
         if w is None and not final:
             return False  # producer task not finished/reported yet; retry when it is
-        if (
-            w is None
-        ):  # no record of who wrote this version: insufficient evidence (spec 5.6)
+        if w is None:
+            # no record of who wrote this version: insufficient evidence (spec 5.6)
             status, producer, t_ready, latency, payload, producer_host = (
                 "unknown",
                 "",
@@ -315,9 +316,7 @@ class MiniAppsWorkflow(DDSimManager):
                 int(read.get("payload_bytes", 0)), int(w.get("payload_bytes", 0))
             )
             producer_host = w.get("host", "")
-        self._emit(
-            DataDelivery,
-            event_time=d["t_usable"],
+        fields = dict(
             replica=self.name,
             iteration=d["iteration"],
             exchange=d["exchange"],
@@ -335,6 +334,9 @@ class MiniAppsWorkflow(DDSimManager):
             producer_host=producer_host,
             consumer_host=d["consumer_host"],
         )
+        self._emit(DataDelivery, event_time=d["t_usable"], **fields)
+        if self.otel is not None:  # alternate pathway: OTLP endpoint
+            self.otel.record_delivery(**fields)
         return True
 
     def _resolve_pending(self, final=False) -> None:

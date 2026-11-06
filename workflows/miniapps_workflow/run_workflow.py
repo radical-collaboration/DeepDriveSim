@@ -6,6 +6,7 @@ from pathlib import Path
 
 from radical.asyncflow import WorkflowEngine
 
+from ddsim import otel_export
 from ddsim.util import load_config
 from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
 
@@ -33,15 +34,33 @@ async def run_miniapps(config_file: str) -> None:
         asyncflow = await WorkflowEngine.create(engine_concurrent)
 
     # --- Telemetry
+    # Alternate pathway: also post telemetry to an OTLP/HTTP endpoint when one is
+    # configured (config `otel_endpoint` or env OTEL_EXPORTER_OTLP_ENDPOINT).
+    otel_endpoint = otel_export.resolve_endpoint(cfg.get("otel_endpoint"))
+    otel_export.warn_if_unreachable(otel_endpoint)
     telemetry = None
+    otel = None
     if cfg.get("telemetry", True):
         telemetry_dir = cfg.get("telemetry_dir", "telemetry-output")
         if hasattr(asyncflow, "start_telemetry"):
             telemetry = await asyncflow.start_telemetry(
                 resource_poll_interval=0.05,
                 checkpoint_path=telemetry_dir,
+                **otel_export.rhapsody_hooks(otel_endpoint),
             )
             print("Started Asyncflow telemetry ...")
+            otel = otel_export.OtelExporter.create(
+                otel_endpoint,
+                service_name="ddsim.miniapps",
+                resource_attributes={
+                    "session_id": telemetry.session_id,
+                    "ddsim.backend": backend,
+                },
+            )
+            if otel is not None:
+                print(f"Posting telemetry to OTLP endpoint {otel_endpoint}")
+    elif otel_endpoint:
+        print("otel_endpoint is set but telemetry is disabled; nothing is exported")
 
     home_dir = Path(cfg.get("home_dir", Path.home() / "MiniApps")).expanduser()
 
@@ -52,6 +71,7 @@ async def run_miniapps(config_file: str) -> None:
             name=f"min{i + 1}",
             asyncflow=asyncflow,
             telemetry=telemetry,
+            otel=otel,
             home_dir=str(home_dir),
         )
         for i in range(num_replicas)
@@ -78,6 +98,8 @@ async def run_miniapps(config_file: str) -> None:
 
         if telemetry:
             await telemetry.stop()
+        if otel is not None:
+            otel.shutdown()
         await asyncflow.shutdown()
 
         pending = {t for t in asyncio.all_tasks() if t is not asyncio.current_task()}

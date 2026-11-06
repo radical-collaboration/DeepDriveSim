@@ -8,6 +8,10 @@ num_replicas: 4
 home_dir:      "MiniApps"
 telemetry:     true
 telemetry_dir: "telemetry-output"
+# Optional: also post telemetry to an OpenTelemetry collector (OTLP/HTTP base URL).
+# Falls back to the OTEL_EXPORTER_OTLP_ENDPOINT env var; unset = JSONL only.
+# Needs: pip install opentelemetry-exporter-otlp-proto-http
+# otel_endpoint: "http://localhost:4318"
 
 total_num_sim:            10
 max_sim_batch:            4
