@@ -1,0 +1,47 @@
+# =============================================================================
+# Agentic MiniApps workflow — the stock config.yaml plus the LLM steering step
+# =============================================================================
+# Everything above `agentic:` is identical to config.yaml, so the stock and the
+# agentic workflow run the same simulations, training and steering loop; only the
+# steering step (agent.py -> LLM prompt_task) differs.
+
+debug: false
+num_replicas: 4
+home_dir:      "MiniApps"
+telemetry:     true
+telemetry_dir: "telemetry-output"
+
+total_num_sim:            10
+max_sim_batch:            4
+training_cores:           1
+free_resources_for_train: true
+miniapps_data_ready:      4     # signal inference-ready after this many sims complete
+phase:                    0
+num_step:                 100
+num_epochs:               100
+clean_unregistered_sims:  false
+
+src_dir: ""   # leave empty to use the miniapps/ directory (default)
+executable: ""
+
+# --- LLM steering step -------------------------------------------------------
+agentic:
+  prompt_tokens:  2048     # prompt size (padded with numeric rows); content is representative only
+  stop_threshold: 0.5      # stop a running sim whose LLM score is below this
+  decision:       llm      # llm | coinflip (the stock rule, for comparisons)
+  seed:           0
+
+# --- LLM inference backend (explicit) -----------------------------------------
+llm:
+  backend: vllm                      # vllm = RHAPSODY DragonVllmInferenceBackend; standin = CPU-only test stand-in
+  model:   Qwen/Qwen2.5-0.5B-Instruct  # HF id or local path (open-weight placeholder)
+  hf_token: ""
+  tp_size: 1
+  num_nodes: 1
+  num_gpus: 1                        # GPUs per node for the inference service
+  max_tokens: 128                    # answer length; with ignore_eos the answer is always this long
+  ignore_eos: true
+  max_model_len: 8192
+  temperature: 0.5
+  gpu_memory_utilization: 0.85
+  http_service: false                # true also exposes the OpenAI-compatible HTTP endpoint
