@@ -47,7 +47,6 @@ import math
 import os
 import random
 import re
-import threading
 import time
 
 from radical.asyncflow import NoopExecutionBackend
@@ -169,48 +168,95 @@ def sample_answer(
 # ----------------------------------------------------------------------------------
 # Optional GPU load
 # ----------------------------------------------------------------------------------
+_GPU_LOAD_CHILD = r"""
+import sys, threading, time
+import torch
+
+busy, mem_frac, window = (float(x) for x in sys.argv[1:4])
+dev = torch.device("cuda", 0)
+free, total = torch.cuda.mem_get_info(dev)
+n_bytes = int(min(mem_frac * total, free * 0.95))
+reserved = torch.empty(n_bytes, dtype=torch.uint8, device=dev)
+a = torch.randn(4096, 4096, device=dev, dtype=torch.bfloat16)
+active, stop = threading.Event(), threading.Event()
+
+
+def control():
+    for line in sys.stdin:
+        cmd = line.strip()
+        if cmd == "1":
+            active.set()
+        elif cmd == "0":
+            active.clear()
+        elif cmd == "q":
+            break
+    stop.set()
+    active.set()
+
+
+threading.Thread(target=control, daemon=True).start()
+print("ready", n_bytes, flush=True)
+while not stop.is_set():
+    if not active.wait(timeout=0.05):
+        continue
+    t_end = time.perf_counter() + busy * window
+    while time.perf_counter() < t_end and not stop.is_set():
+        a @ a
+        torch.cuda.synchronize()
+    if busy < 1 and not stop.is_set():
+        time.sleep(window * (1 - busy))
+"""
+
+
 class _GpuLoad:
-    """Reserve GPU memory and keep the GPU busy a fraction of time while requested."""
+    """GPU load in a child process: reserve memory, busy a fraction of time when active.
+
+    A separate process (not a thread) so the duty cycle does not compete with the
+    workflow's event loop for the GIL. Controlled through stdin: ``1`` busy, ``0``
+    idle, ``q`` quit.
+    """
 
     def __init__(
         self, busy_fraction: float, memory_fraction: float, window_s: float = 0.1
     ):
-        import torch  # only for gpu: load
+        import subprocess
+        import sys
 
-        self.torch = torch
-        self.busy_fraction = busy_fraction
-        self.window_s = window_s
-        dev = torch.device("cuda", 0)
-        free, total = torch.cuda.mem_get_info(dev)
-        n_bytes = int(min(memory_fraction * total, free * 0.95))
-        self.reserved = torch.empty(n_bytes, dtype=torch.uint8, device=dev)
-        self.a = torch.randn(4096, 4096, device=dev, dtype=torch.bfloat16)
-        self.reserved_bytes = n_bytes
-        self.active = threading.Event()
-        self.stop = threading.Event()
-        self.thread = threading.Thread(
-            target=self._run, name="llm-emulator-gpu", daemon=True
+        self.proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                _GPU_LOAD_CHILD,
+                str(busy_fraction),
+                str(memory_fraction),
+                str(window_s),
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
         )
-        self.thread.start()
+        line = (
+            self.proc.stdout.readline().split()
+        )  # blocks until the memory is reserved
+        if not line or line[0] != "ready":
+            self.proc.kill()
+            raise RuntimeError("llm_emulator: GPU load process failed to start")
+        self.reserved_bytes = int(line[1])
+        self._on = False
 
-    def _run(self) -> None:
-        torch = self.torch
-        while not self.stop.is_set():
-            if not self.active.wait(timeout=0.05):
-                continue
-            t_end = time.perf_counter() + self.busy_fraction * self.window_s
-            while time.perf_counter() < t_end:
-                self.a @ self.a  # noqa: B018 - the kernel is the point
-                torch.cuda.synchronize()
-            rest = self.window_s * (1 - self.busy_fraction)
-            if rest > 0:
-                time.sleep(rest)
+    def set_active(self, on: bool) -> None:
+        if on != self._on and self.proc.poll() is None:
+            self.proc.stdin.write("1\n" if on else "0\n")
+            self.proc.stdin.flush()
+            self._on = on
 
     def close(self) -> None:
-        self.stop.set()
-        self.thread.join(timeout=2)
-        del self.reserved, self.a
-        self.torch.cuda.empty_cache()
+        try:
+            self.proc.stdin.write("q\n")
+            self.proc.stdin.flush()
+            self.proc.wait(timeout=5)
+        except Exception:
+            self.proc.kill()
 
 
 # ----------------------------------------------------------------------------------
@@ -264,14 +310,16 @@ class EmulatedLLMBackend(NoopExecutionBackend):
             startup_s = self.rng.choice(profile["service"]["startup_s"][startup])
         else:
             startup_s = float(startup)
+        # the sampled startup includes the GPU setup (as vLLM's includes its allocation)
+        self.startup_s = startup_s * startup_scale
+        t0 = time.monotonic()
         if self.gpu_mode == "load":
             self._gpu = await asyncio.to_thread(
                 _GpuLoad,
                 profile["gpu"]["busy_percent_inflight"] / 100,
                 self._gpu_memory_fraction,
             )
-        self.startup_s = startup_s * startup_scale
-        await asyncio.sleep(self.startup_s)
+        await asyncio.sleep(max(self.startup_s - (time.monotonic() - t0), 0.0))
         self._loop_task = asyncio.get_running_loop().create_task(self._batch_loop())
         return self
 
@@ -309,10 +357,7 @@ class EmulatedLLMBackend(NoopExecutionBackend):
 
     def _set_gpu_active(self) -> None:
         if self._gpu is not None:
-            if self._inflight > 0:
-                self._gpu.active.set()
-            else:
-                self._gpu.active.clear()
+            self._gpu.set_active(self._inflight > 0)
 
     async def shutdown(self) -> None:
         if self._loop_task is not None:

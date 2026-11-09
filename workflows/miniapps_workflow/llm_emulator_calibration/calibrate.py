@@ -393,22 +393,12 @@ def main() -> None:
     stops = sum(int(r["stop_decisions"]) for r in reqs)
     # stop decisions: per request, all running sims or none (checked here)
     running_rows = read("requests_running.csv")
-    with_running = [r for r in running_rows if int(r["running_tasks_at_submit"]) > 0]
-    stop_all = [
-        r
-        for r in with_running
-        if int(r["stop_decisions"]) == int(r["running_tasks_at_submit"])
-    ]
-    partial = [
-        r
-        for r in with_running
-        if 0 < int(r["stop_decisions"]) < int(r["running_tasks_at_submit"])
-    ]
-    over = [
-        r
-        for r in running_rows
-        if int(r["stop_decisions"]) > int(r["running_tasks_at_submit"])
-    ]
+    # sims still running when the answer arrives: the only ones a decision can stop
+    key = "running_sims_at_response"
+    with_running = [r for r in running_rows if int(r[key]) > 0]
+    stop_all = [r for r in with_running if int(r["stop_decisions"]) == int(r[key])]
+    partial = [r for r in with_running if 0 < int(r["stop_decisions"]) < int(r[key])]
+    over = [r for r in running_rows if int(r["stop_decisions"]) > int(r[key])]
     if partial or over:
         raise SystemExit(
             f"stop rule does not hold: partial {len(partial)}, over {len(over)}"
@@ -500,16 +490,22 @@ def main() -> None:
             "stop_all_running_prob": round(len(stop_all) / len(with_running), 5),
             "stop_score": 0.0,
             "stop_rule": "per request, the model stopped every running sim (score 0.0) or "
-            "none, never some (running = replica's running sim tasks at submit, from "
-            "telemetry). Emulated: with this probability every sim scores 0.0",
+            "none, never some (running = the replica's sim tasks still running when the "
+            "answer arrived, from telemetry). Emulated: with this probability every sim "
+            "scores 0.0",
             "stop_counts": {
+                "counted_at": key,
                 "requests_with_running_sims": len(with_running),
                 "stopped_all": len(stop_all),
                 "stopped_none": len(with_running) - len(stop_all),
                 "stopped_some": len(partial),
                 "by_iteration_stopped_all_of": by_it,
-                "running_sims_at_submit": sum(
-                    int(r["running_tasks_at_submit"]) for r in running_rows
+                "requests_with_running_sims_at_submit": sum(
+                    int(r["running_sims_at_submit"]) > 0 for r in running_rows
+                ),
+                "requests_whose_sims_all_ended_during_the_request": sum(
+                    int(r["running_sims_at_submit"]) > 0 and int(r[key]) == 0
+                    for r in running_rows
                 ),
                 "stop_decisions": stops,
             },

@@ -34,7 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CAL = os.path.dirname(HERE)
 sys.path.insert(0, CAL)
 import calibrate  # noqa: E402
-from extract_running import running_at_submit  # noqa: E402
+from extract_running import running_at_submit, task_roles  # noqa: E402
 
 DRAWS = 2000
 
@@ -135,9 +135,16 @@ def collect(runs_dir: str, label: str) -> dict[str, list[dict]]:
                     }
                 )
         # running sims of the replica at each request (as in extract_running.py)
-        n_running = running_at_submit(events, run_reqs)
+        roles = task_roles(run_dir)
+        n_running = running_at_submit(events, run_reqs, roles, "sim")
+        n_running_resp = running_at_submit(
+            events, [{**r, "t_submit": r["t_response"]} for r in run_reqs], roles, "sim"
+        )
+        n_training = running_at_submit(events, run_reqs, roles, "ml")
         for r in run_reqs:
-            r["running_tasks_at_submit"] = n_running[r["task_uid"]]
+            r["running_sims_at_submit"] = n_running[r["task_uid"]]
+            r["running_sims_at_response"] = n_running_resp[r["task_uid"]]
+            r["training_running_at_submit"] = n_training[r["task_uid"]]
         # GPU busy % by number of requests in flight (as in extract_gpu.py)
         starts, ends = sorted(a for a, _ in win), sorted(b for _, b in win)
         acc: dict[tuple, list[float]] = {}
@@ -225,11 +232,12 @@ def coverage(rs: list[dict]) -> list[float]:
 
 
 def stop_all(rs: list[dict]) -> list[float]:
-    """1 if a request with running sims stopped all of them, else 0."""
+    """1 if a request whose sims were still running at the answer stopped all of them."""
+    key = "running_sims_at_response"
     return [
-        1.0 if int(r["stop_decisions"]) == int(r["running_tasks_at_submit"]) else 0.0
+        1.0 if int(r["stop_decisions"]) == int(r[key]) else 0.0
         for r in rs
-        if int(r["running_tasks_at_submit"]) > 0
+        if int(r[key]) > 0
     ]
 
 

@@ -25,7 +25,7 @@
       "llm_requests.csv": "8268cd6263addc7d3156e8091528bbfcbde922ad1c3fa7149b9dbff52b81a596",
       "llm_service.csv": "d6162fa57be479867a4985461c7b0db82956bf14df47925efbddf4fb6754f61e",
       "node_usage.csv": "b2d670ae9365c7c872106157da18e75ddc0548dfb9f5348513dfd4bfcd50d6cc",
-      "requests_running.csv": "5c9b52e38111b12a66cbaa1b9f14de70cb6c2c29572c2040d10b85a90bdfd0eb",
+      "requests_running.csv": "00ac068a13a2dfb7744da87719e34d9f7aebda1ef370b32baea4db5c286bc0b4",
       "runs.csv": "200488b7e5ce44644e80f5a83f0bfaa67eb13833a6ea3c263239bfc123fd7ab5",
       "stages.csv": "8a8de83399abf762d8d45295f438b1409e0993264eb17c5eb01d4144d8df7e08"
     }
@@ -129,13 +129,14 @@
     ],
     "chars_per_token": 4,
     "unscored_prob": 0.00901,
-    "stop_all_running_prob": 0.44828,
+    "stop_all_running_prob": 0.56522,
     "stop_score": 0.0,
-    "stop_rule": "per request, the model stopped every running sim (score 0.0) or none, never some (running = replica's running sim tasks at submit, from telemetry). Emulated: with this probability every sim scores 0.0",
+    "stop_rule": "per request, the model stopped every running sim (score 0.0) or none, never some (running = the replica's sim tasks still running when the answer arrived, from telemetry). Emulated: with this probability every sim scores 0.0",
     "stop_counts": {
-      "requests_with_running_sims": 29,
+      "counted_at": "running_sims_at_response",
+      "requests_with_running_sims": 23,
       "stopped_all": 13,
-      "stopped_none": 16,
+      "stopped_none": 10,
       "stopped_some": 0,
       "by_iteration_stopped_all_of": {
         "1": [
@@ -144,10 +145,11 @@
         ],
         "2": [
           3,
-          9
+          3
         ]
       },
-      "running_sims_at_submit": 94,
+      "requests_with_running_sims_at_submit": 29,
+      "requests_whose_sims_all_ended_during_the_request": 6,
       "stop_decisions": 44
     },
     "counts": {
