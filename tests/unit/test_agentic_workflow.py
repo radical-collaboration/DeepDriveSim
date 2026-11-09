@@ -47,6 +47,9 @@ def test_prompt_size_and_content(workflow):
     target = workflow.prompt_tokens * CHARS_PER_TOKEN
     assert target <= len(prompt) < target + 200
     assert "sim_0:" in prompt and "sim_3:" in prompt
+    assert "reasoning" in prompt  # default answer_style
+    workflow.answer_style = "scores"
+    assert "reasoning" not in workflow._build_prompt(data)
 
 
 def test_parse_scores(workflow):

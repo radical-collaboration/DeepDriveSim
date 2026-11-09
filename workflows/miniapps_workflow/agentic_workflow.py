@@ -50,6 +50,7 @@ try:
         prompt_chars=int,
         prompt_tokens_est=int,
         response_chars=int,
+        response_tokens_est=int,
         sims_in_prompt=int,
         sims_scored=int,
         stop_decisions=int,
@@ -113,6 +114,11 @@ class AgenticMiniAppsWorkflow(MiniAppsWorkflow):
         self.prompt_tokens = int(agentic.get("prompt_tokens", 2048))
         self.stop_threshold = float(agentic.get("stop_threshold", 0.5))
         self.decision = agentic.get("decision", "llm")  # llm | coinflip (stock rule)
+        # reasoning: one short line of reasoning per sim, then its score (a typical
+        # agentic answer); scores: the scores only. The answer is capped by
+        # llm.max_tokens. Dragon passes the model's EOS ids as stop_token_ids, so
+        # llm.ignore_eos alone cannot force a fixed answer length.
+        self.answer_style = agentic.get("answer_style", "reasoning")
         self._rng = random.Random(int(agentic.get("seed", 0)))
         self._requests: list[dict] = []
         super().__init__(config=config, **kwargs)
@@ -152,11 +158,17 @@ class AgenticMiniAppsWorkflow(MiniAppsWorkflow):
         return [rows[k] for k in sorted(rows)]
 
     def _build_prompt(self, data: list[dict]) -> str:
+        if self.answer_style == "scores":
+            answer = "Answer with one line per simulation, exactly 'sim_<id>: <score>'."
+        else:
+            answer = (
+                "For each simulation, first write one short sentence of reasoning, "
+                "then a line exactly 'sim_<id>: <score>'."
+            )
         head = (
             "You steer an ensemble of molecular-dynamics simulations. For every "
             "simulation listed below, rate how promising it is to keep exploring, "
-            "from 0 (stop it) to 1 (keep it). Answer with one line per simulation, "
-            "exactly 'sim_<id>: <score>'.\n\nSimulations:\n"
+            f"from 0 (stop it) to 1 (keep it). {answer}\n\nSimulations:\n"
         )
         lines = [
             f"sim_{d['sim']}: state={d['state']} output_bytes={d['bytes']} "
@@ -224,6 +236,7 @@ class AgenticMiniAppsWorkflow(MiniAppsWorkflow):
             prompt_chars=len(prompt),
             prompt_tokens_est=len(prompt) // CHARS_PER_TOKEN,
             response_chars=len(response),
+            response_tokens_est=len(response) // CHARS_PER_TOKEN,
             sims_in_prompt=len(sims),
             sims_scored=len(scores),
             stop_decisions=stops,

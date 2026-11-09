@@ -29,6 +29,7 @@ agentic:
   prompt_tokens:  2048     # prompt size (padded with numeric rows); content is representative only
   stop_threshold: 0.5      # stop a running sim whose LLM score is below this
   decision:       llm      # llm | coinflip (the stock rule, for comparisons)
+  answer_style:   reasoning  # reasoning (a short reason per sim, then its score) | scores
   seed:           0
 
 # --- LLM inference backend (explicit) -----------------------------------------
@@ -39,8 +40,8 @@ llm:
   tp_size: 1
   num_nodes: 1
   num_gpus: 1                        # GPUs per node for the inference service
-  max_tokens: 128                    # answer length; with ignore_eos the answer is always this long
-  ignore_eos: true
+  max_tokens: 512                    # answer length cap
+  ignore_eos: true                   # note: Dragon also stops at the model's EOS ids (stop_token_ids)
   max_model_len: 8192
   temperature: 0.5
   gpu_memory_utilization: 0.85
