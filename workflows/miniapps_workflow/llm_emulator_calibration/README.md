@@ -127,9 +127,59 @@ Run 3 has the slowest batches. Without it, `s_per_token` comes out at 0.0090 ins
 
 ### 5. End to end: the agentic workflow with the emulator
 
-`validation/smc_emulator.sbatch` reruns the measured campaign's configuration with `llm.backend: emulated` (`validation/config_validation.yaml`, identical to the campaign's config apart from the `llm` section). `validation/validate_workflow.py` then compares each metric with the measured value's 95 % bootstrap interval. It resamples requests for request-level metrics and runs for run-level metrics; with 5 runs, the run-level intervals are wide.
+`validation/smc_emulator.sbatch` reruns the measured campaign's configuration with `llm.backend: emulated` (`validation/config_validation.yaml`, identical to the campaign's config apart from the `llm` section). `validation/validate_workflow.py` then compares each metric between the emulated and the measured runs, with a two-sample bootstrap (described below). It resamples requests for request-level metrics and runs for run-level metrics; with 5 runs per side, the run-level intervals are wide.
 
-_Results: see `validation/workflow_comparison.csv` (filled in below once the runs finish)._
+**Final runs:** 2026-11-09, SMC smc4, `--exclusive` (all 128 cores, as in the measured campaign), 5 runs per cell, all exit 0, no leftover processes, profile sha256 `1be59a10…`:
+- **CPU-only emulator** (`emulator_gpu: none`): Slurm job 10000, commit `aee077c`.
+- **GPU-load emulator** (`emulator_gpu: load`): job 10033, commit `0f44157`. Its only change since `aee077c` is the GPU-load child process; the profile is the same.
+
+**The test.** "Consistent" means the 95 % bootstrap interval of the difference (emulated − measured), resampling both sides, contains 0. `validation/workflow_comparison.csv` also has the measured value's own interval, and the stricter one-sample check (`in_measured_ci95`). That one-sample check ignores the emulated side's sampling noise: across repeated 5-run cells, run-level metrics fell in and out of it.
+
+| metric | stat | measured | CPU-only emulator | | GPU-load emulator | |
+|---|---|---|---|---|---|---|
+| EQ3 request latency (s) | mean | 5.311 | 5.94 (+11.8 %) | consistent | 5.126 (-3.5 %) | consistent |
+| EQ3 request latency (s) | p50 | 4.483 | 5.77 (+28.7 %) | consistent | 4.917 (+9.7 %) | consistent |
+| EQ3 request latency (s) | p95 | 12.996 | 13.468 (+3.6 %) | consistent | 8.925 (-31.3 %) | consistent |
+| answer size (est. tokens) | mean | 217.154 | 248.976 (+14.7 %) | consistent | 238.619 (+9.9 %) | consistent |
+| answer size (est. tokens) | p95 | 409.0 | 389.0 (-4.9 %) | consistent | 459.0 (+12.2 %) | consistent |
+| prompt size (est. tokens) | mean | 2059.385 | 2056.732 (-0.1 %) | **differs** | 2059.333 (-0.0 %) | consistent |
+| parse coverage | mean | 0.992 | 0.997 (+0.5 %) | consistent | 0.997 (+0.5 %) | consistent |
+| stop-all decision, requests with running sims | mean | 0.565 | 0.5 (-11.5 %) | consistent | 0.462 (-18.3 %) | consistent |
+| EQ4 completed | mean | 1.0 | 1.0 (+0.0 %) | consistent | 1.0 (+0.0 %) | consistent |
+| batch size (requests) | mean | 1.625 | 1.64 (+0.9 %) | consistent | 1.273 (-21.7 %) | consistent |
+| EQ1 requests per run | mean | 7.8 | 8.2 (+5.1 %) | consistent | 8.4 (+7.7 %) | consistent |
+| EC5 service startup, warm (s) | mean | 22.167 | 22.109 (-0.3 %) | consistent | 22.106 (-0.3 %) | consistent |
+| stage llm_steering (s) | mean | 5.311 | 5.94 (+11.8 %) | consistent | 5.126 (-3.5 %) | consistent |
+| stage training (s) | mean | 28.481 | 29.281 (+2.8 %) | consistent | 27.105 (-4.8 %) | **differs** |
+| workflow duration (s) | mean | 113.881 | 123.564 (+8.5 %) | consistent | 126.758 (+11.3 %) | consistent |
+| GPU busy % while requests in flight | mean | 46.089 | – |  | 42.204 (-8.4 %) | consistent |
+| GPU busy % with no request in flight | mean | 0.853 | – |  | 0.585 (-31.4 %) | consistent |
+| node CPU % (host load, not emulated) | mean | 63.016 | 62.733 (-0.5 %) | reported | 61.87 (-1.8 %) | reported |
+| node memory % (host load, not emulated) | mean | 4.009 | 3.9 (-2.7 %) | reported | 3.91 (-2.5 %) | reported |
+| GPU memory reserved, max (MiB) | mean | not measured (config 0.85 × 81,559 = 69,325) | – | | 69910.0 | reported |
+
+**What the table shows:**
+- **Everything the emulator produces is consistent with the measured service,** in both cells. That covers latency (mean, median, p95), answer size, parse coverage, stop decisions, completion, batching, requests per run, warm startup, steering stage, and GPU busy % (in flight and idle).
+- **Two rows differ, and neither is produced by the emulator:**
+  - prompt size in the CPU cell: 3 tokens (0.1 %) short. The workflow builds the prompt, and its padding is nearly deterministic, so its interval is tiny.
+  - training in the GPU-load cell: 4.8 % faster. Training doesn't use the LLM, and the CPU cell's training was consistent.
+- **Workflow duration is consistent but runs +8 to +11 % high,** with wide intervals. Five runs per side can't pin down a difference of that size.
+- **GPU busy % depends on CPU load in a subtle way.** Timed on the GPU itself, the emulator's duty cycle is 44–45 %, idle node or loaded (`validation/gpu_duty_check.sh`). But `nvidia-smi`/NVML utilization reads lower under host CPU load (37.7 % with 80 busy cores). In the workflow it read 42.2 %, against vLLM's 46.1 % under the same load. The emulator's target was **not** tuned to close that gap.
+- **Host CPU and memory** (not emulated) come out close to the measured run anyway (−1.8 % and −2.5 %): the simulations and training dominate the host load.
+
+### Validation history
+
+Each round below found a problem, which was then fixed. Runs from superseded rounds are kept as `superseded/` data.
+
+| round | change it tested | result | fix |
+|---|---|---|---|
+| 1 | stop: low score with p = 13.3 % | stopped 7× too few sims, so runs were longer | stop decision per request (all or none) |
+| 2 | stop: sims labelled `state=running` | stopped all running sims in only 7 % of requests | score every sim 0.0; prompt labels are unreliable |
+| 3 | q = 0.448 counted at submission; 32 cores; GPU load as a thread | stop rate low (decisions on sims that ended during the request); training and workflow slow (32 vs 128 cores); GPU 37 % (GIL) | count q at the answer (0.565); all 128 cores; GPU load as a child process |
+| 4 | the above, `--exclusive` | everything the emulator produces consistent; GPU 35.7 % under CPU load | GPU work as one CUDA-graph launch per window |
+| 5 (final) | the above | see the table | – |
+
+Not part of any round: on the CPU partition (smc11, 256 cores), the full config failed at task launch with Dragon `DRAGON_MEMORY_ERRNO` (`shm_open` of the pool manifest) in 3 of 3 attempts. The small config ran fine there; raising the open-files limit to 65,536 did not help. On smc2 the system OpenMPI library (`libmpi.so.40`) is missing, so the simulations fail. Both nodes were left out; the cause on smc11 is open.
 
 ## Reproduce
 
@@ -143,7 +193,7 @@ pytest tests/unit/test_llm_emulator.py
 
 # end to end, on SMC (pass --exclusive when a node is free)
 VENV=... DDSIM=<this checkout> OUT=runs LABEL=emulated_cpu REPS=5 GPU=none sbatch validation/smc_emulator.sbatch
-python validation/validate_workflow.py runs emulated_cpu emulated_gpuload
+python validation/validate_workflow.py runs emulated_cpu emulated_gpuload   # -> validation/workflow_comparison.csv, validation/emulated/
 ```
 
 ## Use
@@ -175,4 +225,6 @@ Each run's `ddsim.InferenceService` events record `llm_backend: emulated`, the p
 - **Small sample:** 39 requests, 24 batches, 5 runs. The tails, and the per-iteration stop rates, are uncertain.
 - **Token counts are estimates** (characters ÷ 4), both in the measurements and in the emulator.
 - **GPU memory is not measured.** The emulator reserves the configured fraction; vLLM's actual footprint may differ.
+- **GPU busy % is matched in GPU time, not in how NVML samples it.** vLLM's many short decoding steps and the emulator's one burst per window read differently under host CPU load (see "Checks", 5).
+- **Validated on one node type and one config:** SMC smc-ftc, `smc_default.yaml`, 5 runs per cell.
 - **Content is not emulated.** The stop rule reproduces how often the real model stopped running sims under this prompt, not why.

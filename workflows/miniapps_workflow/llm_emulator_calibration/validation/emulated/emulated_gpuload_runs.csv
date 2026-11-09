@@ -1,0 +1,6 @@
+label,rep,host,emulator_gpu,exit_code,wall_s,workflow_duration_s,mean_cpu_percent,mean_memory_percent,gpu_mem_used_max_mib,gpu_mem_total_mib
+emulated_gpuload,rep_01,smc4,load,0,161.25101113319397,134.23612332344055,61.634,3.9018,69910.0,81559.0
+emulated_gpuload,rep_02,smc4,load,0,160.32197260856628,132.9742820262909,62.106,3.9044,69910.0,81559.0
+emulated_gpuload,rep_03,smc4,load,0,128.8145625591278,101.9735255241394,62.551,3.9178,69910.0,81559.0
+emulated_gpuload,rep_04,smc4,load,0,157.1051013469696,130.04785227775574,61.435,3.905,69910.0,81559.0
+emulated_gpuload,rep_05,smc4,load,0,161.3657684326172,134.55753254890442,61.625,3.9218,69910.0,81559.0

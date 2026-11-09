@@ -1,0 +1,38 @@
+label,metric,stat,level,n_measured,n_emulated,measured,measured_ci95,emulated,emulated_vs_measured,difference_ci95,in_measured_ci95,verdict
+emulated_cpu,EQ3 request latency (s),mean,request,39,41,5.311,"[4.400, 6.260]",5.94,+11.8 %,"[-0.759, 2.111]",True,consistent
+emulated_cpu,EQ3 request latency (s),p50,request,39,41,4.483,"[3.800, 6.059]",5.77,+28.7 %,"[-1.081, 2.329]",True,consistent
+emulated_cpu,EQ3 request latency (s),p95,request,39,41,12.996,"[6.501, 14.358]",13.468,+3.6 %,"[-5.152, 7.720]",True,consistent
+emulated_cpu,answer size (est. tokens),mean,request,39,41,217.154,"[184.949, 252.205]",248.976,+14.7 %,"[-13.018, 78.149]",True,consistent
+emulated_cpu,answer size (est. tokens),p95,request,39,41,409.0,"[368.000, 517.000]",389.0,-4.9 %,"[-138.000, 83.000]",True,consistent
+emulated_cpu,prompt size (est. tokens),mean,request,39,41,2059.385,"[2057.949, 2060.897]",2056.732,-0.1 %,"[-4.790, -0.498]",False,differs
+emulated_cpu,parse coverage,mean,request,39,41,0.992,"[0.977, 1.000]",0.997,+0.5 %,"[-0.009, 0.023]",True,consistent
+emulated_cpu,"stop-all decision, requests with running sims",mean,request,23,24,0.565,"[0.348, 0.783]",0.5,-11.5 %,"[-0.359, 0.226]",True,consistent
+emulated_cpu,EQ4 completed,mean,request,39,41,1.0,"[1.000, 1.000]",1.0,+0.0 %,"[0.000, 0.000]",True,consistent
+emulated_cpu,batch size (requests),mean,batch,24,25,1.625,"[1.292, 1.958]",1.64,+0.9 %,"[-0.443, 0.472]",True,consistent
+emulated_cpu,EQ1 requests per run,mean,run,5,5,7.8,"[7.400, 8.000]",8.2,+5.1 %,"[-0.600, 1.400]",False,consistent
+emulated_cpu,"EC5 service startup, warm (s)",mean,run,4,5,22.167,"[22.001, 22.334]",22.109,-0.3 %,"[-0.257, 0.163]",True,consistent
+emulated_cpu,stage llm_steering (s),mean,stage,39,41,5.311,"[4.417, 6.294]",5.94,+11.8 %,"[-0.810, 2.052]",True,consistent
+emulated_cpu,stage training (s),mean,stage,39,41,28.481,"[27.880, 29.094]",29.281,+2.8 %,"[-0.304, 1.926]",False,consistent
+emulated_cpu,workflow duration (s),mean,run,5,5,113.881,"[108.146, 121.197]",123.564,+8.5 %,"[-4.130, 21.487]",False,consistent
+emulated_cpu,"node CPU % (host load, not emulated)",mean,run,5,5,63.016,"[62.748, 63.280]",62.733,-0.5 %,"[-1.206, 0.684]",False,reported
+emulated_cpu,"node memory % (host load, not emulated)",mean,run,5,5,4.009,"[4.003, 4.013]",3.9,-2.7 %,"[-0.121, -0.099]",False,reported
+emulated_gpuload,EQ3 request latency (s),mean,request,39,42,5.311,"[4.400, 6.260]",5.126,-3.5 %,"[-1.338, 1.019]",True,consistent
+emulated_gpuload,EQ3 request latency (s),p50,request,39,42,4.483,"[3.800, 6.059]",4.917,+9.7 %,"[-1.736, 2.030]",True,consistent
+emulated_gpuload,EQ3 request latency (s),p95,request,39,42,12.996,"[6.501, 14.358]",8.925,-31.3 %,"[-5.874, 2.130]",True,consistent
+emulated_gpuload,answer size (est. tokens),mean,request,39,42,217.154,"[185.615, 251.923]",238.619,+9.9 %,"[-24.888, 69.667]",True,consistent
+emulated_gpuload,answer size (est. tokens),p95,request,39,42,409.0,"[368.000, 517.000]",459.0,+12.2 %,"[-138.000, 128.000]",True,consistent
+emulated_gpuload,prompt size (est. tokens),mean,request,39,42,2059.385,"[2057.949, 2060.846]",2059.333,-0.0 %,"[-2.154, 1.993]",True,consistent
+emulated_gpuload,parse coverage,mean,request,39,42,0.992,"[0.977, 1.000]",0.997,+0.5 %,"[-0.009, 0.023]",True,consistent
+emulated_gpuload,"stop-all decision, requests with running sims",mean,request,23,26,0.565,"[0.348, 0.783]",0.462,-18.3 %,"[-0.383, 0.181]",True,consistent
+emulated_gpuload,EQ4 completed,mean,request,39,42,1.0,"[1.000, 1.000]",1.0,+0.0 %,"[0.000, 0.000]",True,consistent
+emulated_gpuload,batch size (requests),mean,batch,24,33,1.625,"[1.292, 1.958]",1.273,-21.7 %,"[-0.746, 0.023]",False,consistent
+emulated_gpuload,EQ1 requests per run,mean,run,5,5,7.8,"[7.400, 8.000]",8.4,+7.7 %,"[-1.200, 1.800]",False,consistent
+emulated_gpuload,"EC5 service startup, warm (s)",mean,run,4,5,22.167,"[22.001, 22.334]",22.106,-0.3 %,"[-0.262, 0.169]",True,consistent
+emulated_gpuload,stage llm_steering (s),mean,stage,39,42,5.311,"[4.356, 6.296]",5.126,-3.5 %,"[-1.382, 0.997]",True,consistent
+emulated_gpuload,stage training (s),mean,stage,39,42,28.481,"[27.877, 29.126]",27.105,-4.8 %,"[-2.197, -0.585]",False,differs
+emulated_gpuload,workflow duration (s),mean,run,5,5,113.881,"[108.146, 121.748]",126.758,+11.3 %,"[-1.626, 23.944]",False,consistent
+emulated_gpuload,GPU busy % while requests in flight,mean,run,5,5,46.089,"[39.134, 54.257]",42.204,-8.4 %,"[-12.148, 3.369]",True,consistent
+emulated_gpuload,GPU busy % with no request in flight,mean,run,5,5,0.853,"[0.563, 1.142]",0.585,-31.4 %,"[-0.633, 0.094]",True,consistent
+emulated_gpuload,"GPU memory reserved, max (MiB)",mean,run,0,5,,not measured; config 0.85 x total = 69325,69910.0,,,,reported
+emulated_gpuload,"node CPU % (host load, not emulated)",mean,run,5,5,63.016,"[62.753, 63.280]",61.87,-1.8 %,"[-1.581, -0.700]",False,reported
+emulated_gpuload,"node memory % (host load, not emulated)",mean,run,5,5,4.009,"[4.003, 4.013]",3.91,-2.5 %,"[-0.107, -0.090]",False,reported

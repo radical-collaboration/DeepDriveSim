@@ -198,13 +198,32 @@ def boot_ci(values: list[float], stat, rng: random.Random) -> tuple[float, float
     return pct(draws, 2.5), pct(draws, 97.5)
 
 
+def diff_ci(measured, emulated, stat, rng) -> tuple[float, float]:
+    """95 % bootstrap interval of stat(emulated) - stat(measured), resampling both."""
+    d = [
+        stat([rng.choice(emulated) for _ in emulated])
+        - stat([rng.choice(measured) for _ in measured])
+        for _ in range(DRAWS)
+    ]
+    return pct(d, 2.5), pct(d, 97.5)
+
+
 def compare(
     rows, metric, level, measured, emulated, stats=("mean",), judged=True, rng=None
 ):
+    """One row per statistic.
+
+    ``verdict`` (the test): the 95 % bootstrap interval of the difference
+    emulated - measured, resampling both sides, contains 0 -> "consistent", else
+    "differs". ``in_measured_ci95`` is the stricter one-sample view (is the emulated
+    value inside the measured value's interval?) that ignores the emulated side's own
+    sampling noise; it is kept for transparency.
+    """
     for s in stats:
         f = STATS[s]
         m, e = f(measured), f(emulated)
         lo, hi = boot_ci(measured, f, rng)
+        dlo, dhi = diff_ci(measured, emulated, f, rng)
         rows.append(
             {
                 "metric": metric,
@@ -216,7 +235,9 @@ def compare(
                 "measured_ci95": f"[{lo:.3f}, {hi:.3f}]",
                 "emulated": round(e, 3),
                 "emulated_vs_measured": f"{(e - m) / m * 100:+.1f} %" if m else "",
-                "verdict": ("inside" if lo <= e <= hi else "OUTSIDE")
+                "difference_ci95": f"[{dlo:.3f}, {dhi:.3f}]",
+                "in_measured_ci95": lo <= e <= hi,
+                "verdict": ("consistent" if dlo <= 0 <= dhi else "differs")
                 if judged
                 else "reported",
             }
@@ -510,8 +531,9 @@ def main() -> None:
         for r in res:
             r["label"] = label
             print(
-                f"  {r['metric']:<42} {r['stat']:<4} measured {str(r['measured']):>9} {r['measured_ci95']:<22} "
-                f"emulated {str(r['emulated']):>9} {r['emulated_vs_measured']:>9}  {r['verdict']}"
+                f"  {r['metric']:<42} {r['stat']:<4} measured {str(r['measured']):>9} "
+                f"emulated {str(r['emulated']):>9} {r['emulated_vs_measured']:>9}  "
+                f"diff CI {r.get('difference_ci95', ''):<22} {r['verdict']}"
             )
         rows.extend(res)
     write_csv(

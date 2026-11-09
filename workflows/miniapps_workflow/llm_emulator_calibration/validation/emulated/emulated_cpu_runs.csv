@@ -1,0 +1,6 @@
+label,rep,host,emulator_gpu,exit_code,wall_s,workflow_duration_s,mean_cpu_percent,mean_memory_percent
+emulated_cpu,rep_01,smc4,none,0,163.82022547721863,136.83654379844666,61.9,3.8805
+emulated_cpu,rep_02,smc4,none,0,145.81046772003174,118.50099635124207,63.489,3.9075
+emulated_cpu,rep_03,smc4,none,0,133.33479571342468,106.49117708206177,64.203,3.9134
+emulated_cpu,rep_04,smc4,none,0,144.5888466835022,117.61178660392761,62.642,3.9039
+emulated_cpu,rep_05,smc4,none,0,165.38931012153625,138.3780014514923,61.429,3.8936
