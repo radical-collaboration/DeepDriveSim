@@ -1,6 +1,6 @@
 series,n,mean_s,p50_s,p95_s,max_s,mean_s_ci95,p50_s_ci95,p95_s_ci95,mean_s_in_measured_ci95,p50_s_in_measured_ci95,p95_s_in_measured_ci95
 measured latency,39,5.311,4.483,12.996,14.358,"[4.419, 6.373]","[3.800, 6.059]","[6.501, 14.358]",,,
-"emulated latency, measured answer sizes",78000,5.074,4.238,11.588,28.855,,,,True,True,True
-"emulated latency, sampled answers",78000,5.225,4.626,10.643,28.003,,,,True,True,True
+"emulated latency, measured answer sizes",78000,5.081,4.228,11.617,27.954,,,,True,True,True
+"emulated latency, sampled answers",78000,5.24,4.631,10.595,25.995,,,,True,True,True
 measured answer tokens (as _s columns),39,217.154,182.0,409.0,517.0,,,,,,
-sampled answer tokens (as _s columns),78000,218.334,203.75,413.75,512.0,,,,,,
+sampled answer tokens (as _s columns),78000,218.287,203.75,413.75,512.0,,,,,,

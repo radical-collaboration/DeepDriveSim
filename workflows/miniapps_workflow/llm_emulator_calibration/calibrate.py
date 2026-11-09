@@ -150,6 +150,61 @@ def fit_batch_model(batches: list[dict]) -> dict:
     }
 
 
+def _lsq(rows: list[list[float]], y: list[float]) -> list[float]:
+    """Ordinary least squares by normal equations (Gaussian elimination)."""
+    k = len(rows[0])
+    mat = [[sum(r[i] * r[j] for r in rows) for j in range(k)] for i in range(k)]
+    v = [sum(r[i] * t for r, t in zip(rows, y)) for i in range(k)]
+    for i in range(k):
+        for j in range(i + 1, k):
+            f = mat[j][i] / mat[i][i]
+            mat[j] = [a - f * b for a, b in zip(mat[j], mat[i])]
+            v[j] -= f * v[i]
+    x = [0.0] * k
+    for i in reversed(range(k)):
+        x[i] = (v[i] - sum(mat[i][j] * x[j] for j in range(i + 1, k))) / mat[i][i]
+    return x
+
+
+def batch_model_alternatives(batches: list[dict]) -> list[dict]:
+    """Batch model time explained by other features (why the emulator uses max tokens only)."""
+    y = [b["model_time_s"] for b in batches]
+    ybar = st.fmean(y)
+    feats = {
+        "a + b x longest answer (unconstrained)": lambda b: [1, b["max_tokens"]],
+        "a + b x longest answer + c x longest x (size - 1)": lambda b: [
+            1,
+            b["max_tokens"],
+            b["max_tokens"] * (b["size"] - 1),
+        ],
+        "a + b x longest answer + c x size": lambda b: [1, b["max_tokens"], b["size"]],
+        "a + b x sum of answers": lambda b: [
+            1,
+            sum(int(r["response_tokens_est"]) for r in b["members"]),
+        ],
+    }
+    out = []
+    for name, f in feats.items():
+        xs = [f(b) for b in batches]
+        c = _lsq(xs, y)
+        pred = [sum(a * x for a, x in zip(c, row)) for row in xs]
+        out.append(
+            {
+                "model": name,
+                "coefficients": " ".join(f"{v:.5f}" for v in c),
+                "n_batches": len(y),
+                "r2": round(
+                    1
+                    - sum((a - p) ** 2 for a, p in zip(y, pred))
+                    / sum((a - ybar) ** 2 for a in y),
+                    3,
+                ),
+                "mae_s": round(st.fmean(abs(a - p) for a, p in zip(y, pred)), 3),
+            }
+        )
+    return out
+
+
 def replay(reqs: list[dict], decode: dict, rng=None, tokens=None) -> dict[int, float]:
     """Latency per request (keyed by id(row)), each run replayed through the batch loop."""
     pred = {}
@@ -262,6 +317,7 @@ def main() -> None:
 
     # --- batch model and alternatives (all data, noise-free) ---
     decode = fit_batch_model(batches)
+    write(os.path.join(OUT_DIR, "batch_models.csv"), batch_model_alternatives(batches))
     a_lin, b_lin = fit_per_request_linear(reqs)
     mean_lat = st.fmean(float(r["latency_ms"]) / 1000 for r in reqs)
     p_batch = replay(reqs, decode)
@@ -444,7 +500,8 @@ def main() -> None:
             "stop_all_running_prob": round(len(stop_all) / len(with_running), 5),
             "stop_score": 0.0,
             "stop_rule": "per request, the model stopped every running sim (score 0.0) or "
-            "none; never some. Measured: requests with running sims, stopped all / total",
+            "none, never some (running = replica's running sim tasks at submit, from "
+            "telemetry). Emulated: with this probability every sim scores 0.0",
             "stop_counts": {
                 "requests_with_running_sims": len(with_running),
                 "stopped_all": len(stop_all),

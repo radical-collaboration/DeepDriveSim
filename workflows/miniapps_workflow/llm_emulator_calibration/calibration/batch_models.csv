@@ -1,0 +1,5 @@
+model,coefficients,n_batches,r2,mae_s
+a + b x longest answer (unconstrained),-0.01174 0.01587,24,0.51,1.142
+a + b x longest answer + c x longest x (size - 1),0.26823 0.01354 0.00158,24,0.533,1.152
+a + b x longest answer + c x size,-0.69908 0.01444 0.63439,24,0.553,1.093
+a + b x sum of answers,1.23863 0.00730,24,0.535,1.28

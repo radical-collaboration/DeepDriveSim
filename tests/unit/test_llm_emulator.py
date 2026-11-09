@@ -93,33 +93,30 @@ def test_answer_format_and_size():
     )
 
 
-def test_stop_rule_all_running_or_none():
+def test_stop_rule_all_or_none():
     profile = emu.load_profile()
     q = profile["answer"]["stop_all_running_prob"]
     rng = random.Random(1)
+    # the workflow's prompt rows; labels are not used (see llm_emulator docstring)
     prompt = (
         "sim_0: state=finished output_bytes=10 age_s=1.0\n"
         "sim_1: state=running output_bytes=0 age_s=0.0\n"
         "sim_2: state=running output_bytes=0 age_s=0.0\n"
         "sim_3: state=finished output_bytes=10 age_s=1.0\n"
     )
-    stopped_all = 0
+    stopped = 0
     n = 2000
     for _ in range(n):
+        ans = emu.sample_answer(prompt, profile, 512, rng)
         scores = {
             int(k): float(v)
-            for k, v in re.findall(
-                r"^sim_(\d+): ([0-9.]+)$",
-                emu.sample_answer(prompt, profile, 512, rng),
-                re.M,
-            )
+            for k, v in re.findall(r"^sim_(\d+): ([0-9.]+)$", ans, re.M)
         }
         low = {k for k, v in scores.items() if v < 0.5}
-        assert low <= {1, 2}  # finished sims are never scored low
-        running_scored = {1, 2} & set(scores)
-        assert low in (set(), running_scored)  # all running or none, never some
-        stopped_all += bool(low)
-    assert stopped_all / n == pytest.approx(q, abs=0.04)
+        assert low in (set(), set(scores))  # every scored sim or none
+        assert all(scores[k] == profile["answer"]["stop_score"] for k in low)
+        stopped += bool(low)
+    assert stopped / n == pytest.approx(q, abs=0.04)
 
 
 def test_answer_without_sims():

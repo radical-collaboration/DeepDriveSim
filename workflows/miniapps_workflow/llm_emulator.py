@@ -25,9 +25,11 @@ Emulated properties:
   answers), capped at ``max_tokens``; one token = 4 characters, the estimate the
   workflow uses for ``response_tokens_est``. A sim is left unscored with the measured
   probability. Stop decisions follow the measured pattern: per request, with
-  probability ``stop_all_running_prob`` every sim the prompt lists as
-  ``state=running`` gets score 0.0 (the real model scored all its stops 0.0), otherwise
-  none does; finished sims (which cannot be stopped) score >= 0.5.
+  probability ``stop_all_running_prob`` every sim gets score 0.0 (so every running sim
+  is stopped; the real model scored all its stops 0.0 and always stopped all running
+  sims or none), otherwise every sim scores >= 0.5. The prompt's ``state=`` labels are
+  not used: the workflow labels a running sim ``finished`` when an output file with
+  its index exists, yet the real model still stopped all running sims.
 * **GPU load (optional, ``gpu: load``).** Reserves ``gpu_memory_utilization`` of GPU 0
   (from the vLLM config; *not* measured) and keeps the GPU busy for the measured
   fraction of time while at least one request is in flight (submitted, not answered).
@@ -125,7 +127,6 @@ def simulate_batches(
 # ----------------------------------------------------------------------------------
 # Answers
 # ----------------------------------------------------------------------------------
-_RUNNING_RE = re.compile(r"sim_(\d+):\s*state=running")  # the workflow's prompt rows
 _FILLER = (
     "The trajectory statistics suggest this simulation explores a region whose "
     "features differ from the ensemble average, so its value for further sampling "
@@ -144,14 +145,13 @@ def sample_answer(
     tokens = len(sims) * rng.choice(ans["tokens_per_sim"])
     tokens = int(min(round(tokens), max_tokens))
     budget = tokens * CHARS_PER_TOKEN
-    running = {int(k) for k in _RUNNING_RE.findall(prompt)}
-    stop_running = bool(running) and rng.random() < ans["stop_all_running_prob"]
+    stop_all = rng.random() < ans["stop_all_running_prob"]
     lines = []
     for k in sims:
         if rng.random() < ans["unscored_prob"]:
             lines.append(f"Simulation {k}: no clear signal.")
             continue
-        if stop_running and k in running:
+        if stop_all:
             score = ans["stop_score"]
         else:
             score = rng.uniform(0.5, 1.0)

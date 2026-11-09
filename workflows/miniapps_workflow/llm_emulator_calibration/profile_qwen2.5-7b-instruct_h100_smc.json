@@ -131,7 +131,7 @@
     "unscored_prob": 0.00901,
     "stop_all_running_prob": 0.44828,
     "stop_score": 0.0,
-    "stop_rule": "per request, the model stopped every running sim (score 0.0) or none; never some. Measured: requests with running sims, stopped all / total",
+    "stop_rule": "per request, the model stopped every running sim (score 0.0) or none, never some (running = replica's running sim tasks at submit, from telemetry). Emulated: with this probability every sim scores 0.0",
     "stop_counts": {
       "requests_with_running_sims": 29,
       "stopped_all": 13,
