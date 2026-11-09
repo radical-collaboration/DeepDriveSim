@@ -1,0 +1,6 @@
+label,rep,model,llm_backend,num_gpus,startup_ms,lifetime_ms
+agentic_vllm,rep_01,Qwen2.5-7B-Instruct,vllm,1,35074.35727119446,106758.45980644226
+agentic_vllm,rep_02,Qwen2.5-7B-Instruct,vllm,1,22386.356353759766,111023.91624450684
+agentic_vllm,rep_03,Qwen2.5-7B-Instruct,vllm,1,22020.103931427002,129031.55279159546
+agentic_vllm,rep_04,Qwen2.5-7B-Instruct,vllm,1,21980.95154762268,114693.98236274719
+agentic_vllm,rep_05,Qwen2.5-7B-Instruct,vllm,1,22281.03256225586,108268.31579208374

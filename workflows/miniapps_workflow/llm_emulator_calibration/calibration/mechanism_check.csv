@@ -1,0 +1,6 @@
+rep,requests,batches,batches_with_same_members,max_abs_error_s,mean_abs_error_s
+rep_01,7,5,5,0.0014,0.0004
+rep_02,8,6,6,0.0007,0.0001
+rep_03,8,4,4,0.0018,0.0005
+rep_04,8,3,3,0.0012,0.0003
+rep_05,8,6,6,0.0028,0.0004

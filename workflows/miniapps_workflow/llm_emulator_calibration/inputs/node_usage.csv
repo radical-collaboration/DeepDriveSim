@@ -1,0 +1,11 @@
+label,rep,samples,mean_cpu_percent,mean_memory_percent
+agentic_vllm,rep_01,1677,63.366,4.0116
+agentic_vllm,rep_02,1749,63.1,4.01
+agentic_vllm,rep_03,2117,62.562,3.9978
+agentic_vllm,rep_04,1836,63.283,4.0125
+agentic_vllm,rep_05,1733,62.771,4.0147
+stock,rep_01,2312,60.954,3.8599
+stock,rep_02,2638,60.426,3.8852
+stock,rep_03,2508,60.811,3.8903
+stock,rep_04,2496,60.592,3.8814
+stock,rep_05,2355,61.09,3.8899

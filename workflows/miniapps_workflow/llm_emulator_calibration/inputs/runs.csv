@@ -1,0 +1,11 @@
+label,rep,workflow,backend,host,exit_code,wall_s,workflow_duration_s,tasks_created,tasks_completed,tasks_failed,telemetry_complete,leftover_processes
+agentic_vllm,rep_01,agentic,dragon,smc4,0,146.52865290641785,106.69057011604309,54,48,0,True,0
+agentic_vllm,rep_02,agentic,dragon,smc4,0,138.0623607635498,110.95003032684326,56,50,0,True,0
+agentic_vllm,rep_03,agentic,dragon,smc4,0,155.7813584804535,128.94587588310242,56,44,0,True,0
+agentic_vllm,rep_04,agentic,dragon,smc4,0,141.50585007667542,114.61775779724121,56,50,0,True,0
+agentic_vllm,rep_05,agentic,dragon,smc4,0,135.38491010665894,108.19904732704163,56,42,0,True,0
+stock,rep_01,stock,dragon,smc4,0,148.81536769866943,140.6475865840912,56,56,0,True,0
+stock,rep_02,stock,dragon,smc4,0,165.7374610900879,157.66566514968872,56,56,0,True,0
+stock,rep_03,stock,dragon,smc4,0,156.84187269210815,152.04524517059326,56,56,0,True,0
+stock,rep_04,stock,dragon,smc4,0,156.62648797035217,151.82026648521423,56,56,0,True,0
+stock,rep_05,stock,dragon,smc4,0,148.05715322494507,143.14793229103088,56,56,0,True,0

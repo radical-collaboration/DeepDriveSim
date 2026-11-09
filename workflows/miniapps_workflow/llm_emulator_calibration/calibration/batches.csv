@@ -1,0 +1,25 @@
+rep,size,queued,max_tokens,start_rel_s,model_time_s,tasks
+rep_01,2,False,177,0.0,3.305,task.000041 task.000042
+rep_01,1,False,376,4.245,5.936,task.000045
+rep_01,1,False,261,14.671,3.494,task.000055
+rep_01,1,False,245,32.018,5.559,task.000056
+rep_01,2,True,173,38.077,2.199,task.000057 task.000058
+rep_02,2,False,264,0.0,3.986,task.000041 task.000042
+rep_02,1,True,106,4.486,1.581,task.000043
+rep_02,1,False,137,13.077,3.127,task.000055
+rep_02,2,False,108,31.831,2.217,task.000057 task.000058
+rep_02,1,True,183,34.548,1.574,task.000059
+rep_02,1,False,111,43.487,1.57,task.000060
+rep_03,3,False,368,0.0,6.003,task.000041 task.000042 task.000043
+rep_03,1,False,312,10.111,5.56,task.000053
+rep_03,3,False,409,36.892,12.498,task.000057 task.000058 task.000059
+rep_03,1,True,390,49.889,7.416,task.000060
+rep_04,4,False,187,0.0,4.942,task.000041 task.000042 task.000043 task.000044
+rep_04,1,False,316,35.855,2.557,task.000057
+rep_04,3,True,517,38.912,4.624,task.000058 task.000059 task.000060
+rep_05,2,False,237,0.0,3.302,task.000041 task.000042
+rep_05,1,False,312,5.889,3.437,task.000047
+rep_05,1,False,131,13.473,1.283,task.000051
+rep_05,2,False,182,33.132,2.041,task.000057 task.000058
+rep_05,1,False,208,38.15,2.213,task.000059
+rep_05,1,False,78,42.522,1.145,task.000060

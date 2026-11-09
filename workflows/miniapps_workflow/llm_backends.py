@@ -11,11 +11,16 @@ Backends (chosen explicitly in the config, ``llm.backend``):
 * ``standin``: :class:`StandInLLMBackend`, a CPU-only stand-in for testing the workflow
   without a GPU. It answers in the same format after a configurable delay; it is not an
   LLM and its numbers must not be reported as LLM measurements.
+* ``emulated``: :class:`llm_emulator.EmulatedLLMBackend`, an emulator calibrated on the
+  measured vLLM service (startup, RHAPSODY batching and batch times, answer size and
+  format, optional GPU load). See ``llm_emulator_calibration/README.md``. Its numbers
+  are emulated, not measured; runs record the profile and its sha256.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 import random
 import re
 import time
@@ -139,6 +144,32 @@ async def make_llm_backend(llm_cfg: dict, name: str = "llm"):
         )
         info["num_gpus"] = int(llm_cfg.get("num_gpus", 1))
         backend = await backend  # initialize(): load the model, start the pipeline
+    elif kind == "emulated":
+        import hashlib
+
+        from workflows.miniapps_workflow.llm_emulator import (
+            DEFAULT_PROFILE,
+            EmulatedLLMBackend,
+        )
+
+        profile_path = llm_cfg.get("emulator_profile") or DEFAULT_PROFILE
+        startup = llm_cfg.get("emulator_startup", "warm")  # warm | cold | seconds
+        gpu = llm_cfg.get("emulator_gpu", "none")  # none | load
+        backend = await EmulatedLLMBackend.create(
+            name=name,
+            profile_path=profile_path,
+            startup=startup if startup in ("warm", "cold") else float(startup),
+            startup_scale=float(llm_cfg.get("emulator_startup_scale", 1.0)),
+            max_tokens=int(llm_cfg.get("max_tokens", 512)),
+            seed=int(llm_cfg.get("emulator_seed", 0)),
+            gpu=gpu,
+            gpu_memory_utilization=llm_cfg.get("gpu_memory_utilization"),
+        )
+        with open(profile_path, "rb") as fh:
+            info["emulator_profile_sha256"] = hashlib.sha256(fh.read()).hexdigest()
+        info["emulator_profile"] = os.path.basename(profile_path)
+        info["model"] = "emulated:" + backend.profile["description"].split(",")[0]
+        info["num_gpus"] = 1 if gpu == "load" else 0
     elif kind == "standin":
         backend = StandInLLMBackend(
             name=name,
@@ -148,6 +179,8 @@ async def make_llm_backend(llm_cfg: dict, name: str = "llm"):
         )
         info["num_gpus"] = 0
     else:
-        raise ValueError(f"llm.backend={kind!r}: expected 'vllm' or 'standin'")
+        raise ValueError(
+            f"llm.backend={kind!r}: expected 'vllm', 'emulated' or 'standin'"
+        )
     info["t_ready"] = time.time()
     return backend, info

@@ -75,6 +75,8 @@ async def run_miniapps(config_file: str) -> None:
         t_init_start=llm_info["t_init_start"],
         t_ready=llm_info["t_ready"],
         startup_ms=(llm_info["t_ready"] - llm_info["t_init_start"]) * 1000,
+        emulator_profile=llm_info.get("emulator_profile", ""),
+        emulator_profile_sha256=llm_info.get("emulator_profile_sha256", ""),
     )
     emit(
         telemetry,

@@ -1,0 +1,29 @@
+{
+  "repository": "radical-experiments/ai-hpc-applications",
+  "branch": "exp2-agentic-deep-drive-sim",
+  "commit": "f85aa8b",
+  "folder": "exp2-agentic-deep-drive-sim/llm-service",
+  "campaign": "2026-11-08, SMC smc4 (--exclusive), configs/smc_default.yaml, 5 agentic (Slurm job 9629) + 5 stock (job 9612) runs",
+  "raw_runs": {
+    "path": "data/runs.tar.xz",
+    "sha256": "9b5dcd689dc7e69d047b2e93b9aac674346f8c5bb5238f742f3967e3442da702"
+  },
+  "inputs": {
+    "llm_requests.csv": "copy of derived/llm_requests.csv",
+    "llm_service.csv": "copy of derived/llm_service.csv",
+    "runs.csv": "copy of derived/runs.csv",
+    "stages.csv": "copy of derived/stages.csv",
+    "gpu_by_inflight.csv": "extract_gpu.py <runs from data/runs.tar.xz>",
+    "node_usage.csv": "extract_gpu.py <runs from data/runs.tar.xz>",
+    "requests_running.csv": "extract_running.py <runs from data/runs.tar.xz>"
+  },
+  "sha256": {
+    "gpu_by_inflight.csv": "06228447ad11eb0f1a9aeea1440a58655486e5258cea24a4af7fa99b3b1af33a",
+    "llm_requests.csv": "8268cd6263addc7d3156e8091528bbfcbde922ad1c3fa7149b9dbff52b81a596",
+    "llm_service.csv": "d6162fa57be479867a4985461c7b0db82956bf14df47925efbddf4fb6754f61e",
+    "node_usage.csv": "b2d670ae9365c7c872106157da18e75ddc0548dfb9f5348513dfd4bfcd50d6cc",
+    "requests_running.csv": "5c9b52e38111b12a66cbaa1b9f14de70cb6c2c29572c2040d10b85a90bdfd0eb",
+    "runs.csv": "200488b7e5ce44644e80f5a83f0bfaa67eb13833a6ea3c263239bfc123fd7ab5",
+    "stages.csv": "8a8de83399abf762d8d45295f438b1409e0993264eb17c5eb01d4144d8df7e08"
+  }
+}

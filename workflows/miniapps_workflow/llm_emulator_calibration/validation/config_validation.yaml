@@ -1,0 +1,34 @@
+# Validation config: exp2/llm-service configs/smc_default.yaml (the measured campaign's
+# config), with the llm section switched to the calibrated emulator. Everything else
+# (replicas, sims, steps, epochs, prompt size, agentic settings) is unchanged.
+debug: false
+num_replicas: 4
+home_dir: MiniApps
+telemetry: true
+telemetry_dir: telemetry-output
+total_num_sim: 10
+max_sim_batch: 4
+training_cores: 1
+free_resources_for_train: true
+miniapps_data_ready: 4
+phase: 0
+num_step: 100
+num_epochs: 100
+clean_unregistered_sims: false
+src_dir: ''
+executable: ''
+agentic:
+  prompt_tokens: 2048
+  stop_threshold: 0.5
+  decision: llm
+  answer_style: reasoning
+  seed: 0
+llm:
+  backend: emulated
+  emulator_profile: ''
+  emulator_startup: warm
+  emulator_startup_scale: 1.0
+  emulator_gpu: none
+  emulator_seed: 0
+  max_tokens: 512
+  gpu_memory_utilization: 0.85

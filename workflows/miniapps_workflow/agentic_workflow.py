@@ -77,6 +77,8 @@ try:
         t_stopped=float,
         startup_ms=float,  # EC5: init start -> ready to serve
         lifetime_ms=float,  # EC2: ready -> stopped (phase=stopped)
+        emulator_profile=str,  # llm.backend emulated: profile file ("" otherwise)
+        emulator_profile_sha256=str,
     )
 except ImportError:  # pragma: no cover
     LLMRequest = LLMRequestSummary = InferenceService = None

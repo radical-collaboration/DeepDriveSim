@@ -1,0 +1,202 @@
+{
+  "schema": "ddsim.llm_emulator.profile/1",
+  "description": "LLM service emulator profile: Qwen2.5-7B-Instruct, vLLM 0.19.1 via Dragon 0.15.0 Inference (RHAPSODY DragonVllmInferenceBackend), 1 H100 80GB, SMC node smc4",
+  "source": {
+    "repository": "radical-experiments/ai-hpc-applications",
+    "branch": "exp2-agentic-deep-drive-sim",
+    "commit": "f85aa8b",
+    "folder": "exp2-agentic-deep-drive-sim/llm-service",
+    "campaign": "2026-11-08, SMC smc4 (--exclusive), configs/smc_default.yaml, 5 agentic (Slurm job 9629) + 5 stock (job 9612) runs",
+    "raw_runs": {
+      "path": "data/runs.tar.xz",
+      "sha256": "9b5dcd689dc7e69d047b2e93b9aac674346f8c5bb5238f742f3967e3442da702"
+    },
+    "inputs": {
+      "llm_requests.csv": "copy of derived/llm_requests.csv",
+      "llm_service.csv": "copy of derived/llm_service.csv",
+      "runs.csv": "copy of derived/runs.csv",
+      "stages.csv": "copy of derived/stages.csv",
+      "gpu_by_inflight.csv": "extract_gpu.py <runs from data/runs.tar.xz>",
+      "node_usage.csv": "extract_gpu.py <runs from data/runs.tar.xz>",
+      "requests_running.csv": "extract_running.py <runs from data/runs.tar.xz>"
+    },
+    "sha256": {
+      "gpu_by_inflight.csv": "06228447ad11eb0f1a9aeea1440a58655486e5258cea24a4af7fa99b3b1af33a",
+      "llm_requests.csv": "8268cd6263addc7d3156e8091528bbfcbde922ad1c3fa7149b9dbff52b81a596",
+      "llm_service.csv": "d6162fa57be479867a4985461c7b0db82956bf14df47925efbddf4fb6754f61e",
+      "node_usage.csv": "b2d670ae9365c7c872106157da18e75ddc0548dfb9f5348513dfd4bfcd50d6cc",
+      "requests_running.csv": "5c9b52e38111b12a66cbaa1b9f14de70cb6c2c29572c2040d10b85a90bdfd0eb",
+      "runs.csv": "200488b7e5ce44644e80f5a83f0bfaa67eb13833a6ea3c263239bfc123fd7ab5",
+      "stages.csv": "8a8de83399abf762d8d45295f438b1409e0993264eb17c5eb01d4144d8df7e08"
+    }
+  },
+  "calibrated_range": {
+    "requests": 39,
+    "runs": 5,
+    "prompt_tokens_est": [
+      2051,
+      2066
+    ],
+    "response_tokens_est": [
+      78,
+      517
+    ],
+    "sims_in_prompt": [
+      6,
+      10
+    ],
+    "max_tokens": 512,
+    "concurrent_requests": [
+      1,
+      4
+    ],
+    "note": "outside this range the emulator extrapolates (e.g. prefill is a constant for ~2k-token prompts)"
+  },
+  "service": {
+    "startup_s": {
+      "warm": [
+        22.386,
+        22.02,
+        21.981,
+        22.281
+      ],
+      "cold": [
+        35.074
+      ]
+    },
+    "cold_rule": "startup > 1.3 x median startup (22.281 s)"
+  },
+  "decode": {
+    "batch_wait_s": 0.5,
+    "max_batch_size": 1024,
+    "overhead_s": 0.0,
+    "s_per_token": 0.0158292,
+    "sigma": 0.35509,
+    "meaning": "RHAPSODY batch loop: collect batch_wait_s, then the batch takes (overhead_s + s_per_token * longest answer tokens) * exp(N(-sigma^2/2, sigma))",
+    "batches_fitted": 24,
+    "fit_noise_free": {
+      "model": "RHAPSODY batch loop + batch time (emulator, noise-free)",
+      "params": "overhead=0.0 s_per_token=0.0158292 sigma=0.35509",
+      "n": 39,
+      "mae_s": 1.806,
+      "rmse_s": 2.806,
+      "bias_s": -0.257,
+      "r2": 0.181
+    },
+    "distribution_check": "calibration/distribution.csv"
+  },
+  "answer": {
+    "tokens_per_sim": [
+      7.8,
+      10.375,
+      10.8,
+      11.1,
+      12.7,
+      13.25,
+      13.429,
+      13.7,
+      13.875,
+      16.1,
+      16.375,
+      18.2,
+      18.3,
+      19.75,
+      20.5,
+      20.625,
+      21.375,
+      22.125,
+      22.125,
+      23.375,
+      24.5,
+      25.5,
+      26.1,
+      28.143,
+      28.833,
+      29.625,
+      29.625,
+      30.2,
+      33.0,
+      34.667,
+      35.111,
+      39.0,
+      39.0,
+      39.0,
+      40.9,
+      46.0,
+      47.0,
+      47.625,
+      51.7
+    ],
+    "chars_per_token": 4,
+    "unscored_prob": 0.00901,
+    "stop_all_running_prob": 0.44828,
+    "stop_score": 0.0,
+    "stop_rule": "per request, the model stopped every running sim (score 0.0) or none; never some. Measured: requests with running sims, stopped all / total",
+    "stop_counts": {
+      "requests_with_running_sims": 29,
+      "stopped_all": 13,
+      "stopped_none": 16,
+      "stopped_some": 0,
+      "by_iteration_stopped_all_of": {
+        "1": [
+          10,
+          20
+        ],
+        "2": [
+          3,
+          9
+        ]
+      },
+      "running_sims_at_submit": 94,
+      "stop_decisions": 44
+    },
+    "counts": {
+      "sims_in_prompt": 333,
+      "sims_scored": 330
+    }
+  },
+  "gpu": {
+    "gpu_id": 0,
+    "busy_percent_inflight": 43.69,
+    "busy_percent_idle": 0.84,
+    "busy_percent_by_inflight": {
+      "0": {
+        "mean_percent": 0.84,
+        "samples": 7263
+      },
+      "1": {
+        "mean_percent": 42.94,
+        "samples": 819
+      },
+      "2": {
+        "mean_percent": 43.39,
+        "samples": 380
+      },
+      "3": {
+        "mean_percent": 50.17,
+        "samples": 412
+      },
+      "4": {
+        "mean_percent": 35.55,
+        "samples": 238
+      }
+    },
+    "samples": {
+      "inflight": 1849,
+      "idle": 7263
+    },
+    "max_mean_percent_other_gpus": 0.0,
+    "memory_fraction_config": 0.85,
+    "memory_note": "GPU memory was not measured; vLLM reserves gpu_memory_utilization of the GPU"
+  },
+  "host_not_emulated": {
+    "node_cpu_percent": {
+      "agentic": 63.016,
+      "stock": 60.775
+    },
+    "node_memory_percent": {
+      "agentic": 4.009,
+      "stock": 3.881
+    }
+  }
+}

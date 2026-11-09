@@ -1,0 +1,4 @@
+model,params,n,mae_s,rmse_s,bias_s,r2
+constant (mean latency),5.311 s,39,2.228,3.101,0.0,0.0
+per request: a + b x own answer tokens (no batching),a=1.557 b=0.01728,39,1.88,2.529,0.0,0.335
+"RHAPSODY batch loop + batch time (emulator, noise-free)",overhead=0.0 s_per_token=0.0158292 sigma=0.35509,39,1.806,2.806,-0.257,0.181
