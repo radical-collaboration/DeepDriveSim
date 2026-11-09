@@ -195,16 +195,44 @@ def control():
 
 
 threading.Thread(target=control, daemon=True).start()
-print("ready", n_bytes, flush=True)
+# Time one kernel, then capture a window's busy share as one CUDA graph: each window
+# is a single launch, so the GPU stays busy even if this process is descheduled on a
+# loaded node (separate launches dropped to 38 % at a 43.7 % target with 80 cores busy).
+out = torch.empty_like(a)
+for _ in range(5):
+    torch.matmul(a, a, out=out)
+torch.cuda.synchronize()
+t = time.perf_counter()
+for _ in range(50):
+    torch.matmul(a, a, out=out)
+torch.cuda.synchronize()
+t_kernel = (time.perf_counter() - t) / 50
+n_per_window = max(int(round(busy * window / t_kernel)), 1)
+s = torch.cuda.Stream()
+s.wait_stream(torch.cuda.current_stream())
+with torch.cuda.stream(s):  # warm-up on a side stream, as CUDA graph capture requires
+    for _ in range(3):
+        torch.matmul(a, a, out=out)
+torch.cuda.current_stream().wait_stream(s)
+graph = torch.cuda.CUDAGraph()
+with torch.cuda.graph(graph):
+    for _ in range(n_per_window):
+        torch.matmul(a, a, out=out)
+torch.cuda.synchronize()
+print("ready", n_bytes, f"{t_kernel:.6f}", n_per_window, flush=True)
+next_window = time.perf_counter()
 while not stop.is_set():
     if not active.wait(timeout=0.05):
+        next_window = time.perf_counter()
         continue
-    t_end = time.perf_counter() + busy * window
-    while time.perf_counter() < t_end and not stop.is_set():
-        a @ a
-        torch.cuda.synchronize()
-    if busy < 1 and not stop.is_set():
-        time.sleep(window * (1 - busy))
+    graph.replay()
+    torch.cuda.synchronize()
+    next_window += window  # absolute schedule: no drift from sleep overshoot
+    now = time.perf_counter()
+    if next_window > now:
+        time.sleep(next_window - now)
+    else:
+        next_window = now
 """
 
 
@@ -242,6 +270,7 @@ class _GpuLoad:
             self.proc.kill()
             raise RuntimeError("llm_emulator: GPU load process failed to start")
         self.reserved_bytes = int(line[1])
+        self.kernel_s, self.kernels_per_window = float(line[2]), int(line[3])
         self._on = False
 
     def set_active(self, on: bool) -> None:

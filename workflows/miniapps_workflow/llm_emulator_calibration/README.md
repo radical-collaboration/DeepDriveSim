@@ -16,11 +16,11 @@ The emulator is `../llm_emulator.py`, and everything it needs to know is in one 
 |---|---|---|
 | **Batching and queueing** | The same loop as RHAPSODY's backend: wait for a request, collect more for 0.5 s, send all pending requests as one batch, return every answer when the batch is done. Requests that arrive meanwhile wait for the next batch. | RHAPSODY code (`max_batch_wait_ms=500`, `max_batch_size=1024`), confirmed on the data (see "Checks", 1) |
 | **Request latency (EQ3)** | Batch time = `overhead_s + s_per_token × longest answer in the batch (tokens)`, multiplied by `exp(N(−σ²/2, σ))` (mean 1) | 24 batches rebuilt from the measured requests |
-| **Service startup (EC5)** | A sleep drawn from the measured startups, `warm` (weights in page cache) or `cold` | `llm_service.csv` |
+| **Service startup (EC5)** | A wait drawn from the measured startups, `warm` (weights in page cache) or `cold`. With GPU load, its setup (~2 s) is part of the wait, as vLLM's GPU allocation is part of the real startup. | `llm_service.csv` |
 | **Answer size** | sims in the prompt × tokens-per-sim, drawn from the 39 measured answers; capped at `max_tokens`; 1 token = 4 characters, the same estimate the workflow uses | `llm_requests.csv` |
 | **Answer format** | Filler sentences plus `sim_<k>: <score>` per sim. A sim is left unscored with the measured probability. | `llm_requests.csv` |
 | **Stop decisions** | Per request, with probability `stop_all_running_prob`, every sim listed as `state=running` in the prompt gets score 0.0; otherwise none does. Finished sims score ≥ 0.5. | `requests_running.csv` (see below) |
-| **GPU load** (optional, `emulator_gpu: load`) | Reserves `gpu_memory_utilization` of the job's GPU, and keeps it busy for the measured fraction of time while a request is in flight | `gpu_by_inflight.csv` (busy %); memory from the vLLM **config** (0.85), since it wasn't measured |
+| **GPU load** (optional, `emulator_gpu: load`) | A child process reserves `gpu_memory_utilization` of the job's GPU, and keeps it busy (bf16 matmuls) for the measured fraction of each 100 ms while a request is in flight. On an SMC H100: 42.8 % busy at a 43.7 % target, 1.9 % idle. It's a process rather than a thread, so it doesn't compete with the workflow for the GIL; a thread version reached only 37 % and slowed the workflow. | `gpu_by_inflight.csv` (busy %); memory from the vLLM **config** (0.85), since it wasn't measured |
 | Not emulated | The model's reasoning (answers are filler); host CPU and memory of the vLLM processes. Measured: node CPU 63.0 % agentic vs 60.8 % stock, memory 4.01 % vs 3.88 % (`host_not_emulated` in the profile). | |
 
 ## How the profile was derived
@@ -43,16 +43,18 @@ The emulator is `../llm_emulator.py`, and everything it needs to know is in one 
 
 ### Stop decisions
 
-- **The workflow can only stop a running simulation;** a low score for a finished one has no effect.
-- **Count of running simulations:** `extract_running.py` counts, for every measured request, the running simulation tasks of the same replica at submission. Each AsyncFlow task carries its replica's `asyncflow.workflow_id`.
-- **The result:** all 29 requests that had running sims either **stopped all of them (13) or none (16), never some.** Every stop was scored 0.0 (`run.log`).
-- **How it's emulated:** an all-or-nothing decision per request, `stop_all_running_prob = 13/29 = 0.448`. When it fires, **every** sim gets 0.0, so every running one is stopped. By iteration the split was 10/20 at iteration 1 and 3/9 at iteration 2; that's too few to model separately.
+- **A decision can only stop sims still running when its answer arrives.** The workflow counts stops against its registered (running) sims at that moment.
+- **Count of running simulations:** `extract_running.py` counts, for every measured request, the replica's running **simulation** tasks, at submission and at the answer.
+  - Each AsyncFlow task carries its replica's `asyncflow.workflow_id`.
+  - Simulation and training tasks are told apart by the first line of their stdout (`Temp for Darshan, sim|ml, ...`).
+- **The result:** all 23 requests whose sims were still running at the answer either **stopped all of them (13) or none (10), never some.** Every stop was scored 0.0 (`run.log`).
+- **How it's emulated:** an all-or-nothing decision per request, `stop_all_running_prob = 13/23 = 0.565`. When it fires, **every** sim gets 0.0, so every running one is stopped.
+- **By iteration:** 10/20 at iteration 1 and 3/3 at iteration 2. The model may stop more readily later on, but 3 cases can't support a separate rule.
 - **Why every sim, and not just those the prompt calls running:** the workflow labels a sim `state=finished` whenever an output file with its index exists, even while that sim runs again. The real model saw those labels and still always stopped every running sim. Scoring all sims 0.0 reproduces that; the scores the real model gave finished sims aren't recorded, and don't affect the workflow.
-- **Two earlier versions failed the end-to-end check, which is how this was found.**
+- **Three earlier versions failed the end-to-end check, which is how this was found.** All their runs are superseded.
   1. "A score is low with probability 13.3 %, regardless of state" stopped 7× too few sims, and made runs longer (9.8 steering requests per run instead of 7.8).
   2. "Stop the sims labelled `state=running`" stopped all running sims in only 7 % of requests, because of the labelling above.
-
-  Both sets of runs are superseded.
+  3. "Stop all, with q counted against sims running **at submission**" (q = 13/29 = 0.448) stopped too rarely. In 6 of the 29 measured requests, all the sims finished during the request, so the decision could not stop anything; counting them diluted q.
 
 ### Everything else
 
