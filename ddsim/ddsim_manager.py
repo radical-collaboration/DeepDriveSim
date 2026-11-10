@@ -180,9 +180,12 @@ class DDSimManager:
         """
         Cancel up to training_cores running sims to free resources for training.
         Cancelled sims are re-queued by _on_sim_done and run again afterwards.
+        Only called after monitor_training_data() resolves so registered_sims
+        is populated; sim_batch_size is decremented only for sims actually cancelled.
         """
         n_to_cancel = getattr(self, "training_cores", 0)
         sims_to_cancel = list(self.registered_sims.keys())[:n_to_cancel]
+        cancelled = 0
         for sim_idx in sims_to_cancel:
             task = self.registered_sims.get(sim_idx)
             if task is not None and not task.done():
@@ -191,7 +194,8 @@ class DDSimManager:
                     component=f"{self.name}-sim",
                 )
                 task.cancel()
-        self.sim_batch_size -= n_to_cancel
+                cancelled += 1
+        self.sim_batch_size -= cancelled
         self.free_resources_for_train = False
 
     # --------------------------------------------------------------------------
@@ -260,11 +264,10 @@ class DDSimManager:
                         )
                     if workflow.retrain_model:
                         wm = workflow.monitor_training_data()
-
-                        if workflow.free_resources_for_train:
-                            await workflow._free_resources_for_training()
                     if wm:
                         await wm
+                        if workflow.free_resources_for_train:
+                            await workflow._free_resources_for_training()
                         if workflow.debug:
                             workflow.logger.task_started(
                                 "Model Training", component=f"{workflow.name}-train"
