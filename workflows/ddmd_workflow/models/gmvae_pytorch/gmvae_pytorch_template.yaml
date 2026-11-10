@@ -1,0 +1,43 @@
+# GMVAE PyTorch Model Configuration Template
+# Copy this file and modify as needed for your experiment
+
+# Experiment settings
+experiment_directory: "/path/to/experiment"
+output_path: "/path/to/output"
+model_tag: "gmvae_pytorch"
+stage_idx: 0
+node_local_path: "/tmp"
+
+# Data selection
+last_n_h5_files: 10
+k_random_old_h5_files: 0
+dataset_name: "contact_map"
+# Shape of contact maps stored in the HDF5 file
+initial_shape: [28, 28]
+# Cropped shape; flattened to final_shape[0] * final_shape[1] GMVAE inputs
+final_shape: [28, 28]
+
+# Training settings
+initial_epochs: 10
+epochs: 10
+batch_size: 32
+split_pct: 0.8
+shuffle: true
+
+# GMVAE Model hyperparameters
+k: 10
+n_z: 64
+qy_dims: [128, 64]
+qz_dims: [128, 64]
+px_dims: [64, 128]
+pz_dims: [64]
+r_nent: 1.0
+lr: 0.0001
+# Reconstruction likelihood: "bernoulli" for binary contact maps, "gaussian" for continuous data
+likelihood: "bernoulli"
+
+# Optional wandb logging
+wandb_project_name: null
+
+# Optional pretrained weights
+init_weights_path: null
