@@ -229,7 +229,7 @@ class TestCheckTrainStatus:
         creator = asyncio.create_task(_create_correct())
         with patch(
             "workflows.miniapps_workflow.miniapps_workflow.asyncio.sleep",
-            side_effect=lambda _: asyncio.sleep(0),
+            new_callable=AsyncMock,
         ):
             result = await asyncio.wait_for(
                 asyncio.gather(workflow.check_train_status(), creator),
@@ -279,3 +279,97 @@ class TestFinalizeResults:
         workflow.run_workflow = True
         await workflow.finalize_results()
         assert workflow.run_workflow is True
+
+    @pytest.mark.asyncio
+    async def test_stops_when_all_sims_failed(self, workflow):
+        workflow.failed_sims = set(range(workflow.total_num_sim))
+        await workflow.finalize_results()
+        assert workflow.run_workflow is False
+        assert workflow.shutting_down.is_set()
+
+    @pytest.mark.asyncio
+    async def test_stops_when_completed_plus_failed_reaches_total(self, workflow):
+        half = workflow.total_num_sim // 2
+        workflow.completed_sims = list(range(half))
+        workflow.failed_sims = set(range(half, workflow.total_num_sim))
+        await workflow.finalize_results()
+        assert workflow.run_workflow is False
+        assert workflow.shutting_down.is_set()
+
+
+# ---------------------------------------------------------------------------
+# Group 8: issue #19 — stop_simulation, evaluate_simulations, selection
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionAndSelection:
+    def test_stop_simulation_uses_prediction_threshold(self, workflow):
+        """Cancellation decision depends on the prediction value, not chance."""
+        workflow.prediction_threshold = 0.5
+        assert workflow.stop_simulation(prediction=0.0) is True
+        assert workflow.stop_simulation(prediction=0.49) is True
+        assert workflow.stop_simulation(prediction=0.5) is False
+        assert workflow.stop_simulation(prediction=1.0) is False
+
+    def test_stop_simulation_threshold_configurable(self, tmp_home):
+        """prediction_threshold is read from config."""
+        from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
+
+        wf = MiniAppsWorkflow(
+            config={"prediction_threshold": 0.3},
+            asyncflow=MagicMock(),
+            home_dir=str(tmp_home),
+        )
+        assert wf.prediction_threshold == 0.3
+        assert wf.stop_simulation(prediction=0.1) is True
+        assert wf.stop_simulation(prediction=0.5) is False
+
+    @pytest.mark.asyncio
+    async def test_evaluate_simulations_fallback_uses_sim_idx(self, workflow):
+        """When prediction file is absent, scores vary by sim index."""
+        workflow.registered_sims = {0: MagicMock(), 1: MagicMock(), 2: MagicMock()}
+        workflow.prediction = AsyncMock()
+
+        await workflow.evaluate_simulations()
+
+        assert set(workflow.sim_predictions.keys()) == {0, 1, 2}
+        scores = list(workflow.sim_predictions.values())
+        # Even indices → high score, odd → low score (see emulation rule)
+        assert len(set(scores)) > 1, "scores must vary across sims"
+
+    @pytest.mark.asyncio
+    async def test_evaluate_simulations_reads_file_when_present(
+        self, workflow, tmp_home
+    ):
+        """When prediction file exists, its values are used."""
+        import yaml
+
+        data = {0: 0.9, 1: 0.1}
+        workflow.prediction_file.write_text(yaml.dump(data))
+        workflow.prediction = AsyncMock()
+
+        await workflow.evaluate_simulations()
+
+        assert workflow.sim_predictions == data
+
+    @pytest.mark.asyncio
+    async def test_train_model_calls_selection(self, workflow):
+        """selection() is awaited in train_model so AI output seeds new sims."""
+        workflow.training = AsyncMock()
+        workflow.selection = AsyncMock(return_value="selection_cmd")
+        initial_total = workflow.total_num_sim
+
+        await workflow.train_model()
+
+        workflow.selection.assert_awaited_once()
+        assert workflow.total_num_sim > initial_total
+
+    @pytest.mark.asyncio
+    async def test_train_model_seeds_new_sims_into_queue(self, workflow):
+        """Sims added after selection appear in the task queue."""
+        workflow.training = AsyncMock()
+        workflow.selection = AsyncMock(return_value="selection_cmd")
+
+        await workflow.train_model()
+
+        assert not workflow.sim_task_queue.empty()

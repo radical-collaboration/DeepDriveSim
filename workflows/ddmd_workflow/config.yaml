@@ -12,3 +12,8 @@ experiment_dir: "DDMD"   # relative to campaign work dir; overrides experiment_d
 tf_gpu_wrapper: "${MD_HOME}/delta_tf_gpu_wrapper.sh"
 tf_cpu_wrapper: "${MD_HOME}/delta_tf_cpu_wrapper.sh"
 executable: ""
+
+# Cancellation settings (default: disabled; enable for active-learning runs)
+enable_cancellation:  false  # set true to enable early sim cancellation based on prediction
+prediction_threshold: 0.5    # cancel any sim with score below this threshold
+train_after_fraction: 1.0    # fraction of sims that must complete before training fires (1.0 = all)
