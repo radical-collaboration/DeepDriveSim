@@ -376,6 +376,10 @@ class DDMdWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def close(self):
+<<<<<<< Updated upstream
+=======
+        # Temporary cleanup to test campaign manager and aid Disk quota exceeded.
+>>>>>>> Stashed changes
         pass
 
     # --------------------------------------------------------------------------

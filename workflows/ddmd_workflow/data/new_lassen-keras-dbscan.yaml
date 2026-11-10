@@ -1,14 +1,14 @@
 title: BBA integration test
-resource: access.bridges2
-queue: GPU
+resource: delta.ncsa
+queue: CPU
 schema_: local
-project: cv19-a01
+project: bblj
 walltime_min: 290
-max_iteration: 3
+max_iteration: 1
 cpus_per_node: 40
-gpus_per_node: 8
+gpus_per_node: 0
 hardware_threads_per_cpu: 1
-experiment_directory: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/ddmd_test_experiments/bba-keras-dbscan-run-0
+experiment_directory: /projects/bblj/rrishabh/updated_DeepDriveSim/DeepDriveSim/workflows/ddmd_workflow/ddmd_test_experiments/bba-keras-dbscan-run-0
 node_local_path: /tmp
 molecular_dynamics_stage:
     pre_exec:
@@ -17,10 +17,10 @@ molecular_dynamics_stage:
     #- unset PYTHONPATH
     - module load anaconda3
     - source activate base
-    - conda activate /ocean/projects/dmr170002p/goliyad/conda_env/conda-openmm
-    executable: /ocean/projects/dmr170002p/goliyad/conda_env/conda-openmm/bin/python
+    - conda activate /projects/bblj/rrishabh/updated_DeepDriveSim/ve/ddmd-openmm
+    executable: /projects/bblj/rrishabh/updated_DeepDriveSim/ve/ddmd-openmm/bin/python
     arguments:
-    - /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/sim/openmm/run_openmm.py
+    - /projects/bblj/rrishabh/updated_DeepDriveSim/DeepDriveSim/workflows/ddmd_workflow/sim/openmm/run_openmm.py
     cpu_reqs:
         processes: 1
         process_type: null
@@ -30,8 +30,8 @@ molecular_dynamics_stage:
         processes: 1
         process_type: null
         threads_per_process: 1
-        thread_type: CUDA
-    num_tasks: 8
+        thread_type: null
+    num_tasks: 4
     task_config:
         experiment_directory: set_by_deepdrivemd
         stage_idx: 0
@@ -39,16 +39,16 @@ molecular_dynamics_stage:
         output_path: set_by_deepdrivemd
         node_local_path: set_by_deepdrivemd
         pdb_file: set_by_deepdrivemd
-        initial_pdb_dir: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/data/bba
+        initial_pdb_dir: /projects/bblj/rrishabh/updated_DeepDriveSim/DeepDriveSim/workflows/ddmd_workflow/data/bba
         solvent_type: implicit
         top_suffix: null
-        simulation_length_ns: 100.0
+        simulation_length_ns: 10.0
         report_interval_ps: 1.0
         dt_ps: 0.002
         temperature_kelvin: 310.0
         heat_bath_friction_coef: 1.0
         wrap: false
-        reference_pdb_file: /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/data/bba/1FME-folded.pdb
+        reference_pdb_file: /projects/bblj/rrishabh/updated_DeepDriveSim/DeepDriveSim/workflows/ddmd_workflow/data/bba/1FME-folded.pdb
         openmm_selection:
         - CA
         mda_selection: protein and name CA
@@ -96,12 +96,12 @@ machine_learning_stage:
     - export XLA_FLAGS="--xla_gpu_strict_conv_algorithm_picker=false --xla_gpu_cuda_data_dir=/opt/packages/cuda/v12.6.1"
     - module load anaconda3
     - source /opt/packages/anaconda3-2024.10-1/etc/profile.d/conda.sh
-    - conda activate /ocean/projects/dmr170002p/goliyad/conda_env/conda-keras
+    - conda activate /projects/bblj/rrishabh/updated_DeepDriveSim/ve/ddmd-keras
     - unset CUDA_VISIBLE_DEVICES
     - export OMP_NUM_THREADS=4
-    executable: /ocean/projects/dmr170002p/goliyad/conda_env/conda-keras/bin/python
+    executable: /projects/bblj/rrishabh/updated_DeepDriveSim/ve/ddmd-keras/bin/python
     arguments:
-    - /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/models/keras_cvae/train.py
+    - /projects/bblj/rrishabh/updated_DeepDriveSim/DeepDriveSim/workflows/ddmd_workflow/models/keras_cvae/train.py
     cpu_reqs:
         processes: 1
         process_type: MPI
@@ -111,7 +111,7 @@ machine_learning_stage:
         processes: 1
         process_type: null
         threads_per_process: 1
-        thread_type: CUDA
+        thread_type: null
     retrain_freq: 1
     task_config:
         experiment_directory: set_by_deepdrivemd
@@ -121,8 +121,8 @@ machine_learning_stage:
         node_local_path: set_by_deepdrivemd
         model_tag: set_by_deepdrivemd
         init_weights_path: null
-        last_n_h5_files: 8
-        k_random_old_h5_files: 8
+        last_n_h5_files: 4
+        k_random_old_h5_files: 4
         dataset_name: contact_map
         initial_shape:
         - 28
@@ -173,10 +173,10 @@ model_selection_stage:
     #- unset PYTHONPATH
     - module load anaconda3
     - source activate base
-    - conda activate /ocean/projects/dmr170002p/goliyad/conda_env/conda-keras
-    executable: /ocean/projects/dmr170002p/goliyad/conda_env/conda-keras/bin/python
+    - conda activate /projects/bblj/rrishabh/updated_DeepDriveSim/ve/ddmd-keras
+    executable: /projects/bblj/rrishabh/updated_DeepDriveSim/ve/ddmd-keras/bin/python
     arguments:
-    - /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/selection/latest/select_model.py
+    - /projects/bblj/rrishabh/updated_DeepDriveSim/DeepDriveSim/workflows/ddmd_workflow/selection/latest/select_model.py
     cpu_reqs:
         processes: 1
         process_type: null
@@ -206,17 +206,17 @@ agent_stage:
     - export TF_FORCE_GPU_ALLOW_GROWTH=true
     - module load anaconda3
     - source /opt/packages/anaconda3-2024.10-1/etc/profile.d/conda.sh
-    - conda activate /ocean/projects/dmr170002p/goliyad/conda_env/conda-keras
+    - conda activate /projects/bblj/rrishabh/updated_DeepDriveSim/ve/ddmd-keras
     - export CUDA_HOME=/opt/packages/cuda/v12.6.1
     - export OMP_NUM_THREADS=4
     - export LD_LIBRARY_PATH=/opt/packages/cuda/v12.6.1/lib64:$LD_LIBRARY_PATH
-    executable: /ocean/projects/dmr170002p/goliyad/conda_env/conda-keras/bin/python
+    executable: /projects/bblj/rrishabh/updated_DeepDriveSim/ve/ddmd-keras/bin/python
     arguments:
-    - /ocean/projects/dmr170002p/goliyad/DeepDriveSim/workflows/ddmd_workflow/agents/lof/lof.py
+    - /projects/bblj/rrishabh/updated_DeepDriveSim/DeepDriveSim/workflows/ddmd_workflow/agents/lof/lof.py
     cpu_reqs:
         processes: 1
         process_type: null
-        threads_per_process: 8
+        threads_per_process: 4
         thread_type: OpenMP
     gpu_reqs:
         processes: 0
