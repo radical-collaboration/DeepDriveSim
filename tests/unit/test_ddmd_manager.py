@@ -257,7 +257,7 @@ class TestFreeResourcesForTraining:
 
     @pytest.mark.asyncio
     async def test_does_not_decrement_when_no_sims_running(self):
-        """Old code: sim_batch_size -= training_cores even with empty registered_sims."""
+        """Old code decremented sim_batch_size even with empty registered_sims."""
         manager = make_manager()
         initial = manager.sim_batch_size
 
@@ -267,7 +267,7 @@ class TestFreeResourcesForTraining:
 
     @pytest.mark.asyncio
     async def test_decrements_by_actual_cancelled_count(self):
-        """Slot count drops by the number of tasks really cancelled, not by training_cores."""
+        """Slot count drops by tasks actually cancelled, not by training_cores."""
         manager = make_manager(training_cores=2)
         initial = manager.sim_batch_size
 
