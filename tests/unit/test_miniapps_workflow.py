@@ -268,14 +268,14 @@ class TestInitSimQueue:
 class TestFinalizeResults:
     @pytest.mark.asyncio
     async def test_stops_workflow_when_all_sims_done(self, workflow):
-        workflow.completed_sims = list(range(workflow.total_num_sim))
+        workflow.completed_sims = set(range(workflow.total_num_sim))
         await workflow.finalize_results()
         assert workflow.run_workflow is False
         assert workflow.shutting_down.is_set()
 
     @pytest.mark.asyncio
     async def test_does_not_stop_when_sims_incomplete(self, workflow):
-        workflow.completed_sims = [0, 1]
+        workflow.completed_sims = {0, 1}
         workflow.run_workflow = True
         await workflow.finalize_results()
         assert workflow.run_workflow is True

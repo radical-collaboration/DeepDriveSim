@@ -41,7 +41,7 @@ class DDSimManager:
         self.logger = Logger(name=name, use_colors=True)
         self.registered_sims = OrderedDict()  # running:  {sim_idx: asyncio.Task}
         self.sim_task_queue = asyncio.Queue()  # pending sim inputs
-        self.completed_sims = []  # finished sim indices
+        self.completed_sims: set = set()  # finished sim indices
         self.sim_predictions = {}
         self.train_models = []
 
@@ -126,7 +126,7 @@ class DDSimManager:
                     f"Sim {sim_idx} failed: {exc}", component=f"{self.name}-sim"
                 )
             else:
-                self.completed_sims.append(sim_idx)
+                self.completed_sims.add(sim_idx)
                 if self.debug:
                     self.logger.task_completed(
                         f"Sim {sim_idx}", component=f"{self.name}-sim"
@@ -218,10 +218,8 @@ class DDSimManager:
                 prediction=pred
             ):
                 self._perm_cancelled.add(sim_idx)
-                self.completed_sims.append(sim_idx)
-                task = self.registered_sims[sim_idx]
-                task.cancel()
-                to_await.append(task)
+                self.completed_sims.add(sim_idx)
+                self.registered_sims[sim_idx].cancel()
                 self.logger.task_killed(
                     f"Sim {sim_idx} permanently killed (prediction score {pred})",
                     component=f"{self.name}-sim",
