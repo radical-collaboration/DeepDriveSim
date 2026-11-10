@@ -60,7 +60,9 @@ async def run_miniapps(config_file: str) -> None:
     try:
         await asyncio.gather(*[r.start() for r in replicas])
     except Exception as e:
+        import traceback
         print(f"An error occurred during workflow execution: {e}")
+        traceback.print_exc()
     finally:
         await asyncio.gather(*[r.close() for r in replicas])
 
@@ -81,10 +83,13 @@ async def run_miniapps(config_file: str) -> None:
         await asyncflow.shutdown()
 
         pending = {t for t in asyncio.all_tasks() if t is not asyncio.current_task()}
-        if pending:
-            for t in pending:
-                t.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
+        for t in pending:
+            t.cancel()
+        for t in pending:
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
 
     print()
     print("=" * 60)

@@ -83,9 +83,26 @@ def main():
     wf.generateRandomNumber(device, msz)
 
     num_step = args.num_step
+    checkpoint_step = max(1, num_step // 10)
 
     print(f"Running time of step 1 is {time.time() - start_time} seconds")
-    for _ in range(num_step):
+
+    # Phase 1: run to early checkpoint so monitor_training_data can proceed
+    # while the sim is still running its main phase.
+    for _ in range(checkpoint_step):
+        wf.axpy(device, msz)
+        wf.axpy(device, msz)
+        wf.generateRandomNumber(device, msz * msz)
+        wf.inplaceCompute(device, msz * msz, 1, "square")
+        wf.matMulGeneral(device, [msz, msz], [msz], ([1], [0]))
+
+    if device == "gpu":
+        wf.dataCopyD2H(msz)
+    wf.writeNonMPI(args.write_size, root_path, args.instance_index)
+    print(f"Checkpoint written at step {checkpoint_step}/{num_step}: {time.time() - start_time:.1f}s")
+
+    # Phase 2: continue main computation (prediction/cancel may fire during this phase)
+    for _ in range(num_step - checkpoint_step):
         wf.axpy(device, msz)
         wf.axpy(device, msz)
         wf.generateRandomNumber(device, msz * msz)
@@ -94,7 +111,7 @@ def main():
     print(f"Running time of step 2 is {time.time() - start_time} seconds")
 
     if device == "gpu":
-        wf.dataCopyD2H(msz)  # only once (duplicate removed)
+        wf.dataCopyD2H(msz)
 
     print(f"Running time of step 3 is {time.time() - start_time} seconds")
 

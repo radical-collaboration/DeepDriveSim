@@ -209,8 +209,10 @@ class MiniAppsWorkflow(DDSimManager):
         self.prediction = prediction
 
         # ── Selection ─────────────────────────────────────────────────────────
-        @self.flow.function_task
-        async def selection(*args, **kwargs):
+        _sel_desc = {"process_templates": [[1]], "cores_per_rank": 1, "gpus_per_rank": 0} if self.engine == "dragon" else {"cpus": 1}
+
+        @self.flow.executable_task(capture_stdio=True)
+        async def selection(task_description=_sel_desc):
             return self._selection_cmd()
 
         self.selection = selection

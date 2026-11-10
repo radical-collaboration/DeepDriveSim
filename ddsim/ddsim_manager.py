@@ -247,13 +247,11 @@ class DDSimManager:
                     component=f"{self.name}-sim",
                 )
 
-        # Await all cancelled tasks so their done-callbacks (_on_sim_done pops
-        # from registered_sims) fire before the caller proceeds to
-        # finalize_results.  Without this yield, finalize_results sees
-        # registered_sims non-empty even though all sims are already counted
-        # in completed_sims, causing a spurious warning and a missed shutdown.
-        if to_await:
-            await asyncio.gather(*to_await, return_exceptions=True)
+        # Not awaiting Dragon tasks — awaiting a still-running Dragon task
+        # triggers IPC serialization (cloudpickle) which fails on asyncio.Task
+        # references in the execution context. finalize_results only checks
+        # completed_sims (already pre-added above), not registered_sims, so
+        # callbacks do not need to fire before finalize_results proceeds.
 
     # --------------------------------------------------------------------------
     async def start(self):
@@ -285,6 +283,7 @@ class DDSimManager:
                             await workflow._free_resources_for_training()
                     if wm:
                         await wm
+                        wm = None
                         if workflow.debug:
                             workflow.logger.task_started(
                                 "Model Training", component=f"{workflow.name}-train"
@@ -346,14 +345,16 @@ class DDSimManager:
                     component=f"{workflow.name}-finalize",
                 )
                 submit_task.cancel()
-                await asyncio.gather(submit_task, return_exceptions=True)
+                try:
+                    await submit_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
                 if workflow.registered_sims:
                     for task in list(workflow.registered_sims.values()):
                         task.cancel()
-                    await asyncio.gather(
-                        *workflow.registered_sims.values(), return_exceptions=True
-                    )
+                    # Not awaiting Dragon tasks — same IPC pickle constraint as
+                    # cancel_sims; Dragon cleans up subprocess resources on its own.
 
             workflow.logger.manager_exiting()
             workflow.logger.separator(f"{workflow.name} MANAGER FINISHED")

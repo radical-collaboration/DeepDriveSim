@@ -46,6 +46,9 @@ telemetry-output/
 workflows/exchange_workflow/ala_dipep_output/
 workflows/exchange_workflow/output/
 
+# Auto-generated at runtime from lassen-keras-dbscan.yaml — not for commit
+workflows/ddmd_workflow/data/new_lassen-keras-dbscan.yaml
+
 # Runtime output
 asyncflow.session*/
 telemetry-output/

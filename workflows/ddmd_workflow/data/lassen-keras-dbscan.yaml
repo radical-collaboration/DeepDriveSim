@@ -236,6 +236,6 @@ agent_stage:
         n_traj_frames: 100
         n_most_recent_h5_files: 3
         k_random_old_h5_files: 2
-        sklearn_num_jobs: -1
+        sklearn_num_jobs: 1
         model_type: "keras_cvae"
         inference_batch_size: 1024

@@ -48,13 +48,13 @@ fi
 
 # ── System library paths (Delta-specific, required by Dragon) ─────────────────
 export CUDA_HOME=/opt/nvidia/hpc_sdk/Linux_x86_64/25.3/cuda/12.8
-export MPI_LIB=/opt/cray/pe/mpich/8.1.32/ofi/gnu/11.2/lib-abi-mpich
+export MPI_LIB=/opt/cray/pe/mpich/8.1.32/ofi/gnu/11.2/lib
 export FAB_LIB=/opt/cray/libfabric/1.22.0/lib64
-export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${MPI_LIB}:${FAB_LIB}:${LD_LIBRARY_PATH:-}
 
 # ── Environment ───────────────────────────────────────────────────────────────
 DDSIM_DIR="${DDSIM_DIR:-${WORK_DIR}/DeepDriveSim}"
 EXCHANGE_VENV="${EXCHANGE_VENV:-${WORK_DIR}/ve/exchange}"
+export LD_LIBRARY_PATH=${EXCHANGE_VENV}/lib:${CUDA_HOME}/lib64:${MPI_LIB}:${FAB_LIB}:${LD_LIBRARY_PATH:-}
 unset SLURM_EXPORT_ENV
 export PYTHONUNBUFFERED=1
 source "${EXCHANGE_VENV}/bin/activate"

@@ -96,13 +96,17 @@ class DDMdWorkflow(DDSimManager):
         self.max_retries = 2  # re-queue failed sims up to this many times
 
         self.free_resources_for_train = False
-        self.call_cancel_simulations = False
+        self.call_cancel_simulations = bool(camp_cfg.get("enable_cancellation", False))
         self.call_finalize_results = True
         self.call_evaluate_simulations = True
 
         self.training_cores = 1
         self.iteration = 0
         self.retrain_model = True
+        self.prediction_threshold = float(camp_cfg.get("prediction_threshold", 0.5))
+        # Trigger training after this fraction of sims complete (not all), so
+        # prediction/cancel can fire while remaining sims are still running.
+        self._train_after_fraction = float(camp_cfg.get("train_after_fraction", 1.0))
 
         self.register_tasks()
         self.sim_inputs = {}
@@ -175,12 +179,9 @@ class DDMdWorkflow(DDSimManager):
             self.sim_inputs[sim_idx] = next_file
 
     # --------------------------------------------------------------------------
-    def stop_simulation(self, *args, **kwargs):
-        """Decide whether to cancel a simulation based on prediction.
-
-        Returns False — this workflow does not use early cancellation.
-        """
-        return False
+    def stop_simulation(self, *args, **kwargs) -> bool:
+        """Cancel a simulation if its prediction score is below the threshold."""
+        return kwargs.get("prediction", 1.0) < self.prediction_threshold
 
     # --------------------------------------------------------------------------
     async def finalize_results(self):
@@ -218,9 +219,15 @@ class DDMdWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def check_train_status(self):
-        """Return True when all simulations for the current iteration have finished."""
-        return len(self.completed_sims) + len(self.failed_sims) >= self.num_sims * (
-            self.stage_idx + 1
+        """Return True when enough sims have completed to start training.
+
+        Triggers after `_train_after_fraction` of sims complete (default: all),
+        so prediction/cancel can fire while remaining sims are still running.
+        """
+        threshold = max(1, int(self.num_sims * self._train_after_fraction))
+        return (
+            len(self.completed_sims) + len(self.failed_sims)
+            >= threshold * (self.stage_idx + 1)
         )
 
     # --------------------------------------------------------------------------
@@ -339,7 +346,15 @@ class DDMdWorkflow(DDSimManager):
                     component=self.name,
                 )
 
-        self.evaluate_simulations = agent_stage
+        async def evaluate_simulations():
+            await agent_stage()
+            # Assign a default low score to any currently-running sim not yet
+            # scored by the LOF agent, so cancel_sims() can target them.
+            for sim_idx in list(self.registered_sims):
+                if sim_idx not in self.sim_predictions:
+                    self.sim_predictions[sim_idx] = 0.0
+
+        self.evaluate_simulations = evaluate_simulations
 
         # --- Model selection ---
         @self.flow.executable_task(capture_stdio=True)
