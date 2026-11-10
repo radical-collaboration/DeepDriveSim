@@ -227,7 +227,6 @@ class DDSimManager:
         Permanently cancel sims whose prediction score is below threshold.
         Pre-adds to completed_sims so _on_sim_done skips re-queuing.
         """
-        to_await = []
         for sim_idx, pred in self.sim_predictions.items():
             if self.debug:
                 self.logger.info(
@@ -239,19 +238,11 @@ class DDSimManager:
             ):
                 self._perm_cancelled.add(sim_idx)
                 self.completed_sims.append(sim_idx)
-                task = self.registered_sims[sim_idx]
-                task.cancel()
-                to_await.append(task)
+                self.registered_sims[sim_idx].cancel()
                 self.logger.task_killed(
                     f"Sim {sim_idx} permanently killed (prediction score {pred})",
                     component=f"{self.name}-sim",
                 )
-
-        # Not awaiting Dragon tasks — awaiting a still-running Dragon task
-        # triggers IPC serialization (cloudpickle) which fails on asyncio.Task
-        # references in the execution context. finalize_results only checks
-        # completed_sims (already pre-added above), not registered_sims, so
-        # callbacks do not need to fire before finalize_results proceeds.
 
     # --------------------------------------------------------------------------
     async def start(self):
