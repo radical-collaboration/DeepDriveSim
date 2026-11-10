@@ -237,3 +237,70 @@ class TestSimulationQueueEdgeCases:
 
         assert len(manager.registered_sims) == 2
         assert manager.sim_task_queue.empty()
+
+
+# ---------------------------
+# Group 8: _free_resources_for_training timing fix (issue_21)
+# ---------------------------
+class TestFreeResourcesForTraining:
+    """
+    Regression tests for the _free_resources_for_training timing bug.
+
+    Old behaviour: called before any sim was registered → registered_sims
+    empty → 0 tasks cancelled but sim_batch_size still decremented by
+    training_cores, losing one slot for the entire run.
+
+    Fixed behaviour: called only after monitor_training_data() resolves
+    (sims are running); sim_batch_size decremented only by the number of
+    tasks actually cancelled.
+    """
+
+    @pytest.mark.asyncio
+    async def test_does_not_decrement_when_no_sims_running(self):
+        """Old code: sim_batch_size -= training_cores even with empty registered_sims."""
+        manager = make_manager()
+        initial = manager.sim_batch_size
+
+        await manager._free_resources_for_training()
+
+        assert manager.sim_batch_size == initial
+
+    @pytest.mark.asyncio
+    async def test_decrements_by_actual_cancelled_count(self):
+        """Slot count drops by the number of tasks really cancelled, not by training_cores."""
+        manager = make_manager(training_cores=2)
+        initial = manager.sim_batch_size
+
+        for i in range(2):
+            task = asyncio.create_task(asyncio.sleep(60))
+            task.add_done_callback(lambda t, idx=i: manager._on_sim_done(t, idx))
+            manager.registered_sims[i] = task
+
+        await manager._free_resources_for_training()
+
+        assert manager.sim_batch_size == initial - 2
+        assert manager.free_resources_for_train is False
+
+    @pytest.mark.asyncio
+    async def test_decrements_only_for_running_tasks(self):
+        """If fewer sims are running than training_cores, only running ones count."""
+        manager = make_manager(training_cores=3)
+        initial = manager.sim_batch_size
+
+        task = asyncio.create_task(asyncio.sleep(60))
+        task.add_done_callback(lambda t: manager._on_sim_done(t, 0))
+        manager.registered_sims[0] = task
+
+        await manager._free_resources_for_training()
+
+        assert manager.sim_batch_size == initial - 1
+
+    @pytest.mark.asyncio
+    async def test_clears_free_resources_flag(self):
+        """Flag is always cleared regardless of how many sims were cancelled."""
+        manager = make_manager()
+        manager.free_resources_for_train = True
+
+        await manager._free_resources_for_training()
+
+        assert manager.free_resources_for_train is False
