@@ -120,7 +120,8 @@ def get_intrinsic_score(
 
     if cfg.intrinsic_score == "lof":
         # Perform LocalOutlierFactor outlier detection on embeddings
-        clf = LocalOutlierFactor(n_jobs=cfg.sklearn_num_jobs)
+        # Dragon patches multiprocessing.Pool but breaks ThreadPool MRO; force n_jobs=1.
+        clf = LocalOutlierFactor(n_jobs=1)
         embeddings = np.nan_to_num(embeddings, nan=0.0)  # type: ignore[no-untyped-call]
         # Array with 1 if inlier, -1 if outlier
         clf.fit_predict(embeddings)
