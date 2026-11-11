@@ -147,6 +147,23 @@ class TestPredictionCmd:
     def test_contains_agent_script(self, workflow):
         assert "agent.py" in workflow._prediction_cmd()
 
+    def test_num_mult_uses_num_mult_not_num_epochs(self, workflow):
+        """Regression: num_mult was read from num_epochs due to copy-paste error."""
+        assert f"--num_mult {workflow.num_mult}" in workflow._prediction_cmd()
+        assert f"--num_mult {workflow.num_epochs}" not in workflow._prediction_cmd()
+
+    def test_num_mult_default_is_one_when_not_in_config(self, tmp_path):
+        """When num_mult is absent from config, it defaults to 1, not num_epochs."""
+        from unittest.mock import MagicMock
+        from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
+
+        cfg = {"num_epochs": 100}  # num_mult intentionally absent
+        w = MiniAppsWorkflow(
+            config=cfg, asyncflow=MagicMock(), home_dir=str(tmp_path)
+        )
+        assert w.num_mult == 1
+        assert "--num_mult 1" in w._prediction_cmd()
+
 
 # ---------------------------------------------------------------------------
 # Group 4: _selection_cmd
