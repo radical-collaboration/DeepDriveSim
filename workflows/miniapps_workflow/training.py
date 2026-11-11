@@ -30,7 +30,7 @@ def parse_args():
         "--data_root_dir", default="./", help="the root dir of gsas output data"
     )
     parser.add_argument(
-        "--model_dir", default="./", help="the directory where save and load model"
+        "--model_dir", default="", help="directory to write model output; defaults to data_root_dir"
     )
     parser.add_argument(
         "--num_sample", type=int, default=100, help="num of samples in matrix mult"
@@ -91,7 +91,10 @@ def main():
     print(args)
 
     root_path = args.data_root_dir + f"/phase{args.phase}" + "/"
+    model_path = (args.model_dir or args.data_root_dir) + f"/phase{args.phase}" + "/"
+    os.makedirs(model_path, exist_ok=True)
     print("root_path for data = ", root_path)
+    print("model_path for output = ", model_path)
 
     device = args.device
 
@@ -124,7 +127,7 @@ def main():
 
     if device == "gpu":
         wf.dataCopyD2H(args.dense_dim_in * args.dense_dim_out)
-    wf.writeNonMPI(args.write_size, root_path, args.instance_index)
+    wf.writeNonMPI(args.write_size, model_path, args.instance_index)
 
     end_time = time.time()
     print(f"Total training time is {end_time - start_time} seconds")
