@@ -87,6 +87,7 @@ class MiniAppsWorkflow(DDSimManager):
 
         self.clean_unregistered_sims = bool(cfg.get("clean_unregistered_sims", False))
         self.engine = cfg.get("engine", "concurrent")
+        self.gpus_per_node = int(cfg.get("gpus_per_node", 4))
 
         self.register_tasks()
         self.sim_inputs = {}
@@ -160,25 +161,18 @@ class MiniAppsWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     def register_tasks(self):
-        # Build engine-specific task descriptions for R1 telemetry.
-        # Dragon uses process_templates (ranks + cores/gpus per rank);
-        # concurrent uses direct cpus/gpus keys.
+        # Build engine-specific task descriptions.
+        # Dragon pins GPU affinity via Policy: GPU 0 reserved for training/prediction,
+        # remaining GPUs shared among simulations.
+        # Concurrent backend uses plain cpus/gpus counts.
         if self.engine == "dragon":
-            _sim_desc = {
-                "process_templates": [[1]],
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0,
-            }
-            _train_desc = {
-                "process_templates": [[1]],
-                "cores_per_rank": self.training_cores,
-                "gpus_per_rank": 1,
-            }
-            _pred_desc = {
-                "process_templates": [[1]],
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0,
-            }
+            from dragon.infrastructure.policy import Policy
+
+            _train_gpu = [0]
+            _sim_gpus = list(range(1, self.gpus_per_node))
+            _sim_desc = {"process_template": {"policy": Policy(gpu_affinity=_sim_gpus)}}
+            _train_desc = {"process_template": {"policy": Policy(gpu_affinity=_train_gpu)}}
+            _pred_desc = {"process_template": {"policy": Policy(gpu_affinity=_train_gpu)}}
         else:
             _sim_desc = {"cpus": 1}
             _train_desc = {"cpus": self.training_cores, "gpus": 1}
