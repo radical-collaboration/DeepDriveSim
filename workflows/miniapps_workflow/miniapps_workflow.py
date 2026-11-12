@@ -242,45 +242,15 @@ class MiniAppsWorkflow(DDSimManager):
                 raise ValueError(f"Unable to add sim {sim_idx} to queue")
 
     async def check_train_status(self):
-        try:
-            from mpi4py import MPI
-
-            comm = MPI.COMM_WORLD
-            ranks = comm.Get_size()
-        except Exception:
-            ranks = 1
-
-        root_path = Path(self.sim_output_dir, "phase0")
-        next_iter = self.iteration + 1
-        filenames = [
-            Path(root_path, f"data_{rank}_{next_iter}.h5") for rank in range(ranks)
-        ]
-
+        n_done = len(self.completed_sims)
+        if n_done >= self.miniapps_data_ready:
+            self.logger.info("Training data ready.", component=self.name)
+            return True
         self.logger.info(
-            f"Waiting for {len(filenames)} file to start training...",
+            f"Waiting for training data: {n_done}/{self.miniapps_data_ready} sims done.",
             component=self.name,
         )
-        start_trainig = False
-        while True:
-            if start_trainig:
-                break
-            start_trainig = True
-            for filename in filenames:
-                if not filename.exists():
-                    if self.debug:
-                        self.logger.info(
-                            f"File {filename} not found yet, wait...",
-                            component=self.name,
-                        )
-                    start_trainig = False
-                    await asyncio.sleep(5)
-                    break
-
-        self.logger.info(
-            "All required files are available. Starting training...",
-            component=self.name,
-        )
-        return True
+        return False
 
     async def train_model(self):
         self.iteration += 1
