@@ -42,6 +42,7 @@ class MiniAppsWorkflow(DDSimManager):
         self._on_ready = kwargs.get("on_ready", None)
         self._data_ready_signaled = False
         self.miniapps_data_ready = int(cfg.get("miniapps_data_ready", 3))
+        self.sleep_time = int(cfg.get("sleep_time", 20))
 
         _home_base = Path(
             kwargs.get("home_dir", cfg.get("home_dir", Path.home() / "MiniApps"))
