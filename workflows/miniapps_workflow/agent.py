@@ -87,6 +87,9 @@ def parse_args():
         required=True,
         help="use to distinguish different agent task. Should be from 0~n-1",
     )
+    parser.add_argument(
+        "--model_dir", default="", help="directory to write model output; defaults to data_root_dir"
+    )
 
     args = parser.parse_args()
 
@@ -104,7 +107,10 @@ def main():
     print(args)
 
     root_path = args.data_root_dir + f"/phase{args.phase}" + "/"
+    model_path = (args.model_dir or args.data_root_dir) + f"/phase{args.phase}" + "/"
+    os.makedirs(model_path, exist_ok=True)
     print("root_path for data = ", root_path)
+    print("model_path for output = ", model_path)
 
     try:
         import cupy
@@ -144,7 +150,7 @@ def main():
             )
             wf.axpy(device, args.dense_dim_in * args.dense_dim_out)
 
-    wf.writeNonMPI(args.write_size, root_path, args.instance_index)
+    wf.writeNonMPI(args.write_size, model_path, args.instance_index)
 
     results = {}
     for filename in os.listdir(root_path):
