@@ -12,6 +12,7 @@ telemetry_dir: "telemetry-output"
 total_num_sim:            10
 max_sim_batch:            4
 training_cores:           1
+gpus_per_node:            4     # GPU 0 reserved for training/prediction; GPUs 1-3 for simulation
 free_resources_for_train: true
 miniapps_data_ready:      4     # signal inference-ready after this many sims complete
 phase:                    0
