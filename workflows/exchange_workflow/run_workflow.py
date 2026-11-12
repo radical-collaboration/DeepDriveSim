@@ -2,6 +2,8 @@
 import argparse
 import asyncio
 import os
+import sys
+import traceback
 
 from radical.asyncflow import WorkflowEngine
 
@@ -45,28 +47,32 @@ async def run_exchange(config_file: str) -> None:
         asyncflow=asyncflow,
     )
 
+    _exc = None
     try:
         await workflow.start()
-    except Exception as e:
-        print(f"An error occurred during workflow execution: {e}")
+    except Exception:
+        _exc = sys.exc_info()[1]
+        traceback.print_exc()
     finally:
-        try:
-            summary = telemetry.summary()
-            print(f"Tasks — {summary['tasks']}")
-            if summary.get("duration"):
-                d = summary["duration"]
-                print(
-                    f"Mean task time: {d['mean_seconds']:.2f} s  "
-                    f"Max: {d['max_seconds']:.2f} s"
-                )
-        except Exception:
-            pass
-
-        if telemetry:
+        if telemetry is not None:
+            try:
+                summary = telemetry.summary()
+                print(f"Tasks — {summary['tasks']}")
+                if summary.get("duration"):
+                    d = summary["duration"]
+                    print(
+                        f"Mean task time: {d['mean_seconds']:.2f} s  "
+                        f"Max: {d['max_seconds']:.2f} s"
+                    )
+            except Exception:
+                pass
             await telemetry.stop()
 
         # ExchangeWorkflow.close() calls asyncflow.shutdown() internally.
         await workflow.close()
+
+    if _exc is not None:
+        raise _exc
 
 
 if __name__ == "__main__":
@@ -83,4 +89,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    asyncio.run(run_exchange(args.config_file))
+    try:
+        asyncio.run(run_exchange(args.config_file))
+    except Exception:
+        sys.exit(1)

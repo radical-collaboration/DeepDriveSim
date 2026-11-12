@@ -2,6 +2,8 @@
 import argparse
 import asyncio
 import os
+import sys
+import traceback
 
 from radical.asyncflow import WorkflowEngine
 
@@ -51,27 +53,29 @@ async def run_ddmd(config_file: str) -> None:
         for i in range(num_replicas)
     ]
 
+    _exc = None
     try:
         await asyncio.gather(*[r.start() for r in replicas])
-    except Exception as e:
-        print(f"An error occurred during workflow execution: {e}")
+    except Exception:
+        _exc = sys.exc_info()[1]
+        traceback.print_exc()
     finally:
         await asyncio.gather(*[r.close() for r in replicas])
 
-        try:
-            summary = telemetry.summary()
-            print(f"Tasks — {summary['tasks']}")
-            if summary.get("duration"):
-                d = summary["duration"]
-                print(
-                    f"Mean task time: {d['mean_seconds']:.2f} s  "
-                    f"Max: {d['max_seconds']:.2f} s"
-                )
-        except Exception:
-            pass
-
-        if telemetry:
+        if telemetry is not None:
+            try:
+                summary = telemetry.summary()
+                print(f"Tasks — {summary['tasks']}")
+                if summary.get("duration"):
+                    d = summary["duration"]
+                    print(
+                        f"Mean task time: {d['mean_seconds']:.2f} s  "
+                        f"Max: {d['max_seconds']:.2f} s"
+                    )
+            except Exception:
+                pass
             await telemetry.stop()
+
         await asyncflow.shutdown()
 
         pending = {t for t in asyncio.all_tasks() if t is not asyncio.current_task()}
@@ -80,11 +84,8 @@ async def run_ddmd(config_file: str) -> None:
                 t.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
 
-        pending = {t for t in asyncio.all_tasks() if t is not asyncio.current_task()}
-        if pending:
-            for t in pending:
-                t.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
+    if _exc is not None:
+        raise _exc
 
     print()
     print("=" * 60)
@@ -102,4 +103,7 @@ if __name__ == "__main__":
         help="Path to YAML config file (default: config.yaml next to this script)",
     )
     args = parser.parse_args()
-    asyncio.run(run_ddmd(args.config))
+    try:
+        asyncio.run(run_ddmd(args.config))
+    except Exception:
+        sys.exit(1)
