@@ -307,11 +307,57 @@ profile fails if the model has a feature the decoder does not reproduce (tied
 embeddings, a different activation, sliding-window attention) or if the two
 tensor inventories differ.
 
-**What it does not contain.** No measurement of real inference: no operator
-timings, no measured memory of a real process, nothing about a serving engine.
-`measurements` is empty and `not_captured` lists these. Weights are still random.
+**What it does not describe.** A serving engine (batching, kernel fusion, paged KV
+cache) and the tokenizer or generated content; `not_captured` lists these. In
+normal use the weights are random: the profile fixes the computation, not the
+values.
 
 **Real-size run.** [Results](../../../../runs/inference-profile/2026-11-22-qwen2.5-7b/README.md):
 on Nimitz the emulator ran at full Qwen size on eight CPU cores and one H200.
 A request shaped like the November 8 campaign (2,059 prompt tokens, 217
 generated) took a median 2.42 s on the H200 and 47.08 s on CPU.
+
+## Comparison with real Qwen inference — November 22
+
+[Results](../../../../runs/inference-profile/2026-11-22-qwen2.5-7b-measured/README.md).
+Reference: the real Qwen2.5-7B-Instruct weights run by the `transformers`
+implementation in eager PyTorch, greedy decoding with the model's own KV cache.
+That is the model's computation without a serving engine. Same node, same
+process settings, BF16, batch 1.
+
+**The emulator executes the real model's computation.** `InferenceWorkload` accepts
+weights, and `inference_profile.workload_from_model` loads a real model's
+safetensors files into it by name. With the real weights the emulator's logits
+are bitwise identical to the reference on both the H200 and the CPU at every
+step of a 32-token generation, and it generates the same text. In FP32 the
+largest difference is 3.5e-5 on logits spanning about -29 to 42.
+`test_emulator_program_reproduces_a_transformers_qwen2_model` checks the same
+property on a small random model wherever `transformers` is installed.
+
+**Same operator calls.** For a 256 + 32 token request both issue 6,304 `linear`
+calls (3,616 plain, 2,688 with a fused bias), 896 attention calls, 896 SiLU and
+1,824 RMSNorm powers. Three differences found by the comparison were removed:
+projections now go through `linear` as the reference does, attention shares each
+key/value head across its query heads instead of materializing the expansion
+(`enable_gqa`, PyTorch >= 2.5, with a fallback), and both keep last-position
+logits only.
+
+**Timing, random weights against the real model** (medians of two interleaved
+rounds; ranges are in the results):
+
+| Request (prompt + generated) | Device | Real Qwen | Emulator | Emulator / real |
+|---|---|---:|---:|---:|
+| 256 + 32 | H200 | 0.322 s | 0.325 s | 1.01 |
+| 256 + 32 | CPU, 8 cores | 5.96 s | 5.75 s | 0.96 |
+| 2,059 + 217 | H200 | 2.28 s | 2.23 s | 0.98 |
+| 2,059 + 217 | CPU, 8 cores | 45.78 s | 44.30 s | 0.97 |
+
+GPU peak allocation differs by under 1% (14.65 against 14.73 GiB on the long
+request). CPU peak RSS is 7–9% higher for the emulator with random weights,
+because generating them leaves float32 temporaries behind; with the real weights
+memory-mapped it is within 1%.
+
+The comparison is stored in the profile's `measurements` section. It is one
+model, one node, two request shapes and a handful of repetitions. It says
+nothing about vLLM or any other serving engine, which would be a separate
+reference.

@@ -5,7 +5,7 @@
   "source": {
     "model": "Qwen/Qwen2.5-7B-Instruct",
     "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
-    "note": "config.json and weight-file headers read on 2026-11-22 from the copy used by the November 8 llm-service campaign (SMC shared home). Revision as recorded by that campaign; not re-verified against the Hub.",
+    "note": "config.json and weight-file headers read on 2026-11-22 from the copy used by the November 8 llm-service campaign (SMC shared home). Revision confirmed on 2026-11-22: the weight files downloaded at this revision match the SHA-256 published by the Hub and have the same headers as that copy.",
     "files_sha256": {
       "config.json": "7463bb0ea78315365e6c6b74de4e73bbcc8359dfb0c5a737584e077d42c0b03c",
       "safetensors-headers.json": "973273c07cb378ad62923586e18a65568df0c5c84e57150b2a7e9083a69adb78"
@@ -152,10 +152,159 @@
       }
     ]
   },
-  "measurements": [],
+  "measurements": [
+    {
+      "kind": "reference_comparison",
+      "date": "2026-11-22",
+      "reference": "real weights in transformers 5.24.0, eager PyTorch 2.11.0+cu128, greedy decoding with the model's KV cache, last-position logits only; not a serving engine",
+      "hardware": {
+        "host": "nimitz",
+        "gpu": "NVIDIA H200 NVL",
+        "cpu": "Intel Xeon 6530P, 8 pinned cores, 8 threads"
+      },
+      "dtype": "bfloat16",
+      "equivalence": {
+        "method": "real weights loaded into the emulator; logits compared per step on a real tokenized prompt",
+        "cuda-bf16": {
+          "steps": 32,
+          "steps_bitwise_equal": 32,
+          "max_abs_logit_difference": 0.0,
+          "generated_tokens_identical": true
+        },
+        "cuda-fp32": {
+          "steps": 32,
+          "steps_bitwise_equal": 0,
+          "max_abs_logit_difference": 3.4809112548828125e-05,
+          "generated_tokens_identical": true
+        },
+        "cpu-bf16": {
+          "steps": 32,
+          "steps_bitwise_equal": 32,
+          "max_abs_logit_difference": 0.0,
+          "generated_tokens_identical": true
+        }
+      },
+      "requests": [
+        {
+          "device": "cuda",
+          "prompt_tokens": 256,
+          "new_tokens": 32,
+          "reference_s": 0.3218,
+          "reference_range_s": [
+            0.3213,
+            0.3241
+          ],
+          "emulator_s": 0.325,
+          "emulator_range_s": [
+            0.3169,
+            0.3336
+          ],
+          "emulator_over_reference": 1.01,
+          "timed_requests_each": 6,
+          "reference_peak_memory_bytes": 15365324800,
+          "emulator_peak_memory_bytes": 15376670208,
+          "memory_counter": "cuda peak allocated"
+        },
+        {
+          "device": "cpu",
+          "prompt_tokens": 256,
+          "new_tokens": 32,
+          "reference_s": 5.963,
+          "reference_range_s": [
+            5.9257,
+            6.1311
+          ],
+          "emulator_s": 5.7455,
+          "emulator_range_s": [
+            5.6497,
+            5.8084
+          ],
+          "emulator_over_reference": 0.9635,
+          "timed_requests_each": 10,
+          "reference_peak_memory_bytes": 15283904512,
+          "emulator_peak_memory_bytes": 16698302464,
+          "memory_counter": "process peak RSS"
+        },
+        {
+          "device": "cuda",
+          "prompt_tokens": 2059,
+          "new_tokens": 217,
+          "reference_s": 2.2804,
+          "reference_range_s": [
+            2.2583,
+            2.3012
+          ],
+          "emulator_s": 2.2322,
+          "emulator_range_s": [
+            2.2064,
+            2.2438
+          ],
+          "emulator_over_reference": 0.9788,
+          "timed_requests_each": 6,
+          "reference_peak_memory_bytes": 15729232896,
+          "emulator_peak_memory_bytes": 15818117632,
+          "memory_counter": "cuda peak allocated"
+        },
+        {
+          "device": "cpu",
+          "prompt_tokens": 2059,
+          "new_tokens": 217,
+          "reference_s": 45.7757,
+          "reference_range_s": [
+            45.4571,
+            46.6999
+          ],
+          "emulator_s": 44.3032,
+          "emulator_range_s": [
+            43.2144,
+            45.2879
+          ],
+          "emulator_over_reference": 0.9678,
+          "timed_requests_each": 4,
+          "reference_peak_memory_bytes": 15800053760,
+          "emulator_peak_memory_bytes": 16833683456,
+          "memory_counter": "process peak RSS"
+        }
+      ],
+      "operator_calls_256_plus_32_request": {
+        "aten::linear": 6304,
+        "aten::mm": 3616,
+        "aten::addmm": 2688,
+        "aten::scaled_dot_product_attention": 896,
+        "aten::silu": 896,
+        "aten::pow": 1824
+      },
+      "cpu_operators_2059_plus_217_request": {
+        "aten::mm": {
+          "reference_calls": 24521,
+          "emulator_calls": 24521,
+          "reference_s": 37.2,
+          "emulator_s": 36.74
+        },
+        "aten::addmm": {
+          "reference_calls": 18228,
+          "emulator_calls": 18228,
+          "reference_s": 3.34,
+          "emulator_s": 3.13
+        },
+        "aten::copy_": {
+          "reference_calls": 68789,
+          "emulator_calls": 116312,
+          "reference_s": 0.25,
+          "emulator_s": 0.23
+        }
+      },
+      "random_over_real_weight_time": {
+        "short-cuda": 0.9861,
+        "short-cpu": 0.7979,
+        "campaign-cuda": 1.0013,
+        "campaign-cpu": 1.0173,
+        "note": "from an earlier emulator revision; the short CPU real-weight timings in that run were noisy (6.7-8.5 s), so that cell is not reliable"
+      },
+      "evidence": "ai4sci/runs/inference-profile/2026-11-22-qwen2.5-7b-measured"
+    }
+  ],
   "not_captured": [
-    "operator-level timing of the real model",
-    "measured memory of a real inference process",
     "serving-engine behavior: batching, kernel fusion, paged KV cache",
     "tokenizer and generated content"
   ]

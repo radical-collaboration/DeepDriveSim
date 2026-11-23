@@ -93,6 +93,21 @@ def test_observer_sees_every_forward_pass_without_changing_the_result(spec, torc
     assert observed["token_ids"] == model.run(2, 8, 3)["token_ids"]
 
 
+def test_shared_and_materialized_key_value_heads_agree(spec, torch):
+    shared = InferenceWorkload(spec)
+    if not shared._broadcast_heads:
+        pytest.skip("this PyTorch cannot share key/value heads in attention")
+    materialized = InferenceWorkload(spec)
+    materialized._broadcast_heads = False
+    materialized._attention_options = {}
+    with torch.inference_mode():
+        tokens = torch.tensor([[1, 2, 3, 4, 5], [5, 4, 3, 2, 1]])
+        a = shared.forward(tokens, shared.new_caches(2, 6), 0)
+        b = materialized.forward(tokens, materialized.new_caches(2, 6), 0)
+    torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-6)
+    assert shared.run(2, 8, 3)["token_ids"] == materialized.run(2, 8, 3)["token_ids"]
+
+
 def test_cached_decode_matches_causal_full_prefix(spec, torch):
     model = InferenceWorkload(spec)
     with torch.inference_mode():

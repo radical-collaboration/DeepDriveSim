@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -197,11 +198,25 @@ class InferenceWorkload:
     substituted; unsupported combinations raise instead.
     """
 
-    def __init__(self, spec: InferenceSpec, device: str | torch.device = "cpu") -> None:
-        """Build the fixed synthetic weights for ``spec`` on ``device``.
+    def __init__(
+        self,
+        spec: InferenceSpec,
+        device: str | torch.device = "cpu",
+        weights: Mapping[str, torch.Tensor] | None = None,
+    ) -> None:
+        """Build the workload for ``spec`` on ``device``.
+
+        Args:
+            spec: Validated dimensions and bounds.
+            device: ``cpu`` or ``cuda[:index]``.
+            weights: Tensors to use instead of the fixed synthetic ones, keyed by
+                the names of ``spec.tensor_shapes()``. Every tensor must be
+                present with the expected shape. Used to run a real model's
+                weights through this same tensor program.
 
         Raises:
-            ValueError: ``device`` is neither ``cpu`` nor ``cuda[:index]``.
+            ValueError: ``device`` is neither ``cpu`` nor ``cuda[:index]``, or
+                ``weights`` does not match the spec's tensor inventory.
             RuntimeError: CUDA was requested but is unavailable.
         """
         # The spec has already validated every bound; torch is imported only now
@@ -216,51 +231,77 @@ class InferenceWorkload:
         if self.device.type == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("CUDA requested but unavailable; no CPU fallback")
         self.dtype = getattr(torch, spec.dtype)
-        generator = torch.Generator(device="cpu").manual_seed(spec.seed)
-
-        def weight(rows: int, cols: int) -> torch.Tensor:
-            # Drawn on the CPU from a private generator: the same values on any
-            # device, and no mutation of the global RNG state.
-            initial = torch.randn(
-                rows, cols, generator=generator, dtype=torch.float32
-            ) / math.sqrt(cols)
-            return initial.to(device=self.device, dtype=self.dtype)
-
-        def norm() -> torch.Tensor:
-            return torch.ones(spec.hidden_size, device=self.device, dtype=self.dtype)
-
-        def bias(size: int) -> torch.Tensor:
-            initial = torch.randn(size, generator=generator, dtype=torch.float32)
-            return (initial * 0.02).to(device=self.device, dtype=self.dtype)
-
-        def layer() -> dict[str, torch.Tensor]:
-            # Insertion order is the allocation order of ``spec.tensor_shapes()``.
-            tensors = {
-                "q": weight(h, h),
-                "k": weight(kv, h),
-                "v": weight(kv, h),
-                "o": weight(h, h),
-                "gate": weight(m, h),
-                "up": weight(m, h),
-                "down": weight(h, m),
-                "norm1": norm(),
-                "norm2": norm(),
-            }
-            if spec.attention_bias:
-                tensors.update(q_bias=bias(h), k_bias=bias(kv), v_bias=bias(kv))
-            return tensors
-
-        h, m = spec.hidden_size, spec.intermediate_size
-        kv = spec.num_kv_heads * spec.head_dim
-        self.embedding = weight(spec.vocab_size, h)
-        self.head = weight(spec.vocab_size, h)
-        self.final_norm = norm()
+        shapes = spec.tensor_shapes()
+        if weights is None:
+            tensors = self._synthetic_weights(shapes)
+        else:
+            tensors = self._supplied_weights(shapes, weights)
+        self.embedding = tensors["embedding"]
+        self.head = tensors["head"]
+        self.final_norm = tensors["final_norm"]
+        # Per-layer insertion order is the allocation order of ``tensor_shapes()``.
         self.layers: list[dict[str, torch.Tensor]] = [
-            layer() for _ in range(spec.num_layers)
+            {} for _ in range(spec.num_layers)
         ]
+        for name, tensor in tensors.items():
+            if name.startswith("layers."):
+                _, index, kind = name.split(".")
+                self.layers[int(index)][kind] = tensor
+        # Grouped-query attention: where PyTorch can share each key/value head
+        # across its query heads (``enable_gqa``, torch >= 2.5) use that, as the
+        # reference implementation does; otherwise materialize the expansion.
+        self._broadcast_heads = self._supports_grouped_attention()
+        self._attention_options = {"enable_gqa": True} if self._broadcast_heads else {}
         exponent = torch.arange(0, spec.head_dim, 2, device=self.device).float()
         self.inv_freq = 1.0 / (spec.rope_theta ** (exponent / spec.head_dim))
         self._synchronize()
+
+    def _synthetic_weights(
+        self, shapes: list[tuple[str, tuple[int, ...]]]
+    ) -> dict[str, torch.Tensor]:
+        """Fixed random weights: the same values on any device for a given seed.
+
+        Drawn on the CPU from a private generator, in allocation order, without
+        touching the global RNG state.
+        """
+        torch = self._torch
+        generator = torch.Generator(device="cpu").manual_seed(self.spec.seed)
+        tensors = {}
+        for name, shape in shapes:
+            if "norm" in name:
+                initial = torch.ones(shape)
+            elif name.endswith("_bias"):
+                initial = 0.02 * torch.randn(
+                    shape, generator=generator, dtype=torch.float32
+                )
+            else:
+                initial = torch.randn(
+                    shape, generator=generator, dtype=torch.float32
+                ) / math.sqrt(shape[1])
+            tensors[name] = initial.to(device=self.device, dtype=self.dtype)
+        return tensors
+
+    def _supplied_weights(
+        self,
+        shapes: list[tuple[str, tuple[int, ...]]],
+        weights: Mapping[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
+        """Validate supplied weights against the spec and move them to the device."""
+        expected = dict(shapes)
+        if set(weights) != set(expected):
+            missing = sorted(set(expected) - set(weights))[:3]
+            extra = sorted(set(weights) - set(expected))[:3]
+            raise ValueError(
+                f"weights do not match the spec: missing {missing}, unexpected {extra}"
+            )
+        tensors = {}
+        for name, shape in shapes:
+            if tuple(weights[name].shape) != shape:
+                raise ValueError(
+                    f"{name}: shape {tuple(weights[name].shape)}, expected {shape}"
+                )
+            tensors[name] = weights[name].to(device=self.device, dtype=self.dtype)
+        return tensors
 
     def parameters(self) -> list[torch.Tensor]:
         """Every weight tensor, in a stable order (embedding, head, norm, layers)."""
@@ -318,6 +359,9 @@ class InferenceWorkload:
         """
         torch, spec = self._torch, self.spec
         functional = torch.nn.functional
+        # Projections go through ``linear``, as in the reference implementation,
+        # so both issue the same matrix-product calls (bias fused where present).
+        linear = functional.linear
         batch, length = tokens.shape
         end = offset + length
         positions = torch.arange(offset, end, device=self.device)
@@ -325,30 +369,59 @@ class InferenceWorkload:
         x = self.embedding[tokens]
         for layer, (keys, values) in zip(self.layers, caches):
             z = self._norm(x, layer["norm1"])
-            q, k, v = z @ layer["q"].T, z @ layer["k"].T, z @ layer["v"].T
-            if spec.attention_bias:
-                q = q + layer["q_bias"]
-                k = k + layer["k_bias"]
-                v = v + layer["v_bias"]
+            q = linear(z, layer["q"], layer.get("q_bias"))
+            k = linear(z, layer["k"], layer.get("k_bias"))
+            v = linear(z, layer["v"], layer.get("v_bias"))
             q = self._split_heads(q, spec.num_heads)
             k = self._split_heads(k, spec.num_kv_heads)
             v = self._split_heads(v, spec.num_kv_heads)
             q, k = self._rope(q, positions), self._rope(k, positions)
             keys[:, :, offset:end].copy_(k)
             values[:, :, offset:end].copy_(v)
-            k = keys[:, :, :end].repeat_interleave(repeats, dim=1)
-            v = values[:, :, :end].repeat_interleave(repeats, dim=1)
+            k, v = keys[:, :, :end], values[:, :, :end]
+            if not self._broadcast_heads:
+                k = self._repeat_heads(k, repeats)
+                v = self._repeat_heads(v, repeats)
             # Prefill is causal. A one-token decode attends to the entire prefix;
             # is_causal=True on this non-square attention would mask incorrectly.
             attended = functional.scaled_dot_product_attention(
-                q, k, v, dropout_p=0.0, is_causal=(offset == 0)
+                q,
+                k,
+                v,
+                dropout_p=0.0,
+                is_causal=(offset == 0),
+                **self._attention_options,
             )
-            x = x + attended.transpose(1, 2).reshape(batch, length, -1) @ layer["o"].T
+            attended = attended.transpose(1, 2).reshape(batch, length, -1)
+            x = x + linear(attended, layer["o"])
             z = self._norm(x, layer["norm2"])
-            gated = functional.silu(z @ layer["gate"].T) * (z @ layer["up"].T)
-            x = x + gated @ layer["down"].T
+            gated = functional.silu(linear(z, layer["gate"])) * linear(z, layer["up"])
+            x = x + linear(gated, layer["down"])
         # Only the last position is needed to choose the next token.
-        return self._norm(x[:, -1], self.final_norm) @ self.head.T
+        return linear(self._norm(x[:, -1], self.final_norm), self.head)
+
+    def _supports_grouped_attention(self) -> bool:
+        """True if this PyTorch's attention accepts fewer key/value than query heads."""
+        torch = self._torch
+        query, key = torch.zeros(1, 2, 1, 2), torch.zeros(1, 1, 1, 2)
+        try:
+            torch.nn.functional.scaled_dot_product_attention(
+                query, key, key, enable_gqa=True
+            )
+        except TypeError:
+            return False
+        return True
+
+    @staticmethod
+    def _repeat_heads(cached: torch.Tensor, repeats: int) -> torch.Tensor:
+        """Give each key/value head to ``repeats`` consecutive query heads.
+
+        Used only where attention cannot share heads itself. Expand-then-reshape
+        yields the same tensor as ``repeat_interleave`` on the head dimension.
+        """
+        batch, heads, length, width = cached.shape
+        expanded = cached[:, :, None].expand(batch, heads, repeats, length, width)
+        return expanded.reshape(batch, heads * repeats, length, width)
 
     def _split_heads(self, x: torch.Tensor, heads: int) -> torch.Tensor:
         """Reshape ``(batch, length, heads * head_dim)`` to per-head layout."""

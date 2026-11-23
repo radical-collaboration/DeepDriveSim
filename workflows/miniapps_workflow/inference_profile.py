@@ -5,10 +5,12 @@ provenance of the files it was derived from. The compute emulator turns it into
 an :class:`InferenceSpec`, so the synthetic decoder has the real model's layer
 structure, tensor shapes and precision instead of hand-chosen dimensions.
 
-Schema ``ddsim.inference_profile/1`` holds the ``architecture`` level only: it is
-derived from the model's ``config.json`` and the headers of its weight files,
-without loading or running the model. Runtime measurements of the real model are
-a separate level; ``measurements`` is empty until one has been captured.
+Schema ``ddsim.inference_profile/1``. The ``architecture`` and ``tensors``
+sections are what the emulator consumes; they are derived from the model's
+``config.json`` and the headers of its weight files, without loading or running
+the model. ``measurements`` records comparisons of the emulator against real
+inference of that model; it is evidence, not an input, and is empty until a
+comparison has been made.
 
 Build a profile from source files with::
 
@@ -21,12 +23,22 @@ import argparse
 import hashlib
 import json
 import math
+import mmap
 import re
+import struct
+import warnings
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from workflows.miniapps_workflow.inference_compute import RMS_NORM_EPS, InferenceSpec
+from workflows.miniapps_workflow.inference_compute import (
+    RMS_NORM_EPS,
+    InferenceSpec,
+    InferenceWorkload,
+)
+
+if TYPE_CHECKING:
+    import torch
 
 SCHEMA = "ddsim.inference_profile/1"
 PROFILE_DIR = Path(__file__).resolve().parent / "inference_profiles"
@@ -39,13 +51,35 @@ _SAFETENSORS_DTYPES = {"BF16": "bfloat16", "F16": "float16", "F32": "float32"}
 #: Sizes a caller chooses per run; they are not properties of the model.
 _BOUNDS = ("max_batch_size", "max_prompt_tokens", "max_new_tokens", "max_tensor_bytes")
 _LAYER_INDEX = re.compile(r"\.layers\.\d+\.")
+#: Emulator tensor kind -> the name the same tensor has in a Qwen2 model.
+_QWEN2_LAYER_NAMES = {
+    "q": "self_attn.q_proj.weight",
+    "k": "self_attn.k_proj.weight",
+    "v": "self_attn.v_proj.weight",
+    "o": "self_attn.o_proj.weight",
+    "gate": "mlp.gate_proj.weight",
+    "up": "mlp.up_proj.weight",
+    "down": "mlp.down_proj.weight",
+    "norm1": "input_layernorm.weight",
+    "norm2": "post_attention_layernorm.weight",
+    "q_bias": "self_attn.q_proj.bias",
+    "k_bias": "self_attn.k_proj.bias",
+    "v_bias": "self_attn.v_proj.bias",
+}
+_QWEN2_TOP_NAMES = {
+    "embedding": "model.embed_tokens.weight",
+    "head": "lm_head.weight",
+    "final_norm": "model.norm.weight",
+}
 
-#: Properties of real inference that an architecture-level profile cannot give.
+#: What no profile of this schema describes, whatever its measurements.
 NOT_CAPTURED = (
-    "operator-level timing of the real model",
-    "measured memory of a real inference process",
     "serving-engine behavior: batching, kernel fusion, paged KV cache",
     "tokenizer and generated content",
+)
+#: Keys every entry of a profile's ``measurements`` list must have.
+MEASUREMENT_KEYS = frozenset(
+    ("kind", "date", "reference", "hardware", "equivalence", "requests", "evidence")
 )
 
 
@@ -56,6 +90,15 @@ def _sha256(path: Path) -> str:
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(f"unsupported model for the compute emulator: {message}")
+
+
+def _rope_theta(config: dict[str, Any]) -> float:
+    """Rotary base: top-level in older configs, under ``rope_parameters`` in newer."""
+    theta = config.get("rope_theta")
+    if theta is None:
+        theta = (config.get("rope_parameters") or {}).get("rope_theta")
+    _require(theta is not None, "no rope_theta in the config")
+    return float(theta)
 
 
 def _architecture(config: dict[str, Any], tensors: dict[str, Any]) -> dict[str, Any]:
@@ -86,7 +129,7 @@ def _architecture(config: dict[str, Any], tensors: dict[str, Any]) -> dict[str, 
         "vocab_size": config["vocab_size"],
         "dtype": _SAFETENSORS_DTYPES[stored],
         "attention_bias": any(name.endswith("q_proj.bias") for name in tensors),
-        "rope_theta": float(config["rope_theta"]),
+        "rope_theta": _rope_theta(config),
         "rms_norm_eps": config["rms_norm_eps"],
         "max_position_embeddings": config["max_position_embeddings"],
     }
@@ -150,6 +193,7 @@ def build_profile(
         "not_captured": list(NOT_CAPTURED),
     }
     check_inventory(profile)
+    _check_names(_inventory_spec(profile), tensors)
     return profile
 
 
@@ -166,9 +210,13 @@ def load_profile(name_or_path: str | Path) -> dict[str, Any]:
     profile = json.loads(path.read_text())
     if profile.get("schema") != SCHEMA:
         raise ValueError(f"{path}: expected schema {SCHEMA}")
-    for section in ("name", "source", "architecture", "tensors"):
+    for section in ("name", "source", "architecture", "tensors", "measurements"):
         if section not in profile:
             raise ValueError(f"{path}: profile has no {section!r} section")
+    for entry in profile["measurements"]:
+        missing = MEASUREMENT_KEYS - set(entry)
+        if missing:
+            raise ValueError(f"{path}: measurement lacks {sorted(missing)}")
     return profile
 
 
@@ -214,6 +262,84 @@ def spec_from_profile(profile: dict[str, Any], **bounds: Any) -> InferenceSpec:
     )
 
 
+def model_tensor_names(spec: InferenceSpec) -> dict[str, str]:
+    """Map each emulator tensor name to its name in the real (Qwen2) model."""
+    names = {}
+    for name, _ in spec.tensor_shapes():
+        if name in _QWEN2_TOP_NAMES:
+            names[name] = _QWEN2_TOP_NAMES[name]
+        else:
+            _, layer, kind = name.split(".")
+            names[name] = f"model.layers.{layer}.{_QWEN2_LAYER_NAMES[kind]}"
+    return names
+
+
+def read_model_weights(
+    model_dir: str | Path, spec: InferenceSpec
+) -> dict[str, torch.Tensor]:
+    """Read a real model's weights, keyed by emulator tensor name.
+
+    The safetensors files are memory-mapped and each tensor is a view of the
+    mapping, so nothing is copied until the workload moves it to its device.
+    Only little-endian hosts are supported, as in the file format.
+
+    Raises:
+        ValueError: A tensor the spec needs is missing or has another shape.
+    """
+    import torch
+
+    dtypes = {"BF16": torch.bfloat16, "F16": torch.float16, "F32": torch.float32}
+    stored: dict[str, torch.Tensor] = {}
+    for path in sorted(Path(model_dir).glob("model-*.safetensors")):
+        with path.open("rb") as handle:
+            mapped = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
+        (length,) = struct.unpack("<Q", mapped[:8])
+        header = json.loads(mapped[8 : 8 + length])
+        data = memoryview(mapped)[8 + length :]
+        for name, info in header.items():
+            if name == "__metadata__":
+                continue
+            begin, end = info["data_offsets"]
+            with warnings.catch_warnings():
+                # Expected: the tensor is a read-only view and is never written.
+                warnings.simplefilter("ignore", UserWarning)
+                flat = torch.frombuffer(data[begin:end], dtype=dtypes[info["dtype"]])
+            stored[name] = flat.reshape(info["shape"])
+    weights = {}
+    for name, real_name in model_tensor_names(spec).items():
+        if real_name not in stored:
+            raise ValueError(f"model has no tensor {real_name}")
+        weights[name] = stored[real_name]
+    return weights
+
+
+def workload_from_model(
+    profile: dict[str, Any],
+    model_dir: str | Path,
+    device: str = "cpu",
+    **bounds: Any,
+) -> InferenceWorkload:
+    """Build the emulator workload with a real model's weights.
+
+    The result runs the real model's computation through the emulator's own
+    tensor program, which is how the program is validated against a reference
+    implementation. ``bounds`` are those of :func:`spec_from_profile`.
+    """
+    spec = spec_from_profile(profile, **bounds)
+    return InferenceWorkload(spec, device, weights=read_model_weights(model_dir, spec))
+
+
+def _inventory_spec(profile: dict[str, Any]) -> InferenceSpec:
+    """Spec used only to enumerate tensors; its bounds are placeholders."""
+    return spec_from_profile(
+        profile,
+        max_batch_size=1,
+        max_prompt_tokens=1,
+        max_new_tokens=1,
+        max_tensor_bytes=2**62,
+    )
+
+
 def check_inventory(profile: dict[str, Any]) -> None:
     """Check that the emulator would allocate exactly the real model's tensors.
 
@@ -223,14 +349,7 @@ def check_inventory(profile: dict[str, Any]) -> None:
     Raises:
         ValueError: The inventories differ.
     """
-    # Bounds do not affect the weight inventory; these are only placeholders.
-    spec = spec_from_profile(
-        profile,
-        max_batch_size=1,
-        max_prompt_tokens=1,
-        max_new_tokens=1,
-        max_tensor_bytes=2**62,
-    )
+    spec = _inventory_spec(profile)
     emulated = Counter(shape for _, shape in spec.tensor_shapes())
     real: Counter[tuple[int, ...]] = Counter()
     for kind in profile["tensors"]["kinds"]:
@@ -240,6 +359,22 @@ def check_inventory(profile: dict[str, Any]) -> None:
             "emulator tensor inventory differs from the real model: "
             f"only emulated {dict(emulated - real)}, only real {dict(real - emulated)}"
         )
+
+
+def _check_names(spec: InferenceSpec, tensors: dict[str, Any]) -> None:
+    """Check every emulator tensor against the real tensor of the same role."""
+    names = model_tensor_names(spec)
+    unmatched = set(tensors) - set(names.values())
+    if unmatched:
+        raise ValueError(
+            f"real tensors with no emulator counterpart: {sorted(unmatched)[:3]}"
+        )
+    for name, shape in spec.tensor_shapes():
+        real = tensors.get(names[name])
+        if real is None or tuple(real["shape"]) != shape:
+            raise ValueError(
+                f"{names[name]} does not match emulator tensor {name} {shape}"
+            )
 
 
 def main() -> None:
