@@ -1,34 +1,42 @@
-# TINY functional example, not a Qwen/H100 resource-equivalent configuration.
-# See INFERENCE_COMPUTE.md. No model weights are downloaded or trained.
+# =============================================================================
+# Inference-only MiniApps workflow steered by the compute emulator
+# =============================================================================
+# A small example that runs on one CPU node. The model dimensions are tiny; to
+# emulate a real model, use an inference profile instead (INFERENCE_COMPUTE.md).
+
 debug: false
 num_replicas: 1
-home_dir: MiniApps-inference-compute
-telemetry: true
-telemetry_dir: telemetry-inference-compute
-total_num_sim: 4
-max_sim_batch: 2
+home_dir:      "MiniApps-inference-compute"
+telemetry:     true
+telemetry_dir: "telemetry-inference-compute"
+
+total_num_sim:       4
+max_sim_batch:       2
 miniapps_data_ready: 1
-phase: 0
-num_step: 10
-src_dir: ""
+phase:               0
+num_step:            10
+
+src_dir: ""   # leave empty to use the miniapps/ directory (default)
 executable: ""
 
+# --- Steering loop -------------------------------------------------------------
 agentic:
-  inference_only: true
-  prompt_tokens: 128             # approximate, includes synthetic observations
-  steering_interval_s: 0.1       # workflow polling, NOT inference latency
-  stop_threshold: 0.5
-  decision: llm
-  answer_style: scores
-  seed: 0
+  inference_only:      true     # no training stage; required by the compute backend
+  prompt_tokens:       128      # approximate prompt size
+  steering_interval_s: 0.1      # how often the workflow asks; not inference time
+  stop_threshold:      0.5      # stop a running sim scoring below this
+  decision:            llm
+  answer_style:        scores
+  seed:                0
 
+# --- Inference backend ---------------------------------------------------------
 llm:
   backend: compute
   compute:
-    device: cpu                 # same tensor program: cpu or cuda[:index]
-    new_tokens: 16               # actual autoregressive generation steps
-    steering_seed: 0             # random scores AFTER compute, independent of device
-    max_pending: 16
+    device: cpu                 # the same program runs on cuda or cuda:<index>
+    new_tokens: 16              # tokens generated per request
+    steering_seed: 0            # seed of the pseudo-random steering scores
+    max_pending: 16             # queued requests before new ones are refused
     spec:
       hidden_size: 64
       intermediate_size: 128
@@ -36,9 +44,9 @@ llm:
       num_heads: 4
       num_kv_heads: 2
       vocab_size: 128
+      dtype: float32            # keep the same dtype when comparing devices
+      seed: 0
       max_batch_size: 4
       max_prompt_tokens: 512
       max_new_tokens: 32
-      dtype: float32             # preserve across device comparisons
-      seed: 0
-      max_tensor_bytes: 268435456 # estimated tensor budget, NOT process RSS
+      max_tensor_bytes: 268435456   # tensor budget in bytes, not process memory

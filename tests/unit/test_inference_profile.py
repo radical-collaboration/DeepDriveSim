@@ -297,7 +297,7 @@ def write_safetensors(path, tensors):
 
 
 def model_weights(spec, torch):
-    """Random 'real' weights under their Qwen2 names, split over two files' worth."""
+    """Random stand-ins for a model's weights, under their Qwen2 names."""
     generator = torch.Generator().manual_seed(11)
     names = profiles.model_tensor_names(spec)
     return {
@@ -381,9 +381,9 @@ def test_emulator_program_reproduces_a_transformers_qwen2_model(tmp_path):
     write_safetensors(source / "model-00001-of-00001.safetensors", model.state_dict())
     (source / profiles.CONFIG_FILE).write_text(json.dumps(config.to_dict()))
     script = profiles.PROFILE_DIR / "read_safetensors_headers.py"
-    spec_ = importlib.util.spec_from_file_location("read_headers", script)
-    reader = importlib.util.module_from_spec(spec_)
-    spec_.loader.exec_module(reader)
+    module_spec = importlib.util.spec_from_file_location("read_headers", script)
+    reader = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(reader)
     (source / profiles.HEADERS_FILE).write_text(json.dumps(reader.read_headers(source)))
 
     profile = profiles.build_profile("tiny-qwen2", source, {"model": "random"})

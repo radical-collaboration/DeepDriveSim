@@ -1,13 +1,23 @@
-"""Portable, synthetic decoder inference; not a measured Qwen trace.
+"""Decoder-only LLM inference as a portable tensor program.
 
-The same tensor program executes on CPU/CUDA: embeddings, RMSNorm, rotary
-positions, grouped-query causal attention, a KV cache, gated SiLU MLPs and a
-vocabulary projection. Weights are random, fixed and never trained. Device
-execution, not a latency model or utilization target, determines runtime.
+One implementation runs on CPU and on CUDA: token embedding, RMSNorm, rotary
+positions, grouped-query causal attention with a key/value cache, gated SiLU
+MLPs and a vocabulary projection. A request is one prefill over the prompt
+followed by autoregressive decoding. Runtime comes from executing that work on
+the chosen device; nothing is slept or scaled.
 
-Keep this module independent of AsyncFlow. Importing it does not import torch or
-initialize CUDA (torch is an optional dependency, imported when a workload is
-built). Defaults are deliberately tiny; no full-model preset is implied.
+Two ways to use it:
+
+* With synthetic weights (the default): fixed random values, never trained. The
+  cost of inference does not depend on the values, so this reproduces a model's
+  compute and memory footprint without its weights.
+* With a real model's weights (``weights=``): the same program then computes
+  that model's logits. ``inference_profile`` loads them and checks the program
+  against a reference implementation.
+
+The module does not depend on AsyncFlow, and importing it does not import torch:
+torch is an optional dependency, imported when a workload is built. The default
+dimensions are deliberately tiny.
 """
 
 from __future__ import annotations
@@ -32,7 +42,8 @@ if TYPE_CHECKING:
 #: Recorded with every result so synthetic runs are never mistaken for a trace.
 FIDELITY = "synthetic_decoder_not_measured_trace"
 
-_DTYPES = ("float32", "float16", "bfloat16")
+#: Supported floating-point types and their size in bytes.
+_DTYPE_BYTES = {"float32": 4, "float16": 2, "bfloat16": 2}
 _FLOAT32_BYTES = 4
 #: Epsilon of the RMSNorm layers.
 RMS_NORM_EPS = 1e-6
@@ -80,7 +91,7 @@ class InferenceSpec:
                 raise ValueError(f"{name} must be a positive integer")
         if not _is_int(self.seed) or self.seed < 0:
             raise ValueError("seed must be a nonnegative integer")
-        if self.dtype not in _DTYPES:
+        if self.dtype not in _DTYPE_BYTES:
             raise ValueError("dtype must be float32, float16 or bfloat16")
         if not isinstance(self.attention_bias, bool):
             raise ValueError("attention_bias must be true or false")
@@ -110,7 +121,7 @@ class InferenceSpec:
     @property
     def element_bytes(self) -> int:
         """Bytes per stored scalar for the configured dtype."""
-        return _FLOAT32_BYTES if self.dtype == "float32" else 2
+        return _DTYPE_BYTES[self.dtype]
 
     @property
     def parameter_count(self) -> int:
@@ -159,10 +170,9 @@ class InferenceSpec:
     def kv_bytes(self, batch_size: int, prompt_tokens: int, new_tokens: int) -> int:
         """Bytes of key/value cache storage for one batch."""
         capacity = self.cache_tokens(prompt_tokens, new_tokens)
-        elements = (
-            2 * self.num_layers * batch_size * self.num_kv_heads * capacity
-        ) * self.head_dim
-        return elements * self.element_bytes
+        per_tensor = batch_size * self.num_kv_heads * capacity * self.head_dim
+        # One key tensor and one value tensor per layer.
+        return 2 * self.num_layers * per_tensor * self.element_bytes
 
     def check_storage(
         self, batch_size: int, prompt_tokens: int, new_tokens: int
@@ -178,6 +188,9 @@ class InferenceSpec:
         )
         h, m = self.hidden_size, self.intermediate_size
         seq = self.cache_tokens(prompt_tokens, new_tokens)
+        # Temporaries, counted generously in float32: attention weights
+        # (heads x seq x seq), a dozen hidden-width and four MLP-width
+        # activations per position, and one row of logits.
         scratch = batch_size * (
             self.num_heads * seq * seq * _FLOAT32_BYTES
             + seq * (12 * h + 4 * m) * _FLOAT32_BYTES
@@ -191,7 +204,7 @@ class InferenceSpec:
 
 
 class InferenceWorkload:
-    """Synchronous inference-only tensor workload on one device.
+    """Inference-only decoder workload on one device.
 
     Not thread-safe: a single owner must serialize calls to :meth:`run`.
     A CUDA request never falls back to CPU, and the configured dtype is never
@@ -231,6 +244,7 @@ class InferenceWorkload:
         if self.device.type == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("CUDA requested but unavailable; no CPU fallback")
         self.dtype = getattr(torch, spec.dtype)
+
         shapes = spec.tensor_shapes()
         if weights is None:
             tensors = self._synthetic_weights(shapes)
@@ -239,7 +253,7 @@ class InferenceWorkload:
         self.embedding = tensors["embedding"]
         self.head = tensors["head"]
         self.final_norm = tensors["final_norm"]
-        # Per-layer insertion order is the allocation order of ``tensor_shapes()``.
+        # One dict per layer, in the allocation order of ``tensor_shapes()``.
         self.layers: list[dict[str, torch.Tensor]] = [
             {} for _ in range(spec.num_layers)
         ]
@@ -247,62 +261,16 @@ class InferenceWorkload:
             if name.startswith("layers."):
                 _, index, kind = name.split(".")
                 self.layers[int(index)][kind] = tensor
+
+        exponent = torch.arange(0, spec.head_dim, 2, device=self.device).float()
+        self.inv_freq = 1.0 / (spec.rope_theta ** (exponent / spec.head_dim))
         # Grouped-query attention: where PyTorch can share each key/value head
         # across its query heads (``enable_gqa``, torch >= 2.5) use that, as the
         # reference implementation does; otherwise materialize the expansion.
-        self._broadcast_heads = self._supports_grouped_attention()
-        self._attention_options = {"enable_gqa": True} if self._broadcast_heads else {}
-        exponent = torch.arange(0, spec.head_dim, 2, device=self.device).float()
-        self.inv_freq = 1.0 / (spec.rope_theta ** (exponent / spec.head_dim))
+        self._shares_kv_heads = self._attention_shares_kv_heads()
         self._synchronize()
 
-    def _synthetic_weights(
-        self, shapes: list[tuple[str, tuple[int, ...]]]
-    ) -> dict[str, torch.Tensor]:
-        """Fixed random weights: the same values on any device for a given seed.
-
-        Drawn on the CPU from a private generator, in allocation order, without
-        touching the global RNG state.
-        """
-        torch = self._torch
-        generator = torch.Generator(device="cpu").manual_seed(self.spec.seed)
-        tensors = {}
-        for name, shape in shapes:
-            if "norm" in name:
-                initial = torch.ones(shape)
-            elif name.endswith("_bias"):
-                initial = 0.02 * torch.randn(
-                    shape, generator=generator, dtype=torch.float32
-                )
-            else:
-                initial = torch.randn(
-                    shape, generator=generator, dtype=torch.float32
-                ) / math.sqrt(shape[1])
-            tensors[name] = initial.to(device=self.device, dtype=self.dtype)
-        return tensors
-
-    def _supplied_weights(
-        self,
-        shapes: list[tuple[str, tuple[int, ...]]],
-        weights: Mapping[str, torch.Tensor],
-    ) -> dict[str, torch.Tensor]:
-        """Validate supplied weights against the spec and move them to the device."""
-        expected = dict(shapes)
-        if set(weights) != set(expected):
-            missing = sorted(set(expected) - set(weights))[:3]
-            extra = sorted(set(weights) - set(expected))[:3]
-            raise ValueError(
-                f"weights do not match the spec: missing {missing}, unexpected {extra}"
-            )
-        tensors = {}
-        for name, shape in shapes:
-            if tuple(weights[name].shape) != shape:
-                raise ValueError(
-                    f"{name}: shape {tuple(weights[name].shape)}, expected {shape}"
-                )
-            tensors[name] = weights[name].to(device=self.device, dtype=self.dtype)
-        return tensors
-
+    # ------------------------------------------------------------ public API
     def parameters(self) -> list[torch.Tensor]:
         """Every weight tensor, in a stable order (embedding, head, norm, layers)."""
         tensors = [self.embedding, self.head, self.final_norm]
@@ -322,26 +290,6 @@ class InferenceWorkload:
             for _ in self.layers
         ]
 
-    def _synchronize(self) -> None:
-        """Wait for queued CUDA work so wall-clock timing is meaningful."""
-        if self.device.type == "cuda":
-            self._torch.cuda.synchronize(self.device)
-
-    def _norm(self, x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
-        """RMSNorm, computed in float32 and cast back to the working dtype."""
-        wide = x.float()
-        scale = self._torch.rsqrt(wide.square().mean(-1, keepdim=True) + RMS_NORM_EPS)
-        return (wide * scale).to(x.dtype) * weight
-
-    def _rope(self, x: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
-        """Apply rotary position embeddings to ``x`` at absolute ``positions``."""
-        torch = self._torch
-        angles = positions.float()[:, None] * self.inv_freq[None, :]
-        angles = torch.cat((angles, angles), dim=-1)[None, None, :, :]
-        half = x.shape[-1] // 2
-        rotated = torch.cat((-x[..., half:], x[..., :half]), dim=-1)
-        return x * angles.cos().to(x.dtype) + rotated * angles.sin().to(x.dtype)
-
     def forward(
         self, tokens: torch.Tensor, caches: list[LayerCache], offset: int
     ) -> torch.Tensor:
@@ -357,76 +305,17 @@ class InferenceWorkload:
         Returns:
             Logits for the last position, shape ``(batch, vocab_size)``.
         """
-        torch, spec = self._torch, self.spec
-        functional = torch.nn.functional
-        # Projections go through ``linear``, as in the reference implementation,
-        # so both issue the same matrix-product calls (bias fused where present).
-        linear = functional.linear
-        batch, length = tokens.shape
-        end = offset + length
-        positions = torch.arange(offset, end, device=self.device)
-        repeats = spec.num_heads // spec.num_kv_heads
+        length = tokens.shape[1]
+        positions = self._torch.arange(offset, offset + length, device=self.device)
         x = self.embedding[tokens]
-        for layer, (keys, values) in zip(self.layers, caches):
-            z = self._norm(x, layer["norm1"])
-            q = linear(z, layer["q"], layer.get("q_bias"))
-            k = linear(z, layer["k"], layer.get("k_bias"))
-            v = linear(z, layer["v"], layer.get("v_bias"))
-            q = self._split_heads(q, spec.num_heads)
-            k = self._split_heads(k, spec.num_kv_heads)
-            v = self._split_heads(v, spec.num_kv_heads)
-            q, k = self._rope(q, positions), self._rope(k, positions)
-            keys[:, :, offset:end].copy_(k)
-            values[:, :, offset:end].copy_(v)
-            k, v = keys[:, :, :end], values[:, :, :end]
-            if not self._broadcast_heads:
-                k = self._repeat_heads(k, repeats)
-                v = self._repeat_heads(v, repeats)
-            # Prefill is causal. A one-token decode attends to the entire prefix;
-            # is_causal=True on this non-square attention would mask incorrectly.
-            attended = functional.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                dropout_p=0.0,
-                is_causal=(offset == 0),
-                **self._attention_options,
+        for layer, cache in zip(self.layers, caches):
+            x = x + self._attention(
+                self._norm(x, layer["norm1"]), layer, cache, offset, positions
             )
-            attended = attended.transpose(1, 2).reshape(batch, length, -1)
-            x = x + linear(attended, layer["o"])
-            z = self._norm(x, layer["norm2"])
-            gated = functional.silu(linear(z, layer["gate"])) * linear(z, layer["up"])
-            x = x + linear(gated, layer["down"])
+            x = x + self._mlp(self._norm(x, layer["norm2"]), layer)
         # Only the last position is needed to choose the next token.
-        return linear(self._norm(x[:, -1], self.final_norm), self.head)
-
-    def _supports_grouped_attention(self) -> bool:
-        """True if this PyTorch's attention accepts fewer key/value than query heads."""
-        torch = self._torch
-        query, key = torch.zeros(1, 2, 1, 2), torch.zeros(1, 1, 1, 2)
-        try:
-            torch.nn.functional.scaled_dot_product_attention(
-                query, key, key, enable_gqa=True
-            )
-        except TypeError:
-            return False
-        return True
-
-    @staticmethod
-    def _repeat_heads(cached: torch.Tensor, repeats: int) -> torch.Tensor:
-        """Give each key/value head to ``repeats`` consecutive query heads.
-
-        Used only where attention cannot share heads itself. Expand-then-reshape
-        yields the same tensor as ``repeat_interleave`` on the head dimension.
-        """
-        batch, heads, length, width = cached.shape
-        expanded = cached[:, :, None].expand(batch, heads, repeats, length, width)
-        return expanded.reshape(batch, heads * repeats, length, width)
-
-    def _split_heads(self, x: torch.Tensor, heads: int) -> torch.Tensor:
-        """Reshape ``(batch, length, heads * head_dim)`` to per-head layout."""
-        batch, length, _ = x.shape
-        return x.view(batch, length, heads, self.spec.head_dim).transpose(1, 2)
+        last = self._norm(x[:, -1], self.final_norm)
+        return self._torch.nn.functional.linear(last, self.head)
 
     def run(
         self,
@@ -435,7 +324,7 @@ class InferenceWorkload:
         new_tokens: int,
         observer: ForwardObserver | None = None,
     ) -> dict[str, Any]:
-        """Execute one prefill plus autoregressive decoding.
+        """Execute one request: a prefill, then greedy autoregressive decoding.
 
         This models shapes, not tokenization or content: the input IDs are a
         deterministic numeric sequence. No sleeps, backward passes or training.
@@ -467,16 +356,13 @@ class InferenceWorkload:
                 raise ValueError(f"{name} must be in [1, {limit}]")
         spec.check_storage(batch_size, prompt_tokens, new_tokens)
         capacity = spec.cache_tokens(prompt_tokens, new_tokens)
+
         self._synchronize()
         start = time.perf_counter()
         with torch.inference_mode():
             caches = self.new_caches(batch_size, capacity)
-            tokens = (
-                torch.arange(batch_size * prompt_tokens, device=self.device).reshape(
-                    batch_size, prompt_tokens
-                )
-                % spec.vocab_size
-            )
+            prompt = torch.arange(batch_size * prompt_tokens, device=self.device)
+            tokens = prompt.reshape(batch_size, prompt_tokens) % spec.vocab_size
             generated = []
             offset = 0
             for _ in range(new_tokens):
@@ -489,9 +375,11 @@ class InferenceWorkload:
                 tokens = next_token[:, None]
             token_ids = torch.stack(generated, dim=1).cpu().tolist()
             self._synchronize()
+        elapsed_s = time.perf_counter() - start
+
         return {
             "token_ids": token_ids,
-            "elapsed_s": time.perf_counter() - start,
+            "elapsed_s": elapsed_s,
             "batch_size": batch_size,
             "prompt_tokens": prompt_tokens,
             "new_tokens": new_tokens,
@@ -505,6 +393,153 @@ class InferenceWorkload:
             "dtype": spec.dtype,
             "fidelity": FIDELITY,
         }
+
+    # ------------------------------------------------------------- weights
+    def _synthetic_weights(
+        self, shapes: list[tuple[str, tuple[int, ...]]]
+    ) -> dict[str, torch.Tensor]:
+        """Fixed random weights: the same values on any device for a given seed.
+
+        Drawn on the CPU from a private generator, in allocation order, without
+        touching the global RNG state.
+        """
+        torch = self._torch
+        generator = torch.Generator(device="cpu").manual_seed(self.spec.seed)
+
+        def random(shape: tuple[int, ...]) -> torch.Tensor:
+            return torch.randn(shape, generator=generator, dtype=torch.float32)
+
+        tensors = {}
+        for name, shape in shapes:
+            if "norm" in name:
+                initial = torch.ones(shape)
+            elif name.endswith("_bias"):
+                initial = 0.02 * random(shape)
+            else:
+                initial = random(shape) / math.sqrt(shape[1])
+            tensors[name] = initial.to(device=self.device, dtype=self.dtype)
+        return tensors
+
+    def _supplied_weights(
+        self,
+        shapes: list[tuple[str, tuple[int, ...]]],
+        weights: Mapping[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
+        """Validate supplied weights against the spec and move them to the device."""
+        expected = dict(shapes)
+        if set(weights) != set(expected):
+            missing = sorted(set(expected) - set(weights))[:3]
+            extra = sorted(set(weights) - set(expected))[:3]
+            raise ValueError(
+                f"weights do not match the spec: missing {missing}, unexpected {extra}"
+            )
+        tensors = {}
+        for name, shape in shapes:
+            if tuple(weights[name].shape) != shape:
+                raise ValueError(
+                    f"{name}: shape {tuple(weights[name].shape)}, expected {shape}"
+                )
+            tensors[name] = weights[name].to(device=self.device, dtype=self.dtype)
+        return tensors
+
+    # ---------------------------------------------------------- the decoder
+    def _attention(
+        self,
+        x: torch.Tensor,
+        layer: dict[str, torch.Tensor],
+        cache: LayerCache,
+        offset: int,
+        positions: torch.Tensor,
+    ) -> torch.Tensor:
+        """Grouped-query self-attention over the cached prefix plus ``x``.
+
+        Projections go through ``linear``, as in the reference implementation,
+        so both issue the same matrix-product calls (bias fused where present).
+        """
+        spec = self.spec
+        functional = self._torch.nn.functional
+        batch, length, _ = x.shape
+        end = offset + length
+        q = functional.linear(x, layer["q"], layer.get("q_bias"))
+        k = functional.linear(x, layer["k"], layer.get("k_bias"))
+        v = functional.linear(x, layer["v"], layer.get("v_bias"))
+        q = self._split_heads(q, spec.num_heads)
+        k = self._split_heads(k, spec.num_kv_heads)
+        v = self._split_heads(v, spec.num_kv_heads)
+        q, k = self._rope(q, positions), self._rope(k, positions)
+
+        keys, values = cache
+        keys[:, :, offset:end].copy_(k)
+        values[:, :, offset:end].copy_(v)
+        k, v = keys[:, :, :end], values[:, :, :end]
+        options = {"enable_gqa": True}
+        if not self._shares_kv_heads:
+            repeats = spec.num_heads // spec.num_kv_heads
+            k, v = self._repeat_heads(k, repeats), self._repeat_heads(v, repeats)
+            options = {}
+        # Prefill is causal. A one-token decode attends to the entire prefix;
+        # is_causal=True on this non-square attention would mask incorrectly.
+        attended = functional.scaled_dot_product_attention(
+            q, k, v, dropout_p=0.0, is_causal=(offset == 0), **options
+        )
+        attended = attended.transpose(1, 2).reshape(batch, length, -1)
+        return functional.linear(attended, layer["o"])
+
+    def _mlp(self, x: torch.Tensor, layer: dict[str, torch.Tensor]) -> torch.Tensor:
+        """Gated feed-forward block: ``down(silu(gate(x)) * up(x))``."""
+        functional = self._torch.nn.functional
+        gate = functional.silu(functional.linear(x, layer["gate"]))
+        return functional.linear(
+            gate * functional.linear(x, layer["up"]), layer["down"]
+        )
+
+    def _norm(self, x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+        """RMSNorm, computed in float32 and cast back to the working dtype."""
+        wide = x.float()
+        scale = self._torch.rsqrt(wide.square().mean(-1, keepdim=True) + RMS_NORM_EPS)
+        return (wide * scale).to(x.dtype) * weight
+
+    def _rope(self, x: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+        """Apply rotary position embeddings to ``x`` at absolute ``positions``."""
+        torch = self._torch
+        angles = positions.float()[:, None] * self.inv_freq[None, :]
+        angles = torch.cat((angles, angles), dim=-1)[None, None, :, :]
+        half = x.shape[-1] // 2
+        rotated = torch.cat((-x[..., half:], x[..., :half]), dim=-1)
+        return x * angles.cos().to(x.dtype) + rotated * angles.sin().to(x.dtype)
+
+    def _split_heads(self, x: torch.Tensor, heads: int) -> torch.Tensor:
+        """Reshape ``(batch, length, heads * head_dim)`` to per-head layout."""
+        batch, length, _ = x.shape
+        return x.view(batch, length, heads, self.spec.head_dim).transpose(1, 2)
+
+    @staticmethod
+    def _repeat_heads(cached: torch.Tensor, repeats: int) -> torch.Tensor:
+        """Give each key/value head to ``repeats`` consecutive query heads.
+
+        Used only where attention cannot share heads itself. Expand-then-reshape
+        yields the same tensor as ``repeat_interleave`` on the head dimension.
+        """
+        batch, heads, length, width = cached.shape
+        expanded = cached[:, :, None].expand(batch, heads, repeats, length, width)
+        return expanded.reshape(batch, heads * repeats, length, width)
+
+    def _attention_shares_kv_heads(self) -> bool:
+        """True if this PyTorch's attention accepts fewer key/value than query heads."""
+        torch = self._torch
+        query, key = torch.zeros(1, 2, 1, 2), torch.zeros(1, 1, 1, 2)
+        try:
+            torch.nn.functional.scaled_dot_product_attention(
+                query, key, key, enable_gqa=True
+            )
+        except TypeError:
+            return False
+        return True
+
+    def _synchronize(self) -> None:
+        """Wait for queued CUDA work so wall-clock timing is meaningful."""
+        if self.device.type == "cuda":
+            self._torch.cuda.synchronize(self.device)
 
 
 def main() -> None:

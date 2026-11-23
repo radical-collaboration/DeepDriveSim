@@ -23,7 +23,8 @@ def expected_answer(prompt, seed=0):
 
 
 def test_seeded_scores_are_pinned_to_recorded_values():
-    # Values recorded by the November 18 Nimitz CPU and GPU mini-app runs.
+    # Recorded from full mini-app runs on CPU and GPU; pins the policy against
+    # accidental change.
     prompt = "Steering context: replica=min1 iteration=1\nsim_0 sim_1 sim_2 sim_3"
     assert seeded_steering_scores(prompt, 17) == {
         0: 0.15975377612343167,

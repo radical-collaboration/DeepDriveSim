@@ -95,11 +95,10 @@ def test_observer_sees_every_forward_pass_without_changing_the_result(spec, torc
 
 def test_shared_and_materialized_key_value_heads_agree(spec, torch):
     shared = InferenceWorkload(spec)
-    if not shared._broadcast_heads:
+    if not shared._shares_kv_heads:
         pytest.skip("this PyTorch cannot share key/value heads in attention")
     materialized = InferenceWorkload(spec)
-    materialized._broadcast_heads = False
-    materialized._attention_options = {}
+    materialized._shares_kv_heads = False
     with torch.inference_mode():
         tokens = torch.tensor([[1, 2, 3, 4, 5], [5, 4, 3, 2, 1]])
         a = shared.forward(tokens, shared.new_caches(2, 6), 0)

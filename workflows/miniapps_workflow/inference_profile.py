@@ -83,11 +83,18 @@ MEASUREMENT_KEYS = frozenset(
 )
 
 
+# ----------------------------------------------------------------------------
+# Building a profile from a model's files
+# ----------------------------------------------------------------------------
+
+
 def _sha256(path: Path) -> str:
+    """SHA-256 of a file, recorded so a profile can be traced to its sources."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _require(condition: bool, message: str) -> None:
+    """Raise ``ValueError`` naming a model feature the emulator cannot mirror."""
     if not condition:
         raise ValueError(f"unsupported model for the compute emulator: {message}")
 
@@ -197,6 +204,11 @@ def build_profile(
     return profile
 
 
+# ----------------------------------------------------------------------------
+# Loading a profile and turning it into an emulator spec
+# ----------------------------------------------------------------------------
+
+
 def load_profile(name_or_path: str | Path) -> dict[str, Any]:
     """Load a profile by packaged name (``qwen2.5-7b-instruct``) or by path.
 
@@ -262,6 +274,11 @@ def spec_from_profile(profile: dict[str, Any], **bounds: Any) -> InferenceSpec:
     )
 
 
+# ----------------------------------------------------------------------------
+# Checking the emulator's tensors against the real model's
+# ----------------------------------------------------------------------------
+
+
 def model_tensor_names(spec: InferenceSpec) -> dict[str, str]:
     """Map each emulator tensor name to its name in the real (Qwen2) model."""
     names = {}
@@ -272,61 +289,6 @@ def model_tensor_names(spec: InferenceSpec) -> dict[str, str]:
             _, layer, kind = name.split(".")
             names[name] = f"model.layers.{layer}.{_QWEN2_LAYER_NAMES[kind]}"
     return names
-
-
-def read_model_weights(
-    model_dir: str | Path, spec: InferenceSpec
-) -> dict[str, torch.Tensor]:
-    """Read a real model's weights, keyed by emulator tensor name.
-
-    The safetensors files are memory-mapped and each tensor is a view of the
-    mapping, so nothing is copied until the workload moves it to its device.
-    Only little-endian hosts are supported, as in the file format.
-
-    Raises:
-        ValueError: A tensor the spec needs is missing or has another shape.
-    """
-    import torch
-
-    dtypes = {"BF16": torch.bfloat16, "F16": torch.float16, "F32": torch.float32}
-    stored: dict[str, torch.Tensor] = {}
-    for path in sorted(Path(model_dir).glob("model-*.safetensors")):
-        with path.open("rb") as handle:
-            mapped = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
-        (length,) = struct.unpack("<Q", mapped[:8])
-        header = json.loads(mapped[8 : 8 + length])
-        data = memoryview(mapped)[8 + length :]
-        for name, info in header.items():
-            if name == "__metadata__":
-                continue
-            begin, end = info["data_offsets"]
-            with warnings.catch_warnings():
-                # Expected: the tensor is a read-only view and is never written.
-                warnings.simplefilter("ignore", UserWarning)
-                flat = torch.frombuffer(data[begin:end], dtype=dtypes[info["dtype"]])
-            stored[name] = flat.reshape(info["shape"])
-    weights = {}
-    for name, real_name in model_tensor_names(spec).items():
-        if real_name not in stored:
-            raise ValueError(f"model has no tensor {real_name}")
-        weights[name] = stored[real_name]
-    return weights
-
-
-def workload_from_model(
-    profile: dict[str, Any],
-    model_dir: str | Path,
-    device: str = "cpu",
-    **bounds: Any,
-) -> InferenceWorkload:
-    """Build the emulator workload with a real model's weights.
-
-    The result runs the real model's computation through the emulator's own
-    tensor program, which is how the program is validated against a reference
-    implementation. ``bounds`` are those of :func:`spec_from_profile`.
-    """
-    spec = spec_from_profile(profile, **bounds)
-    return InferenceWorkload(spec, device, weights=read_model_weights(model_dir, spec))
 
 
 def _inventory_spec(profile: dict[str, Any]) -> InferenceSpec:
@@ -375,6 +337,71 @@ def _check_names(spec: InferenceSpec, tensors: dict[str, Any]) -> None:
             raise ValueError(
                 f"{names[name]} does not match emulator tensor {name} {shape}"
             )
+
+
+# ----------------------------------------------------------------------------
+# Running a real model's weights through the emulator
+# ----------------------------------------------------------------------------
+
+
+def read_model_weights(
+    model_dir: str | Path, spec: InferenceSpec
+) -> dict[str, torch.Tensor]:
+    """Read a real model's weights, keyed by emulator tensor name.
+
+    The safetensors files are memory-mapped and each tensor is a view of the
+    mapping, so nothing is copied until the workload moves it to its device.
+    Only little-endian hosts are supported, as in the file format.
+
+    Raises:
+        ValueError: A tensor the spec needs is missing from the model.
+    """
+    import torch
+
+    dtypes = {"BF16": torch.bfloat16, "F16": torch.float16, "F32": torch.float32}
+    stored: dict[str, torch.Tensor] = {}
+    for path in sorted(Path(model_dir).glob("model-*.safetensors")):
+        with path.open("rb") as handle:
+            mapped = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
+        (length,) = struct.unpack("<Q", mapped[:8])
+        header = json.loads(mapped[8 : 8 + length])
+        data = memoryview(mapped)[8 + length :]
+        for name, info in header.items():
+            if name == "__metadata__":
+                continue
+            begin, end = info["data_offsets"]
+            with warnings.catch_warnings():
+                # Expected: the tensor is a read-only view and is never written.
+                warnings.simplefilter("ignore", UserWarning)
+                flat = torch.frombuffer(data[begin:end], dtype=dtypes[info["dtype"]])
+            stored[name] = flat.reshape(info["shape"])
+    weights = {}
+    for name, real_name in model_tensor_names(spec).items():
+        if real_name not in stored:
+            raise ValueError(f"model has no tensor {real_name}")
+        weights[name] = stored[real_name]
+    return weights
+
+
+def workload_from_model(
+    profile: dict[str, Any],
+    model_dir: str | Path,
+    device: str = "cpu",
+    **bounds: Any,
+) -> InferenceWorkload:
+    """Build the emulator workload with a real model's weights.
+
+    The result runs the real model's computation through the emulator's own
+    tensor program, which is how the program is validated against a reference
+    implementation. ``bounds`` are those of :func:`spec_from_profile`.
+    """
+    spec = spec_from_profile(profile, **bounds)
+    return InferenceWorkload(spec, device, weights=read_model_weights(model_dir, spec))
+
+
+# ----------------------------------------------------------------------------
+# Command line
+# ----------------------------------------------------------------------------
 
 
 def main() -> None:
