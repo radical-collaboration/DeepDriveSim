@@ -15,6 +15,9 @@ Backends (chosen explicitly in the config, ``llm.backend``):
   measured vLLM service (startup, RHAPSODY batching and batch times, answer size and
   format, optional GPU load). See ``llm_emulator_calibration/README.md``. Its numbers
   are emulated, not measured; runs record the profile and its sha256.
+* ``compute``: executes a shared synthetic decoder inference program on CPU/CUDA.
+  Actual execution determines latency; no calibrated timing wait or separate load
+  generator. Random weights, not a measured Qwen trace; see INFERENCE_COMPUTE.md.
 """
 
 from __future__ import annotations
@@ -170,6 +173,19 @@ async def make_llm_backend(llm_cfg: dict, name: str = "llm"):
         info["emulator_profile"] = os.path.basename(profile_path)
         info["model"] = "emulated:" + backend.profile["description"].split(",")[0]
         info["num_gpus"] = 1 if gpu == "load" else 0
+    elif kind == "compute":
+        import hashlib
+        import json
+
+        from workflows.miniapps_workflow.llm_compute_backend import ComputeLLMBackend
+
+        backend = await ComputeLLMBackend.create(llm_cfg.get("compute", {}), name=name)
+        description = backend.description()
+        encoded = json.dumps(description, sort_keys=True)
+        info["compute_spec_json"] = encoded
+        info["compute_spec_sha256"] = hashlib.sha256(encoded.encode()).hexdigest()
+        info["model"] = "synthetic-decoder:" + info["compute_spec_sha256"][:12]
+        info["num_gpus"] = int(backend.workload.device.type == "cuda")
     elif kind == "standin":
         backend = StandInLLMBackend(
             name=name,
@@ -180,7 +196,7 @@ async def make_llm_backend(llm_cfg: dict, name: str = "llm"):
         info["num_gpus"] = 0
     else:
         raise ValueError(
-            f"llm.backend={kind!r}: expected 'vllm', 'emulated' or 'standin'"
+            f"llm.backend={kind!r}: expected 'vllm', 'emulated', 'compute' or 'standin'"
         )
     info["t_ready"] = time.time()
     return backend, info

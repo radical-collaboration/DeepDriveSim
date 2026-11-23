@@ -56,6 +56,9 @@ Documentation = "https://radical-collaboration.github.io/DeepDriveSim/"
 [project.optional-dependencies]
 lint = ["ruff"]
 
+# Optional portable inference-computation surrogate; no model downloads.
+inference-compute = ["torch>=2.0"]
+
 # All test deps
 dev = [
     "pytest",

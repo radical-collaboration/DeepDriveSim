@@ -1,0 +1,44 @@
+# TINY functional example, not a Qwen/H100 resource-equivalent configuration.
+# See INFERENCE_COMPUTE.md. No model weights are downloaded or trained.
+debug: false
+num_replicas: 1
+home_dir: MiniApps-inference-compute
+telemetry: true
+telemetry_dir: telemetry-inference-compute
+total_num_sim: 4
+max_sim_batch: 2
+miniapps_data_ready: 1
+phase: 0
+num_step: 10
+src_dir: ""
+executable: ""
+
+agentic:
+  inference_only: true
+  prompt_tokens: 128             # approximate, includes synthetic observations
+  steering_interval_s: 0.1       # workflow polling, NOT inference latency
+  stop_threshold: 0.5
+  decision: llm
+  answer_style: scores
+  seed: 0
+
+llm:
+  backend: compute
+  compute:
+    device: cpu                 # same tensor program: cpu or cuda[:index]
+    new_tokens: 16               # actual autoregressive generation steps
+    steering_seed: 0             # random scores AFTER compute, independent of device
+    max_pending: 16
+    spec:
+      hidden_size: 64
+      intermediate_size: 128
+      num_layers: 2
+      num_heads: 4
+      num_kv_heads: 2
+      vocab_size: 128
+      max_batch_size: 4
+      max_prompt_tokens: 512
+      max_new_tokens: 32
+      dtype: float32             # preserve across device comparisons
+      seed: 0
+      max_tensor_bytes: 268435456 # estimated tensor budget, NOT process RSS

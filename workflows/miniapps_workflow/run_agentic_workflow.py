@@ -11,6 +11,7 @@ engine. Run with:
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import time
@@ -25,12 +26,32 @@ from workflows.miniapps_workflow.agentic_workflow import (
     InferenceService,
     emit,
 )
+from workflows.miniapps_workflow.inference_workflow import InferenceOnlyMiniAppsWorkflow
 from workflows.miniapps_workflow.llm_backends import make_llm_backend
+
+
+def _write_summary(path: str, summary: dict) -> None:
+    """Write the run summary to a new file; never overwrite an earlier record.
+
+    Raises:
+        FileExistsError: ``path`` already exists.
+    """
+    with open(path, "x", encoding="utf-8") as handle:
+        json.dump(summary, handle, indent=2)
+        handle.write("\n")
 
 
 async def run_miniapps(config_file: str) -> None:
     cfg = load_config(config_file)
-    workflow_class = AgenticMiniAppsWorkflow
+    workflow_class = (
+        InferenceOnlyMiniAppsWorkflow
+        if (cfg.get("agentic", {}) or {}).get("inference_only", False)
+        else AgenticMiniAppsWorkflow
+    )
+    if (cfg.get("llm", {}) or {}).get("backend") == "compute" and (
+        workflow_class is not InferenceOnlyMiniAppsWorkflow
+    ):
+        raise ValueError("llm.backend: compute requires agentic.inference_only: true")
     backend = os.environ.get("DDSIM_BACKEND", "dragon")
     num_replicas = cfg.get("num_replicas", 4)
 
@@ -44,9 +65,16 @@ async def run_miniapps(config_file: str) -> None:
         mp.set_start_method("dragon", force=True)
         execution_backend = await DragonExecutionBackend()
     elif backend == "concurrent":
-        from rhapsody.backends import ConcurrentExecutionBackend
+        if workflow_class is InferenceOnlyMiniAppsWorkflow:
+            from workflows.miniapps_workflow.inference_execution import (
+                InferenceExecutionBackend,
+            )
 
-        execution_backend = await ConcurrentExecutionBackend()
+            execution_backend = await InferenceExecutionBackend()
+        else:
+            from rhapsody.backends import ConcurrentExecutionBackend
+
+            execution_backend = await ConcurrentExecutionBackend()
     else:
         raise ValueError(
             f"DDSIM_BACKEND={backend!r}: expected 'dragon' or 'concurrent'"
@@ -77,6 +105,8 @@ async def run_miniapps(config_file: str) -> None:
         startup_ms=(llm_info["t_ready"] - llm_info["t_init_start"]) * 1000,
         emulator_profile=llm_info.get("emulator_profile", ""),
         emulator_profile_sha256=llm_info.get("emulator_profile_sha256", ""),
+        compute_spec_json=llm_info.get("compute_spec_json", ""),
+        compute_spec_sha256=llm_info.get("compute_spec_sha256", ""),
     )
     emit(
         telemetry,
@@ -91,10 +121,8 @@ async def run_miniapps(config_file: str) -> None:
 
     home_dir = Path(cfg.get("home_dir", Path.home() / "MiniApps")).expanduser()
 
-    async with (
-        MiniApp(asyncflow, telemetry, backends=[execution_backend, llm_backend]),
-        asyncflow.workflow_scope("ddsim-agentic"),
-    ):
+    app = MiniApp(asyncflow, telemetry, backends=[execution_backend, llm_backend])
+    async with app, asyncflow.workflow_scope("ddsim-agentic"):
         # --- Launch replicas ---
         replicas = [
             workflow_class(
@@ -113,6 +141,7 @@ async def run_miniapps(config_file: str) -> None:
             await asyncio.gather(*[r.start() for r in replicas])
         except Exception as e:
             print(f"An error occurred during workflow execution: {e}")
+            raise
         finally:
             await asyncio.gather(*[r.close() for r in replicas])
 
@@ -142,6 +171,28 @@ async def run_miniapps(config_file: str) -> None:
                 lifetime_ms=(t_stopped - llm_info["t_ready"]) * 1000,
                 **service,
             )
+
+    if app.report is None or not app.report.telemetry_complete:
+        raise RuntimeError("mini-app telemetry verification failed")
+    summary_path = cfg.get("run_summary_path")
+    if summary_path:
+        summary = {
+            "session_id": asyncflow.uid,
+            "telemetry_report": app.report.to_dict(),
+            "service": llm_info,
+            "replicas": [
+                {
+                    "name": r.name,
+                    "iterations": r.iteration,
+                    "completed_sim_ids": r.completed_sims,
+                    "finished_sim_ids": getattr(r, "finished_sim_ids", []),
+                    "stopped_sim_ids": getattr(r, "stopped_sim_ids", []),
+                    "requests": r.requests,
+                }
+                for r in replicas
+            ],
+        }
+        await asyncio.to_thread(_write_summary, summary_path, summary)
 
     # after MiniApp: the sweep would otherwise cancel RHAPSODY's dispatch tasks
     pending = {t for t in asyncio.all_tasks() if t is not asyncio.current_task()}

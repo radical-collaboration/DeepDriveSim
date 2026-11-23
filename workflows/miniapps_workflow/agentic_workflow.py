@@ -25,6 +25,7 @@ Telemetry (custom ``ddsim.*`` events, manager side, each metric recorded indepen
 
 from __future__ import annotations
 
+import json
 import random
 import re
 import time
@@ -54,6 +55,8 @@ try:
         sims_in_prompt=int,
         sims_scored=int,
         stop_decisions=int,
+        scores_json=str,
+        compute_json=str,
     )
     LLMRequestSummary = define_event(
         "ddsim.LLMRequestSummary",
@@ -79,6 +82,8 @@ try:
         lifetime_ms=float,  # EC2: ready -> stopped (phase=stopped)
         emulator_profile=str,  # llm.backend emulated: profile file ("" otherwise)
         emulator_profile_sha256=str,
+        compute_spec_json=str,
+        compute_spec_sha256=str,
     )
 except ImportError:  # pragma: no cover
     LLMRequest = LLMRequestSummary = InferenceService = None
@@ -126,6 +131,11 @@ class AgenticMiniAppsWorkflow(MiniAppsWorkflow):
         super().__init__(config=config, **kwargs)
 
     # ------------------------------------------------------------------ tasks
+    @property
+    def requests(self) -> list[dict]:
+        """The steering requests made so far, oldest first (a copy)."""
+        return list(self._requests)
+
     def register_tasks(self):
         super().register_tasks()
 
@@ -224,6 +234,12 @@ class AgenticMiniAppsWorkflow(MiniAppsWorkflow):
             for k, s in scores.items()
             if k in self.registered_sims and self.stop_simulation(prediction=s)
         )
+        task_description = getattr(fut, "task", {})
+        compute = (
+            task_description.get("inference_compute", {})
+            if isinstance(task_description, dict)
+            else {}
+        )
         req = dict(
             replica=self.name,
             iteration=it,
@@ -242,6 +258,8 @@ class AgenticMiniAppsWorkflow(MiniAppsWorkflow):
             sims_in_prompt=len(sims),
             sims_scored=len(scores),
             stop_decisions=stops,
+            scores_json=json.dumps(scores, sort_keys=True),
+            compute_json=json.dumps(compute, sort_keys=True),
         )
         self._requests.append(req)
         emit(

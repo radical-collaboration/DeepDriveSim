@@ -1,0 +1,162 @@
+{
+  "schema": "ddsim.inference_profile/1",
+  "name": "qwen2.5-7b-instruct",
+  "level": "architecture",
+  "source": {
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "note": "config.json and weight-file headers read on 2026-11-22 from the copy used by the November 8 llm-service campaign (SMC shared home). Revision as recorded by that campaign; not re-verified against the Hub.",
+    "files_sha256": {
+      "config.json": "7463bb0ea78315365e6c6b74de4e73bbcc8359dfb0c5a737584e077d42c0b03c",
+      "safetensors-headers.json": "973273c07cb378ad62923586e18a65568df0c5c84e57150b2a7e9083a69adb78"
+    },
+    "weight_header_sha256": {
+      "model-00001-of-00004.safetensors": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae",
+      "model-00002-of-00004.safetensors": "20e0d104bddf53b6cf4ec70ff5bc40fdaef61da779ed2f57527d6390bb6abc67",
+      "model-00003-of-00004.safetensors": "7d4c92793e1771da420b91e721c5d6858076b06691f1bf1bca16b457ec8ed52a",
+      "model-00004-of-00004.safetensors": "ce6c55b46ee119c95277aa1dadfdb6031f130e44f6ead73f83280278ce92e896"
+    }
+  },
+  "architecture": {
+    "family": "decoder",
+    "model_type": "qwen2",
+    "hidden_size": 3584,
+    "intermediate_size": 18944,
+    "num_layers": 28,
+    "num_heads": 28,
+    "num_kv_heads": 4,
+    "vocab_size": 152064,
+    "dtype": "bfloat16",
+    "attention_bias": true,
+    "rope_theta": 1000000.0,
+    "rms_norm_eps": 1e-06,
+    "max_position_embeddings": 32768
+  },
+  "tensors": {
+    "count": 339,
+    "parameters": 7615616512,
+    "kinds": [
+      {
+        "name": "lm_head.weight",
+        "count": 1,
+        "shape": [
+          152064,
+          3584
+        ]
+      },
+      {
+        "name": "model.embed_tokens.weight",
+        "count": 1,
+        "shape": [
+          152064,
+          3584
+        ]
+      },
+      {
+        "name": "model.layers.N.input_layernorm.weight",
+        "count": 28,
+        "shape": [
+          3584
+        ]
+      },
+      {
+        "name": "model.layers.N.mlp.down_proj.weight",
+        "count": 28,
+        "shape": [
+          3584,
+          18944
+        ]
+      },
+      {
+        "name": "model.layers.N.mlp.gate_proj.weight",
+        "count": 28,
+        "shape": [
+          18944,
+          3584
+        ]
+      },
+      {
+        "name": "model.layers.N.mlp.up_proj.weight",
+        "count": 28,
+        "shape": [
+          18944,
+          3584
+        ]
+      },
+      {
+        "name": "model.layers.N.post_attention_layernorm.weight",
+        "count": 28,
+        "shape": [
+          3584
+        ]
+      },
+      {
+        "name": "model.layers.N.self_attn.k_proj.bias",
+        "count": 28,
+        "shape": [
+          512
+        ]
+      },
+      {
+        "name": "model.layers.N.self_attn.k_proj.weight",
+        "count": 28,
+        "shape": [
+          512,
+          3584
+        ]
+      },
+      {
+        "name": "model.layers.N.self_attn.o_proj.weight",
+        "count": 28,
+        "shape": [
+          3584,
+          3584
+        ]
+      },
+      {
+        "name": "model.layers.N.self_attn.q_proj.bias",
+        "count": 28,
+        "shape": [
+          3584
+        ]
+      },
+      {
+        "name": "model.layers.N.self_attn.q_proj.weight",
+        "count": 28,
+        "shape": [
+          3584,
+          3584
+        ]
+      },
+      {
+        "name": "model.layers.N.self_attn.v_proj.bias",
+        "count": 28,
+        "shape": [
+          512
+        ]
+      },
+      {
+        "name": "model.layers.N.self_attn.v_proj.weight",
+        "count": 28,
+        "shape": [
+          512,
+          3584
+        ]
+      },
+      {
+        "name": "model.norm.weight",
+        "count": 1,
+        "shape": [
+          3584
+        ]
+      }
+    ]
+  },
+  "measurements": [],
+  "not_captured": [
+    "operator-level timing of the real model",
+    "measured memory of a real inference process",
+    "serving-engine behavior: batching, kernel fusion, paged KV cache",
+    "tokenizer and generated content"
+  ]
+}
