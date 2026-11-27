@@ -263,7 +263,10 @@ class DDSimManager:
                     if workflow.retrain_model:
                         wm = workflow.monitor_training_data()
 
-                        if workflow.free_resources_for_train and workflow.registered_sims:
+                        if (
+                            workflow.free_resources_for_train
+                            and workflow.registered_sims
+                        ):
                             await workflow._free_resources_for_training()
                     if wm:
                         await wm
