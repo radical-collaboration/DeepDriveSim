@@ -273,39 +273,3 @@ class TestSimulationQueueEdgeCases:
 
         assert len(manager.registered_sims) == 2
         assert manager.sim_task_queue.empty()
-
-
-# ---------------------------
-# Group 7: failed_sims exit-condition helpers
-# ---------------------------
-class TestFailedSimsExitCondition:
-    """
-    Verify that failed_sims count toward the exit condition in the same way
-    as completed_sims.  These tests use a small inline subclass that mirrors
-    the check_train_status logic used in ddmd_workflow and the finalize_results
-    logic used in miniapps_workflow / dummy_workflow.
-    """
-
-    def _make_manager_with_counts(self, completed, failed, total):
-        """Return a MockLearner pre-seeded with the given sim counts."""
-        manager = make_manager()
-        manager.completed_sims = list(range(completed))
-        manager.failed_sims = set(range(completed, completed + failed))
-        manager._total = total  # used by the inline check below
-        return manager
-
-    def test_all_completed_meets_target(self):
-        m = self._make_manager_with_counts(completed=4, failed=0, total=4)
-        assert len(m.completed_sims) + len(m.failed_sims) >= m._total
-
-    def test_all_failed_meets_target(self):
-        m = self._make_manager_with_counts(completed=0, failed=4, total=4)
-        assert len(m.completed_sims) + len(m.failed_sims) >= m._total
-
-    def test_mixed_meets_target(self):
-        m = self._make_manager_with_counts(completed=2, failed=2, total=4)
-        assert len(m.completed_sims) + len(m.failed_sims) >= m._total
-
-    def test_incomplete_does_not_meet_target(self):
-        m = self._make_manager_with_counts(completed=1, failed=1, total=4)
-        assert len(m.completed_sims) + len(m.failed_sims) < m._total

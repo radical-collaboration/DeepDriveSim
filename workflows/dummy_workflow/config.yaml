@@ -11,6 +11,7 @@ telemetry_dir: "telemetry-output"
 
 num_inputs:               20  # number of dummy simulation inputs to generate
 max_sim_batch:            4     # max simulations running in parallel
+max_retries:              2     # retries per sim before it is counted as permanently failed
 training_cores:           1     # cores reserved for training (subtracted from sim budget)
 training_threshold:       0.5   # model-accuracy threshold to stop retraining
 prediction_threshold:     0.5   # score below which a sim is cancelled

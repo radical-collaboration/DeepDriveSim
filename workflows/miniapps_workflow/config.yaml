@@ -11,6 +11,7 @@ telemetry_dir: "telemetry-output"
 
 total_num_sim:            10
 max_sim_batch:            4
+max_retries:              2     # retries per sim before it is counted as permanently failed
 training_cores:           1
 free_resources_for_train: true
 miniapps_data_ready:      4     # signal inference-ready after this many sims complete
