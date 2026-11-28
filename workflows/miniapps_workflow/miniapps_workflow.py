@@ -81,7 +81,7 @@ class MiniAppsWorkflow(DDSimManager):
         self.phase = int(cfg.get("phase", 0))
         self.num_step = int(cfg.get("num_step", 1000))
         self.num_epochs = int(cfg.get("num_epochs", 1000))
-        self.num_mult = int(cfg.get("num_epochs", 1))
+        self.num_mult = int(cfg.get("num_mult", 1))
         self.retrain_model = True
         self.sim_predictions = {}
 
