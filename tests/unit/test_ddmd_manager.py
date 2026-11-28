@@ -240,6 +240,69 @@ class TestSimulationQueueEdgeCases:
 
 
 # ---------------------------
+# Group 7: Issue-20 — confirmed-cancel race
+# ---------------------------
+class TestCompletedSimsNoDuplicates:
+    """
+    Regression tests for the confirmed-cancel fix (issue_20).
+
+    The race: AsyncFlow's cancel() can return True but the task finishes
+    normally anyway, so _on_sim_done fires with task.cancelled()==False.
+    completed_sims must be updated only once the cancel is confirmed in
+    _on_sim_done, never pre-added in cancel_sims().
+    """
+
+    @pytest.mark.asyncio
+    async def test_cancel_counts_sim_once_on_confirmed_cancel(self):
+        """
+        cancel_sims marks _perm_cancelled; _on_sim_done counts it in
+        completed_sims only when task.cancelled() is True.
+        """
+        manager = make_manager()
+        manager.sim_predictions = {0: 0.0}
+
+        async def _cancellable():
+            await asyncio.sleep(10)
+
+        loop = asyncio.get_event_loop()
+        task = loop.create_task(_cancellable())
+        task.add_done_callback(lambda t: manager._on_sim_done(t, 0))
+        manager.registered_sims[0] = task
+
+        await manager.cancel_sims()
+        await asyncio.sleep(0)
+
+        assert 0 in manager.completed_sims
+        assert len(manager.completed_sims) == 1
+        assert 0 not in manager._perm_cancelled
+
+    @pytest.mark.asyncio
+    async def test_finish_before_cancel_still_counts_once(self):
+        """
+        If a task finishes before cancel() takes effect, _on_sim_done fires
+        with task.cancelled()==False.  The sim must still be counted exactly
+        once in completed_sims and _perm_cancelled must be cleaned up.
+        """
+        manager = make_manager()
+        manager.sim_predictions = {0: 0.0}
+
+        done_task = make_done_task()
+        await asyncio.sleep(0)
+        assert done_task.done() and not done_task.cancelled()
+
+        done_task.add_done_callback(lambda t: manager._on_sim_done(t, 0))
+        manager.registered_sims[0] = done_task
+
+        await manager.cancel_sims()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert 0 in manager.completed_sims
+        assert len(manager.completed_sims) == 1
+        assert 0 not in manager._perm_cancelled
+
+
+# ---------------------------
 # Group 8: _free_resources_for_training timing fix (issue_21)
 # ---------------------------
 class TestFreeResourcesForTraining:
