@@ -81,12 +81,17 @@ class MiniAppsWorkflow(DDSimManager):
         self.phase = int(cfg.get("phase", 0))
         self.num_step = int(cfg.get("num_step", 1000))
         self.num_epochs = int(cfg.get("num_epochs", 1000))
-        self.num_mult = int(cfg.get("num_epochs", 1))
+        self.num_mult = int(cfg.get("num_mult", 1))
         self.retrain_model = True
         self.sim_predictions = {}
 
         self.clean_unregistered_sims = bool(cfg.get("clean_unregistered_sims", False))
         self.engine = cfg.get("engine", "concurrent")
+        self.gpus_per_node = int(cfg.get("gpus_per_node", 4))
+        # GPU reserved for training/inference on this node.
+        # Set per-replica (e.g. gpu_id: 0 for replica 0, gpu_id: 1 for replica 1)
+        # so each replica's training/inference task stays on its own GPU.
+        self.gpu_id = int(cfg.get("gpu_id", 0))
 
         self.register_tasks()
         self.sim_inputs = {}
@@ -160,29 +165,38 @@ class MiniAppsWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     def register_tasks(self):
-        # Build engine-specific task descriptions for R1 telemetry.
-        # Dragon uses process_templates (ranks + cores/gpus per rank);
-        # concurrent uses direct cpus/gpus keys.
+        # Build engine-specific task descriptions.
+        # Dragon pins GPU affinity via Policy: GPU 0 reserved for training/prediction,
+        # remaining GPUs shared among simulations.
+        # Concurrent backend uses plain cpus/gpus counts.
         if self.engine == "dragon":
-            _sim_desc = {
-                "process_templates": [[1]],
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0,
-            }
+            from dragon.infrastructure.policy import Policy
+
+            # Each replica pins its training/inference to self.gpu_id so
+            # multiple replicas on the same node each use a different GPU.
+            _train_gpu = [self.gpu_id]
+            # Simulations use every GPU except the training/inference one.
+            # If gpus_per_node == 1 there is no spare GPU; pass an empty
+            # affinity list so Dragon schedules simulations freely.
+            _sim_gpus = [g for g in range(self.gpus_per_node) if g != self.gpu_id]
+            _sim_policy = Policy(gpu_affinity=_sim_gpus) if _sim_gpus else Policy()
+            _sim_desc = {"process_template": {"policy": _sim_policy}}
             _train_desc = {
-                "process_templates": [[1]],
-                "cores_per_rank": self.training_cores,
-                "gpus_per_rank": 1,
+                "process_template": {"policy": Policy(gpu_affinity=_train_gpu)}
             }
+            # Inference shares the training GPU (same intent on Dragon and
+            # Concurrent: both run inference on GPU).
+            # training_cores controls Concurrent CPU slots; on Dragon, CPU
+            # pinning would require Policy(cpu_affinity=[...]) — not wired.
             _pred_desc = {
-                "process_templates": [[1]],
-                "cores_per_rank": 1,
-                "gpus_per_rank": 0,
+                "process_template": {"policy": Policy(gpu_affinity=_train_gpu)}
             }
         else:
             _sim_desc = {"cpus": 1}
+            # training_cores reserves CPU slots; gpus: 1 matches Dragon intent
+            # (inference and training both run on GPU).
             _train_desc = {"cpus": self.training_cores, "gpus": 1}
-            _pred_desc = {"cpus": 1}
+            _pred_desc = {"cpus": 1, "gpus": 1}
 
         # ── Simulation ────────────────────────────────────────────────────────
         @self.flow.executable_task(capture_stdio=True)
