@@ -93,7 +93,7 @@ class DDMdWorkflow(DDSimManager):
         self.num_sims = self.experiment_config.molecular_dynamics_stage.num_tasks
         self.max_sim_batch = self.num_sims
         self.sim_batch_size = self.max_sim_batch
-        self.max_retries = 2  # re-queue failed sims up to this many times
+        self.max_retries = camp_cfg.get("max_retries", 2)
 
         self.free_resources_for_train = False
         self.call_cancel_simulations = False

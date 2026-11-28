@@ -77,6 +77,8 @@ class ExchangeWorkflow(DDSimManager):
 
         self.task_types = list(self.config["tasks"].keys())
 
+        self.max_retries = self.config.get("max_retries", 2)
+
         # One long-running task per replica; no resource competition with exchange.
         self.sim_batch_size = float("inf")
         self.max_sim_batch = float("inf")

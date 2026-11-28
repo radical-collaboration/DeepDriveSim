@@ -36,6 +36,7 @@ temperatures:
   - 500
 
 #-----Simulation parameters----------------------
+max_retries:       2     # retries per sim before it is counted as permanently failed
 num_init_sims:     8
 start_cycle: 0
 max_equil_steps:   100
