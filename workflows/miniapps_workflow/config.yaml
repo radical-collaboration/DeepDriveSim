@@ -10,6 +10,8 @@ telemetry:     true
 telemetry_dir: "telemetry-output"
 
 total_num_sim:            10
+max_total_sims:           30    # hard cap on total sims including AI-seeded ones
+sims_per_selection:       2     # new sims added per selection round
 max_sim_batch:            4
 training_cores:           1
 free_resources_for_train: true

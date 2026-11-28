@@ -337,8 +337,9 @@ class ExchangeWorkflow(DDSimManager):
             if self.registered_sims:
                 for task in list(self.registered_sims.values()):
                     task.cancel()
-                # Not awaiting Dragon tasks — same IPC pickle constraint as
-                # cancel_sims; Dragon cleans up subprocess resources on its own.
+                await asyncio.gather(
+                    *self.registered_sims.values(), return_exceptions=True
+                )
 
         self.logger.separator("DDSim MANAGER FINISHED")
 

@@ -79,6 +79,8 @@ class MiniAppsWorkflow(DDSimManager):
         self.call_evaluate_simulations = True
 
         self.total_num_sim = int(cfg.get("total_num_sim", 25))
+        self.sims_per_selection = int(cfg.get("sims_per_selection", 2))
+        self.max_total_sims = int(cfg.get("max_total_sims", self.total_num_sim * 3))
         self.iteration = 0
         self.phase = int(cfg.get("phase", 0))
         self.num_step = int(cfg.get("num_step", 1000))
@@ -144,6 +146,7 @@ class MiniAppsWorkflow(DDSimManager):
         args = (
             f"--data_root_dir {self.sim_output_dir} "
             f"--instance_index {self.iteration} "
+            f"--iteration {self.iteration} "
             f"--phase {self.phase} "
             f"--num_epochs {self.num_epochs} "
             f"--num_mult_outlier 1 "
@@ -209,7 +212,14 @@ class MiniAppsWorkflow(DDSimManager):
         self.prediction = prediction
 
         # ── Selection ─────────────────────────────────────────────────────────
-        _sel_desc = {"process_templates": [[1]], "cores_per_rank": 1, "gpus_per_rank": 0} if self.engine == "dragon" else {"cpus": 1}
+        if self.engine == "dragon":
+            _sel_desc = {
+                "process_templates": [[1]],
+                "cores_per_rank": 1,
+                "gpus_per_rank": 0,
+            }
+        else:
+            _sel_desc = {"cpus": 1}
 
         @self.flow.executable_task(capture_stdio=True)
         async def selection(task_description=_sel_desc):
@@ -221,17 +231,16 @@ class MiniAppsWorkflow(DDSimManager):
     async def evaluate_simulations(self):
         t = time.time()
         await self.prediction()
+        self._emit_stage("prediction", (time.time() - t) * 1000)
         try:
             with open(self.prediction_file) as f:
                 predictions = yaml.safe_load(f) or {}
-        except (OSError, yaml.YAMLError):
-            # Prediction executable unavailable (emulated run): synthesise scores
-            # that depend on each sim's index so stop_simulation() makes
-            # meaningful, deterministic decisions rather than a coin flip.
-            predictions = {
-                sim_idx: (0.8 if i % 2 == 0 else 0.2)
-                for i, sim_idx in enumerate(self.registered_sims)
-            }
+        except (OSError, yaml.YAMLError) as exc:
+            self.logger.error(
+                f"Prediction file missing or unreadable: {exc} — no sims cancelled",
+                component=f"{self.name}-predict",
+            )
+            predictions = {}
         self.sim_predictions = predictions
 
     def stop_simulation(self, *args, **kwargs) -> bool:
@@ -261,7 +270,7 @@ class MiniAppsWorkflow(DDSimManager):
         except Exception:
             ranks = 1
 
-        root_path = Path(self.sim_output_dir, "phase0")
+        root_path = Path(self.sim_output_dir, "phase0", "ckpt")
         next_iter = self.iteration + 1
         filenames = [
             Path(root_path, f"data_{rank}_{next_iter}.h5") for rank in range(ranks)
@@ -309,14 +318,21 @@ class MiniAppsWorkflow(DDSimManager):
         if self.debug:
             self.logger.task_completed("Training Completed", component=self.name)
 
-        # Selection: use model output to seed the next batch of simulations.
-        # In a real run this writes candidate starting points; in an emulated
-        # run it exercises the same code path so the workflow is accurate.
+        # Selection: AI output seeds new simulations (emulated — selection.py
+        # writes candidate starting points, but new indices are the driver here).
         await self.selection()
         if self.debug:
             self.logger.task_completed("Selection Completed", component=self.name)
-        n_new = min(self.sim_batch_size, self.max_sim_batch)
-        start = self.total_num_sim + (self.iteration - 1) * n_new
+        if self.total_num_sim >= self.max_total_sims:
+            if self.debug:
+                self.logger.info(
+                    f"max_total_sims ({self.max_total_sims}) reached;"
+                    " no new sims seeded",
+                    component=self.name,
+                )
+            return
+        n_new = min(self.sims_per_selection, self.max_total_sims - self.total_num_sim)
+        start = self.total_num_sim
         for i in range(n_new):
             sim_idx = start + i
             await self.sim_task_queue.put({"sim_idx": sim_idx})

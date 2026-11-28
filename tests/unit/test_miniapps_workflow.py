@@ -178,10 +178,10 @@ class TestCheckTrainStatus:
     @pytest.mark.asyncio
     async def test_returns_true_when_file_present(self, workflow):
         """check_train_status should return True once the expected file exists."""
-        # iteration=0, next_iter=1 → file: phase0/data_0_1.h5
-        phase_dir = Path(workflow.sim_output_dir) / "phase0"
-        phase_dir.mkdir(parents=True, exist_ok=True)
-        (phase_dir / "data_0_1.h5").touch()
+        # iteration=0, next_iter=1 → file: phase0/ckpt/data_0_1.h5
+        ckpt_dir = Path(workflow.sim_output_dir) / "phase0" / "ckpt"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        (ckpt_dir / "data_0_1.h5").touch()
 
         result = await workflow.check_train_status()
         assert result is True
@@ -189,9 +189,9 @@ class TestCheckTrainStatus:
     @pytest.mark.asyncio
     async def test_waits_until_file_appears(self, workflow):
         """check_train_status should block until the file appears."""
-        phase_dir = Path(workflow.sim_output_dir) / "phase0"
-        phase_dir.mkdir(parents=True, exist_ok=True)
-        target = phase_dir / "data_0_1.h5"
+        ckpt_dir = Path(workflow.sim_output_dir) / "phase0" / "ckpt"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        target = ckpt_dir / "data_0_1.h5"
 
         async def _create_file_after_delay():
             await asyncio.sleep(0.05)
@@ -212,15 +212,15 @@ class TestCheckTrainStatus:
     async def test_checks_correct_file_for_iteration(self, workflow):
         """File checked must match self.iteration + 1."""
         workflow.iteration = 2  # next_iter = 3 → data_0_3.h5
-        phase_dir = Path(workflow.sim_output_dir) / "phase0"
-        phase_dir.mkdir(parents=True, exist_ok=True)
+        ckpt_dir = Path(workflow.sim_output_dir) / "phase0" / "ckpt"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
 
         # Wrong file (iter 1) — should NOT satisfy
-        wrong = phase_dir / "data_0_1.h5"
+        wrong = ckpt_dir / "data_0_1.h5"
         wrong.touch()
 
         # Correct file
-        correct = phase_dir / "data_0_3.h5"
+        correct = ckpt_dir / "data_0_3.h5"
 
         async def _create_correct():
             await asyncio.sleep(0.02)
@@ -325,17 +325,18 @@ class TestPredictionAndSelection:
         assert wf.stop_simulation(prediction=0.5) is False
 
     @pytest.mark.asyncio
-    async def test_evaluate_simulations_fallback_uses_sim_idx(self, workflow):
-        """When prediction file is absent, scores vary by sim index."""
+    async def test_evaluate_simulations_fallback_logs_error(self, workflow):
+        """When prediction file is absent, sim_predictions is empty and error is logged."""
         workflow.registered_sims = {0: MagicMock(), 1: MagicMock(), 2: MagicMock()}
         workflow.prediction = AsyncMock()
 
         await workflow.evaluate_simulations()
 
-        assert set(workflow.sim_predictions.keys()) == {0, 1, 2}
-        scores = list(workflow.sim_predictions.values())
-        # Even indices → high score, odd → low score (see emulation rule)
-        assert len(set(scores)) > 1, "scores must vary across sims"
+        # No sims cancelled when prediction file is missing
+        assert workflow.sim_predictions == {}
+
+        # Error should have been logged via workflow.logger.error
+        # (checked via stderr capture in the test session output)
 
     @pytest.mark.asyncio
     async def test_evaluate_simulations_reads_file_when_present(

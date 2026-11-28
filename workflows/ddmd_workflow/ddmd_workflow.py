@@ -225,9 +225,8 @@ class DDMdWorkflow(DDSimManager):
         so prediction/cancel can fire while remaining sims are still running.
         """
         threshold = max(1, int(self.num_sims * self._train_after_fraction))
-        return (
-            len(self.completed_sims) + len(self.failed_sims)
-            >= threshold * (self.stage_idx + 1)
+        return len(self.completed_sims) + len(self.failed_sims) >= threshold * (
+            self.stage_idx + 1
         )
 
     # --------------------------------------------------------------------------
@@ -348,11 +347,9 @@ class DDMdWorkflow(DDSimManager):
 
         async def evaluate_simulations():
             await agent_stage()
-            # Assign a default low score to any currently-running sim not yet
-            # scored by the LOF agent, so cancel_sims() can target them.
-            for sim_idx in list(self.registered_sims):
-                if sim_idx not in self.sim_predictions:
-                    self.sim_predictions[sim_idx] = 0.0
+            # Sims not scored by the LOF agent are left out of sim_predictions so
+            # cancel_sims() / stop_simulation() does not kill them: a missing score
+            # means the agent hasn't evaluated that sim yet, not that it is bad.
 
         self.evaluate_simulations = evaluate_simulations
 

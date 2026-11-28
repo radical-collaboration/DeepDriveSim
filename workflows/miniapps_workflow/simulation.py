@@ -98,8 +98,15 @@ def main():
 
     if device == "gpu":
         wf.dataCopyD2H(msz)
-    wf.writeNonMPI(args.write_size, root_path, args.instance_index)
-    print(f"Checkpoint written at step {checkpoint_step}/{num_step}: {time.time() - start_time:.1f}s")
+    # Early checkpoint under its own directory so check_train_status can fire
+    # while the sim continues, without racing the final production write.
+    ckpt_path = root_path + "ckpt/"
+    os.makedirs(ckpt_path, exist_ok=True)
+    wf.writeNonMPI(args.write_size, ckpt_path, args.instance_index)
+    elapsed = time.time() - start_time
+    print(
+        f"Early checkpoint written at step {checkpoint_step}/{num_step}: {elapsed:.1f}s"
+    )
 
     # Phase 2: continue main computation (prediction/cancel may fire during this phase)
     for _ in range(num_step - checkpoint_step):

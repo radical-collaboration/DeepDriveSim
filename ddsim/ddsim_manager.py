@@ -227,6 +227,7 @@ class DDSimManager:
         Permanently cancel sims whose prediction score is below threshold.
         Pre-adds to completed_sims so _on_sim_done skips re-queuing.
         """
+        to_await = []
         for sim_idx, pred in self.sim_predictions.items():
             if self.debug:
                 self.logger.info(
@@ -238,11 +239,20 @@ class DDSimManager:
             ):
                 self._perm_cancelled.add(sim_idx)
                 self.completed_sims.append(sim_idx)
-                self.registered_sims[sim_idx].cancel()
+                task = self.registered_sims[sim_idx]
+                task.cancel()
+                to_await.append(task)
                 self.logger.task_killed(
                     f"Sim {sim_idx} permanently killed (prediction score {pred})",
                     component=f"{self.name}-sim",
                 )
+
+        # Await cancelled tasks so their done-callbacks (_on_sim_done pops from
+        # registered_sims) fire before the caller proceeds to finalize_results.
+        # Without this yield, finalize_results sees registered_sims non-empty even
+        # though all sims are already counted in completed_sims.
+        if to_await:
+            await asyncio.gather(*to_await, return_exceptions=True)
 
     # --------------------------------------------------------------------------
     async def start(self):
@@ -344,8 +354,9 @@ class DDSimManager:
                 if workflow.registered_sims:
                     for task in list(workflow.registered_sims.values()):
                         task.cancel()
-                    # Not awaiting Dragon tasks — same IPC pickle constraint as
-                    # cancel_sims; Dragon cleans up subprocess resources on its own.
+                    await asyncio.gather(
+                        *workflow.registered_sims.values(), return_exceptions=True
+                    )
 
             workflow.logger.manager_exiting()
             workflow.logger.separator(f"{workflow.name} MANAGER FINISHED")
