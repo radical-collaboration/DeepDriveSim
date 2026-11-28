@@ -155,12 +155,11 @@ class TestPredictionCmd:
     def test_num_mult_default_is_one_when_not_in_config(self, tmp_path):
         """When num_mult is absent from config, it defaults to 1, not num_epochs."""
         from unittest.mock import MagicMock
+
         from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
 
         cfg = {"num_epochs": 100}  # num_mult intentionally absent
-        w = MiniAppsWorkflow(
-            config=cfg, asyncflow=MagicMock(), home_dir=str(tmp_path)
-        )
+        w = MiniAppsWorkflow(config=cfg, asyncflow=MagicMock(), home_dir=str(tmp_path))
         assert w.num_mult == 1
         assert "--num_mult 1" in w._prediction_cmd()
 
