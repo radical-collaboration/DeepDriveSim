@@ -61,6 +61,7 @@ async def run_miniapps(config_file: str) -> None:
         await asyncio.gather(*[r.start() for r in replicas])
     except Exception as e:
         import traceback
+
         print(f"An error occurred during workflow execution: {e}")
         traceback.print_exc()
     finally:
