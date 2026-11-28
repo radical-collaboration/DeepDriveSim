@@ -2,8 +2,6 @@
 import argparse
 import asyncio
 import os
-import sys
-import traceback
 from pathlib import Path
 
 from radical.asyncflow import WorkflowEngine
@@ -68,12 +66,8 @@ async def run_dummy(config_file: str) -> None:
         for i in range(num_replicas)
     ]
 
-    _exc = None
     try:
         await asyncio.gather(*[r.start() for r in replicas])
-    except Exception:
-        _exc = sys.exc_info()[1]
-        traceback.print_exc()
     finally:
         await asyncio.gather(*[r.close() for r in replicas])
 
@@ -99,9 +93,6 @@ async def run_dummy(config_file: str) -> None:
                 t.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
 
-    if _exc is not None:
-        raise _exc
-
     print()
     print("=" * 60)
     print("  Dummy workflow complete — no errors.")
@@ -124,7 +115,4 @@ if __name__ == "__main__":
     if not Path(args.config_file).exists():
         parser.error(f"Config file not found: {args.config_file}")
 
-    try:
-        asyncio.run(run_dummy(args.config_file))
-    except Exception:
-        sys.exit(1)
+    asyncio.run(run_dummy(args.config_file))

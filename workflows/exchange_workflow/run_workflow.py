@@ -2,8 +2,6 @@
 import argparse
 import asyncio
 import os
-import sys
-import traceback
 
 from radical.asyncflow import WorkflowEngine
 
@@ -47,12 +45,8 @@ async def run_exchange(config_file: str) -> None:
         asyncflow=asyncflow,
     )
 
-    _exc = None
     try:
         await workflow.start()
-    except Exception:
-        _exc = sys.exc_info()[1]
-        traceback.print_exc()
     finally:
         if telemetry is not None:
             try:
@@ -71,9 +65,6 @@ async def run_exchange(config_file: str) -> None:
         # ExchangeWorkflow.close() calls asyncflow.shutdown() internally.
         await workflow.close()
 
-    if _exc is not None:
-        raise _exc
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -89,7 +80,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    try:
-        asyncio.run(run_exchange(args.config_file))
-    except Exception:
-        sys.exit(1)
+    asyncio.run(run_exchange(args.config_file))
