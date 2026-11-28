@@ -112,7 +112,9 @@ class DDSimManager:
 
         if task.cancelled():
             if sim_idx in self._perm_cancelled:
+                # Confirmed permanent kill — count it now that the task is gone.
                 self._perm_cancelled.discard(sim_idx)
+                self.completed_sims.add(sim_idx)
             else:
                 self.logger.info(
                     f"Sim {sim_idx} cancelled for resources — re-queuing",
@@ -120,6 +122,9 @@ class DDSimManager:
                 )
                 asyncio.ensure_future(self.add_sims_to_queue([sim_idx]))
         else:
+            # Task finished normally (or with an error) — may have beaten the
+            # cancel, so clean up _perm_cancelled if it was marked.
+            self._perm_cancelled.discard(sim_idx)
             exc = task.exception()
             if exc:
                 self.logger.error(
@@ -205,7 +210,11 @@ class DDSimManager:
     async def cancel_sims(self):
         """
         Permanently cancel sims whose prediction score is below threshold.
-        Pre-adds to completed_sims so _on_sim_done skips re-queuing.
+
+        Records the intent in _perm_cancelled and calls task.cancel().
+        completed_sims is updated only in _on_sim_done once the cancel is
+        confirmed, so finalize_results() cannot count a sim as done before
+        its task has actually stopped.
         """
         to_await = []
         for sim_idx, pred in self.sim_predictions.items():
@@ -218,8 +227,9 @@ class DDSimManager:
                 prediction=pred
             ):
                 self._perm_cancelled.add(sim_idx)
-                self.completed_sims.add(sim_idx)
-                self.registered_sims[sim_idx].cancel()
+                task = self.registered_sims[sim_idx]
+                task.cancel()
+                to_await.append(task)
                 self.logger.task_killed(
                     f"Sim {sim_idx} permanently killed (prediction score {pred})",
                     component=f"{self.name}-sim",
