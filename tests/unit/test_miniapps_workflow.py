@@ -326,7 +326,7 @@ class TestPredictionAndSelection:
 
     @pytest.mark.asyncio
     async def test_evaluate_simulations_fallback_logs_error(self, workflow):
-        """When prediction file is absent, sim_predictions is empty and error is logged."""
+        """When prediction file is absent, sim_predictions is empty and error logged."""
         workflow.registered_sims = {0: MagicMock(), 1: MagicMock(), 2: MagicMock()}
         workflow.prediction = AsyncMock()
 
