@@ -49,8 +49,8 @@ fi
 DDSIM_DIR="${DDSIM_DIR:-${WORK_DIR}/DeepDriveSim}"
 DDSIM_VENV="${DDSIM_VENV:-${WORK_DIR}/ve/ddsim}"
 export FAB_LIB=/opt/cray/libfabric/1.22.0/lib64
-export MPI_LIB=/opt/cray/pe/mpich/8.1.32/ofi/gnu/11.2/lib-abi-mpich
-export LD_LIBRARY_PATH="${MPI_LIB}:${FAB_LIB}:${LD_LIBRARY_PATH:-}"
+export MPI_LIB=/opt/cray/pe/mpich/8.1.32/ofi/gnu/11.2/lib
+export LD_LIBRARY_PATH="${DDSIM_VENV}/lib:${MPI_LIB}:${FAB_LIB}:${LD_LIBRARY_PATH:-}"
 unset SLURM_EXPORT_ENV
 export PYTHONUNBUFFERED=1
 source "${DDSIM_VENV}/bin/activate"

@@ -87,6 +87,12 @@ def parse_args():
         required=True,
         help="use to distinguish different agent task. Should be from 0~n-1",
     )
+    parser.add_argument(
+        "--iteration",
+        type=int,
+        default=0,
+        help="workflow iteration; combined with sim_tag to seed emulated predictions",
+    )
 
     args = parser.parse_args()
 
@@ -146,10 +152,14 @@ def main():
 
     wf.writeNonMPI(args.write_size, root_path, args.instance_index)
 
+    # Emulated policy: score is a deterministic function of (sim_tag, iteration)
+    # so stop_simulation() makes reproducible decisions across runs.
+    # A real workflow would replace this with model inference output.
     results = {}
     for filename in os.listdir(root_path):
         sim_tag = int(filename.split(".")[0].split("_")[-1])
-        results[int(sim_tag)] = random.random()
+        rng = random.Random((sim_tag, args.iteration))
+        results[int(sim_tag)] = rng.random()
 
     with open(args.output_file, "w") as f:
         yaml.dump(results, f, sort_keys=True)

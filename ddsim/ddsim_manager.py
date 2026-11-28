@@ -64,6 +64,12 @@ class DDSimManager:
         # from a resource-freeing cancel (re-queue).
         self._perm_cancelled: set = set()
 
+        # Failed-sim tracking — sims that exhausted retries without succeeding.
+        # Counts toward the exit condition alongside completed_sims.
+        self.failed_sims: set = set()
+        self.max_retries: int = 2
+        self._retry_counts: dict = {}
+
         self.shutting_down = asyncio.Event()
         self.logger.separator(f"{self.name} MANAGER STARTING")
 
@@ -122,9 +128,23 @@ class DDSimManager:
         else:
             exc = task.exception()
             if exc:
-                self.logger.error(
-                    f"Sim {sim_idx} failed: {exc}", component=f"{self.name}-sim"
-                )
+                retries = self._retry_counts.get(sim_idx, 0)
+                if retries < self.max_retries:
+                    self._retry_counts[sim_idx] = retries + 1
+                    self.logger.warning(
+                        f"Sim {sim_idx} failed (attempt {retries + 1}"
+                        f"/{self.max_retries}, re-queuing): {exc}",
+                        component=f"{self.name}-sim",
+                    )
+                    asyncio.ensure_future(self.add_sims_to_queue([sim_idx]))
+                else:
+                    self._retry_counts.pop(sim_idx, None)
+                    self.failed_sims.add(sim_idx)
+                    self.logger.error(
+                        f"Sim {sim_idx} permanently failed after {self.max_retries}"
+                        f" retries: {exc}",
+                        component=f"{self.name}-sim",
+                    )
             else:
                 self.completed_sims.append(sim_idx)
                 if self.debug:
@@ -231,11 +251,10 @@ class DDSimManager:
                     component=f"{self.name}-sim",
                 )
 
-        # Await all cancelled tasks so their done-callbacks (_on_sim_done pops
-        # from registered_sims) fire before the caller proceeds to
-        # finalize_results.  Without this yield, finalize_results sees
-        # registered_sims non-empty even though all sims are already counted
-        # in completed_sims, causing a spurious warning and a missed shutdown.
+        # Await cancelled tasks so their done-callbacks (_on_sim_done pops from
+        # registered_sims) fire before the caller proceeds to finalize_results.
+        # Without this yield, finalize_results sees registered_sims non-empty even
+        # though all sims are already counted in completed_sims.
         if to_await:
             await asyncio.gather(*to_await, return_exceptions=True)
 
@@ -266,8 +285,7 @@ class DDSimManager:
                         wm = workflow.monitor_training_data()
                     if wm:
                         await wm
-                        if workflow.free_resources_for_train:
-                            await workflow._free_resources_for_training()
+                        wm = None
                         if workflow.debug:
                             workflow.logger.task_started(
                                 "Model Training", component=f"{workflow.name}-train"
@@ -329,7 +347,10 @@ class DDSimManager:
                     component=f"{workflow.name}-finalize",
                 )
                 submit_task.cancel()
-                await asyncio.gather(submit_task, return_exceptions=True)
+                try:
+                    await submit_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
                 if workflow.registered_sims:
                     for task in list(workflow.registered_sims.values()):

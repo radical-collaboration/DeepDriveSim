@@ -322,11 +322,17 @@ class ExchangeWorkflow(DDSimManager):
         finally:
             self.shutting_down.set()
             submit_task.cancel()
-            await asyncio.gather(submit_task, return_exceptions=True)
+            try:
+                await submit_task
+            except (asyncio.CancelledError, Exception):
+                pass
 
             if self._exchange_task and not self._exchange_task.done():
                 self._exchange_task.cancel()
-                await asyncio.gather(self._exchange_task, return_exceptions=True)
+                try:
+                    await self._exchange_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
             if self.registered_sims:
                 for task in list(self.registered_sims.values()):
