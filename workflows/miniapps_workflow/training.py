@@ -30,7 +30,9 @@ def parse_args():
         "--data_root_dir", default="./", help="the root dir of gsas output data"
     )
     parser.add_argument(
-        "--model_dir", default="", help="directory to write model output; defaults to data_root_dir"
+        "--model_dir",
+        default="",
+        help="directory to write model output; defaults to data_root_dir",
     )
     parser.add_argument(
         "--num_sample", type=int, default=100, help="num of samples in matrix mult"

@@ -127,8 +127,11 @@ class TestTrainingCmd:
         """Regression: training must write to model_dir, not sim_output_dir."""
         cmd = workflow._training_cmd()
         assert f"--model_dir {workflow.model_dir}" in cmd
-        # model_dir must not be the same path as sim_output_dir
         assert str(workflow.model_dir) != str(workflow.sim_output_dir)
+
+    def test_training_and_prediction_use_different_dirs(self, workflow):
+        """Training and inference must write to separate dirs (no overwrites)."""
+        assert str(workflow.model_dir) != str(workflow.prediction_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -154,11 +157,11 @@ class TestPredictionCmd:
     def test_contains_agent_script(self, workflow):
         assert "agent.py" in workflow._prediction_cmd()
 
-    def test_model_dir_differs_from_sim_output_dir(self, workflow):
-        """Regression: prediction must write to model_dir, not sim_output_dir."""
+    def test_prediction_dir_differs_from_sim_output_dir(self, workflow):
+        """Regression: prediction must write to prediction_dir, not sim_output_dir."""
         cmd = workflow._prediction_cmd()
-        assert f"--model_dir {workflow.model_dir}" in cmd
-        assert str(workflow.model_dir) != str(workflow.sim_output_dir)
+        assert f"--model_dir {workflow.prediction_dir}" in cmd
+        assert str(workflow.prediction_dir) != str(workflow.sim_output_dir)
 
 
 # ---------------------------------------------------------------------------
