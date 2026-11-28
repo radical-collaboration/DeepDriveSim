@@ -123,6 +123,16 @@ class TestTrainingCmd:
         cmd = workflow._training_cmd()
         assert "training.py" in cmd
 
+    def test_model_dir_differs_from_sim_output_dir(self, workflow):
+        """Regression: training must write to model_dir, not sim_output_dir."""
+        cmd = workflow._training_cmd()
+        assert f"--model_dir {workflow.model_dir}" in cmd
+        assert str(workflow.model_dir) != str(workflow.sim_output_dir)
+
+    def test_training_and_prediction_use_different_dirs(self, workflow):
+        """Training and inference must write to separate dirs (no overwrites)."""
+        assert str(workflow.model_dir) != str(workflow.prediction_dir)
+
 
 # ---------------------------------------------------------------------------
 # Group 3: _prediction_cmd
@@ -147,6 +157,12 @@ class TestPredictionCmd:
     def test_contains_agent_script(self, workflow):
         assert "agent.py" in workflow._prediction_cmd()
 
+    def test_prediction_dir_differs_from_sim_output_dir(self, workflow):
+        """Regression: prediction must write to prediction_dir, not sim_output_dir."""
+        cmd = workflow._prediction_cmd()
+        assert f"--model_dir {workflow.prediction_dir}" in cmd
+        assert str(workflow.prediction_dir) != str(workflow.sim_output_dir)
+
     def test_num_mult_uses_num_mult_not_num_epochs(self, workflow):
         """Regression: num_mult was read from num_epochs due to copy-paste error."""
         assert f"--num_mult {workflow.num_mult}" in workflow._prediction_cmd()
@@ -154,8 +170,6 @@ class TestPredictionCmd:
 
     def test_num_mult_default_is_one_when_not_in_config(self, tmp_path):
         """When num_mult is absent from config, it defaults to 1, not num_epochs."""
-        from unittest.mock import MagicMock
-
         from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
 
         cfg = {"num_epochs": 100}  # num_mult intentionally absent

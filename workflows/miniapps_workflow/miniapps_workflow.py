@@ -50,6 +50,10 @@ class MiniAppsWorkflow(DDSimManager):
         self.clean_dir(self.home_dir)
 
         self.sim_output_dir = self._ensure_dir(self.home_dir / "sim_output")
+        self.model_dir = self._ensure_dir(self.home_dir / "model_output" / "train")
+        self.prediction_dir = self._ensure_dir(
+            self.home_dir / "model_output" / "predict"
+        )
 
         _default_src = str(Path(__file__).parent)
         self.src_dir = cfg.get("src_dir") or _default_src
@@ -132,6 +136,7 @@ class MiniAppsWorkflow(DDSimManager):
     def _training_cmd(self) -> str:
         args = (
             f"--data_root_dir {self.sim_output_dir} "
+            f"--model_dir {self.model_dir} "
             f"--instance_index {self.iteration} "
             f"--phase {self.phase} "
             f"--num_epochs {self.num_epochs}"
@@ -141,6 +146,7 @@ class MiniAppsWorkflow(DDSimManager):
     def _prediction_cmd(self) -> str:
         args = (
             f"--data_root_dir {self.sim_output_dir} "
+            f"--model_dir {self.prediction_dir} "
             f"--instance_index {self.iteration} "
             f"--phase {self.phase} "
             f"--num_epochs {self.num_epochs} "
