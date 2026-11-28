@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import os
+from pathlib import Path
 
 from radical.asyncflow import WorkflowEngine
 
@@ -98,7 +99,7 @@ if __name__ == "__main__":
         "-c",
         "--config",
         type=str,
-        default="config.yaml",
+        default=str(Path(__file__).parent / "config.yaml"),
         help="Path to YAML config file (default: config.yaml next to this script)",
     )
     args = parser.parse_args()
