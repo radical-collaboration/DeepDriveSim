@@ -47,22 +47,19 @@ async def run_exchange(config_file: str) -> None:
 
     try:
         await workflow.start()
-    except Exception as e:
-        print(f"An error occurred during workflow execution: {e}")
     finally:
-        try:
-            summary = telemetry.summary()
-            print(f"Tasks — {summary['tasks']}")
-            if summary.get("duration"):
-                d = summary["duration"]
-                print(
-                    f"Mean task time: {d['mean_seconds']:.2f} s  "
-                    f"Max: {d['max_seconds']:.2f} s"
-                )
-        except Exception:
-            pass
-
-        if telemetry:
+        if telemetry is not None:
+            try:
+                summary = telemetry.summary()
+                print(f"Tasks — {summary['tasks']}")
+                if summary.get("duration"):
+                    d = summary["duration"]
+                    print(
+                        f"Mean task time: {d['mean_seconds']:.2f} s  "
+                        f"Max: {d['max_seconds']:.2f} s"
+                    )
+            except Exception:
+                pass
             await telemetry.stop()
 
         # ExchangeWorkflow.close() calls asyncflow.shutdown() internally.

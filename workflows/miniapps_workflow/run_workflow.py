@@ -61,25 +61,23 @@ async def run_miniapps(config_file: str) -> None:
 
     try:
         await asyncio.gather(*[r.start() for r in replicas])
-    except Exception as e:
-        print(f"An error occurred during workflow execution: {e}")
     finally:
         await asyncio.gather(*[r.close() for r in replicas])
 
-        try:
-            summary = telemetry.summary()
-            print(f"Tasks — {summary['tasks']}")
-            if summary.get("duration"):
-                d = summary["duration"]
-                print(
-                    f"Mean task time: {d['mean_seconds']:.2f} s  "
-                    f"Max: {d['max_seconds']:.2f} s"
-                )
-        except Exception as e:
-            print(f"An error occurred during telemetry summary: {e}")
-
-        if telemetry:
+        if telemetry is not None:
+            try:
+                summary = telemetry.summary()
+                print(f"Tasks — {summary['tasks']}")
+                if summary.get("duration"):
+                    d = summary["duration"]
+                    print(
+                        f"Mean task time: {d['mean_seconds']:.2f} s  "
+                        f"Max: {d['max_seconds']:.2f} s"
+                    )
+            except Exception as e:
+                print(f"Telemetry summary unavailable: {e}")
             await telemetry.stop()
+
         await asyncflow.shutdown()
 
         pending = {t for t in asyncio.all_tasks() if t is not asyncio.current_task()}

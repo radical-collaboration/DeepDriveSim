@@ -68,25 +68,23 @@ async def run_dummy(config_file: str) -> None:
 
     try:
         await asyncio.gather(*[r.start() for r in replicas])
-    except Exception as e:
-        print(f"An error occurred during workflow execution: {e}")
     finally:
         await asyncio.gather(*[r.close() for r in replicas])
 
-        try:
-            summary = telemetry.summary()
-            print(f"Tasks — {summary['tasks']}")
-            if summary.get("duration"):
-                d = summary["duration"]
-                print(
-                    f"Mean task time: {d['mean_seconds']:.2f} s  "
-                    f"Max: {d['max_seconds']:.2f} s"
-                )
-        except Exception:
-            pass
-
-        if telemetry:
+        if telemetry is not None:
+            try:
+                summary = telemetry.summary()
+                print(f"Tasks — {summary['tasks']}")
+                if summary.get("duration"):
+                    d = summary["duration"]
+                    print(
+                        f"Mean task time: {d['mean_seconds']:.2f} s  "
+                        f"Max: {d['max_seconds']:.2f} s"
+                    )
+            except Exception:
+                pass
             await telemetry.stop()
+
         await asyncflow.shutdown()
 
         pending = {t for t in asyncio.all_tasks() if t is not asyncio.current_task()}
