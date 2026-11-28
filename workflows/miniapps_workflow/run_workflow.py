@@ -32,6 +32,8 @@ async def run_miniapps(config_file: str) -> None:
         engine_concurrent = await ConcurrentExecutionBackend()
         asyncflow = await WorkflowEngine.create(engine_concurrent)
 
+    cfg["engine"] = backend
+
     # --- Telemetry
     telemetry = None
     if cfg.get("telemetry", True):

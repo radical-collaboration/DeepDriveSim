@@ -19,6 +19,7 @@
 #   BASE_DIR  = $WORK_DIR
 #   python    = auto-detected via `module load python` (Delta default: 3.13+)
 # =============================================================================
+export WORK_DIR=/projects/bblj/rrishabh/updated_DeepDriveSim 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     set -euo pipefail
 fi

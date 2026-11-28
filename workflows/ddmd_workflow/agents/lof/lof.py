@@ -55,6 +55,20 @@ def get_representation(
             model_weights_path,
             inference_batch_size,
         )
+    elif model_type == "gmvae_pytorch":
+        from workflows.ddmd_workflow.models.gmvae_pytorch.inference import (
+            generate_embeddings,  # type: ignore[no-redef]
+        )
+
+        # qy-weighted latent embeddings, with a distributed forward pass
+        embeddings = generate_embeddings(  # type: ignore[call-arg]
+            model_cfg_path,
+            h5_file,
+            model_weights_path,
+            inference_batch_size,
+            gpu_id,
+            comm,
+        )
     else:
         raise ValueError(f"model_type {model_type} not supported")
 
@@ -320,3 +334,4 @@ if __name__ == "__main__":
         args = parse_args()
         cfg = OutlierDetectionConfig.from_yaml(args.config)
         main(cfg, args.encoder_gpu, args.distributed)
+
