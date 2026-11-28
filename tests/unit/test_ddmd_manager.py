@@ -309,6 +309,9 @@ class TestFailedSimsExitCondition:
     def test_incomplete_does_not_meet_target(self):
         m = self._make_manager_with_counts(completed=1, failed=1, total=4)
         assert len(m.completed_sims) + len(m.failed_sims) < m._total
+
+
+# ---------------------------
 # Group 8: _free_resources_for_training timing fix (issue_21)
 # ---------------------------
 class TestFreeResourcesForTraining:
