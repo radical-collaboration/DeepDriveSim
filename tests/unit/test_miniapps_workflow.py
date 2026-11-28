@@ -8,10 +8,8 @@ These tests verify:
   - check_train_status polls until the expected HDF5 file appears.
 """
 
-import asyncio
 import shutil
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -176,67 +174,45 @@ class TestSelectionCmd:
 
 class TestCheckTrainStatus:
     @pytest.mark.asyncio
-    async def test_returns_true_when_file_present(self, workflow):
-        """check_train_status should return True once the expected file exists."""
-        # iteration=0, next_iter=1 → file: phase0/data_0_1.h5
-        phase_dir = Path(workflow.sim_output_dir) / "phase0"
-        phase_dir.mkdir(parents=True, exist_ok=True)
-        (phase_dir / "data_0_1.h5").touch()
+    async def test_returns_false_below_threshold(self, workflow):
+        """Below train_every_n_sims new completions → False."""
+        workflow.completed_sims = [0]  # 1 new, threshold is 3
+        # Keep a fake running sim so the "nothing left" safety exit doesn't fire.
+        workflow.registered_sims = {"sim_0": MagicMock()}
+        result = await workflow.check_train_status()
+        assert result is False
 
+    @pytest.mark.asyncio
+    async def test_returns_true_at_threshold(self, workflow):
+        """Exactly train_every_n_sims new completions → True."""
+        workflow.completed_sims = list(range(workflow.train_every_n_sims))
         result = await workflow.check_train_status()
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_waits_until_file_appears(self, workflow):
-        """check_train_status should block until the file appears."""
-        phase_dir = Path(workflow.sim_output_dir) / "phase0"
-        phase_dir.mkdir(parents=True, exist_ok=True)
-        target = phase_dir / "data_0_1.h5"
-
-        async def _create_file_after_delay():
-            await asyncio.sleep(0.05)
-            target.touch()
-
-        creator = asyncio.create_task(_create_file_after_delay())
-        with patch(
-            "workflows.miniapps_workflow.miniapps_workflow.asyncio.sleep",
-            new_callable=AsyncMock,
-        ):
-            result = await asyncio.wait_for(
-                asyncio.gather(workflow.check_train_status(), creator),
-                timeout=2.0,
-            )
-        assert result[0] is True
+    async def test_false_again_after_training_run(self, workflow):
+        """After training snapshots the count, check_train_status returns False
+        until another batch of train_every_n_sims sims complete."""
+        workflow.completed_sims = list(range(workflow.train_every_n_sims))
+        workflow.registered_sims = {"sim_0": MagicMock()}
+        assert await workflow.check_train_status() is True
+        # Snapshot what train_model() would do (avoids awaiting real tasks).
+        workflow._sims_at_last_train = len(workflow.completed_sims)
+        # No new sims yet → False
+        assert await workflow.check_train_status() is False
+        # Add enough new sims → True again
+        workflow.completed_sims = list(range(workflow.train_every_n_sims * 2))
+        assert await workflow.check_train_status() is True
 
     @pytest.mark.asyncio
-    async def test_checks_correct_file_for_iteration(self, workflow):
-        """File checked must match self.iteration + 1."""
-        workflow.iteration = 2  # next_iter = 3 → data_0_3.h5
-        phase_dir = Path(workflow.sim_output_dir) / "phase0"
-        phase_dir.mkdir(parents=True, exist_ok=True)
-
-        # Wrong file (iter 1) — should NOT satisfy
-        wrong = phase_dir / "data_0_1.h5"
-        wrong.touch()
-
-        # Correct file
-        correct = phase_dir / "data_0_3.h5"
-
-        async def _create_correct():
-            await asyncio.sleep(0.02)
-            correct.touch()
-
-        creator = asyncio.create_task(_create_correct())
-        with patch(
-            "workflows.miniapps_workflow.miniapps_workflow.asyncio.sleep",
-            side_effect=lambda _: asyncio.sleep(0),
-        ):
-            result = await asyncio.wait_for(
-                asyncio.gather(workflow.check_train_status(), creator),
-                timeout=2.0,
-            )
-        assert result[0] is True
-        assert correct.exists()
+    async def test_returns_true_when_nothing_running_or_queued(self, workflow):
+        """Safety: if no sims are running and the queue is empty, return True
+        so the workflow does not wait forever when sims have all failed."""
+        workflow.completed_sims = []
+        workflow.registered_sims = {}
+        # Queue is empty by default in fixture
+        result = await workflow.check_train_status()
+        assert result is True
 
 
 # ---------------------------------------------------------------------------
