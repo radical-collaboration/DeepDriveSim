@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -119,9 +120,14 @@ def get_intrinsic_score(
 ) -> Tuple["npt.ArrayLike", "npt.ArrayLike"]:
 
     if cfg.intrinsic_score == "lof":
-        # Perform LocalOutlierFactor outlier detection on embeddings
-        # Dragon patches multiprocessing.Pool but breaks ThreadPool MRO; force n_jobs=1.
-        clf = LocalOutlierFactor(n_jobs=1)
+        # Dragon patches multiprocessing.Pool and breaks ThreadPool MRO when
+        # sklearn uses joblib threads; force n_jobs=1 on Dragon only.
+        _n_jobs = (
+            1
+            if os.environ.get("DDSIM_BACKEND") == "dragon"
+            else cfg.sklearn_num_jobs
+        )
+        clf = LocalOutlierFactor(n_jobs=_n_jobs)
         embeddings = np.nan_to_num(embeddings, nan=0.0)  # type: ignore[no-untyped-call]
         # Array with 1 if inlier, -1 if outlier
         clf.fit_predict(embeddings)

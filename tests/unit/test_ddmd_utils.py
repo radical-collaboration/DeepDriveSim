@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import pytest
 
+from ddsim.util import load_config
 from workflows.ddmd_workflow.utils import (
     bestk,
     hash2intarray,
@@ -161,3 +162,23 @@ class TestParseArgs:
             assert args.config == "test.yaml"
         finally:
             sys.argv = old_argv
+
+
+class TestLoadConfig:
+    def test_missing_file_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            load_config(str(tmp_path / "nonexistent.yaml"))
+
+    def test_env_vars_expanded(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TEST_DIR", "/some/path")
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text("data_dir: $TEST_DIR/data\n")
+        result = load_config(str(cfg_file))
+        assert result["data_dir"] == "/some/path/data"
+
+    def test_non_string_values_not_expanded(self, tmp_path):
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text("count: 42\nflag: true\n")
+        result = load_config(str(cfg_file))
+        assert result["count"] == 42
+        assert result["flag"] is True
