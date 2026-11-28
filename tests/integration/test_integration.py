@@ -2,10 +2,14 @@ import os
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 
 import pytest
 
 from tests.unit.mock_manager import MockLearner
+
+# Repo root: two levels above this file (tests/integration/test_integration.py)
+_REPO_ROOT = Path(__file__).parent.parent.parent
 
 
 @pytest.mark.asyncio
@@ -43,7 +47,7 @@ class TestRunWorkflowErrorHandling:
             ],
             capture_output=True,
             text=True,
-            cwd="/work/nvme/bdyk/mgoliyad1/DeepDriveSim",
+            cwd=str(_REPO_ROOT),
         )
         assert result.returncode != 0
         assert "Traceback" in result.stderr
@@ -60,7 +64,7 @@ class TestRunWorkflowErrorHandling:
             ],
             capture_output=True,
             text=True,
-            cwd="/work/nvme/bdyk/mgoliyad1/DeepDriveSim",
+            cwd=str(_REPO_ROOT),
         )
         assert result.returncode != 0
         assert "Traceback" in result.stderr
