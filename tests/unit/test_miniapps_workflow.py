@@ -229,7 +229,7 @@ class TestCheckTrainStatus:
         creator = asyncio.create_task(_create_correct())
         with patch(
             "workflows.miniapps_workflow.miniapps_workflow.asyncio.sleep",
-            side_effect=lambda _: asyncio.sleep(0),
+            new_callable=AsyncMock,
         ):
             result = await asyncio.wait_for(
                 asyncio.gather(workflow.check_train_status(), creator),
@@ -279,3 +279,19 @@ class TestFinalizeResults:
         workflow.run_workflow = True
         await workflow.finalize_results()
         assert workflow.run_workflow is True
+
+    @pytest.mark.asyncio
+    async def test_stops_when_all_sims_failed(self, workflow):
+        workflow.failed_sims = set(range(workflow.total_num_sim))
+        await workflow.finalize_results()
+        assert workflow.run_workflow is False
+        assert workflow.shutting_down.is_set()
+
+    @pytest.mark.asyncio
+    async def test_stops_when_completed_plus_failed_reaches_total(self, workflow):
+        half = workflow.total_num_sim // 2
+        workflow.completed_sims = list(range(half))
+        workflow.failed_sims = set(range(half, workflow.total_num_sim))
+        await workflow.finalize_results()
+        assert workflow.run_workflow is False
+        assert workflow.shutting_down.is_set()

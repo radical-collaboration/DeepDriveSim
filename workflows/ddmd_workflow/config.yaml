@@ -11,4 +11,5 @@ ddsim_config: "${MD_INPUT}/new_lassen-keras-dbscan.yaml"
 experiment_dir: "DDMD"   # relative to campaign work dir; overrides experiment_directory in ddsim_config
 tf_gpu_wrapper: "${MD_HOME}/delta_tf_gpu_wrapper.sh"
 tf_cpu_wrapper: "${MD_HOME}/delta_tf_cpu_wrapper.sh"
+max_retries:  2     # retries per sim before it is counted as permanently failed
 executable: ""

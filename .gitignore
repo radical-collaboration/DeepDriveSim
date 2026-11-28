@@ -46,6 +46,15 @@ telemetry-output/
 workflows/exchange_workflow/ala_dipep_output/
 workflows/exchange_workflow/output/
 
+# Runtime output
+asyncflow.session*/
+telemetry-output/
+workflows/*/logs/
+workflows/*/asyncflow.session*/
+workflows/*/ddict_orc_*
+workflows/exchange_workflow/ala_dipep_output/
+workflows/exchange_workflow/output/
+
 # OS
 .DS_Store
 Thumbs.db

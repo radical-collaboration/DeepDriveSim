@@ -70,6 +70,7 @@ class MiniAppsWorkflow(DDSimManager):
         self.max_sim_batch = int(cfg.get("max_sim_batch", 4))
         self.training_cores = int(cfg.get("training_cores", 1))
         self.sim_batch_size = self.max_sim_batch + self.training_cores
+        self.max_retries = int(cfg.get("max_retries", 2))
         self.free_resources_for_train = bool(cfg.get("free_resources_for_train", True))
 
         self.call_cancel_simulations = True
@@ -305,7 +306,7 @@ class MiniAppsWorkflow(DDSimManager):
                 await result
 
     async def finalize_results(self):
-        n_done = len(self.completed_sims)
+        n_done = len(self.completed_sims) + len(self.failed_sims)
         if not self._data_ready_signaled and n_done >= self.miniapps_data_ready:
             self._data_ready_signaled = True
             if self.debug:

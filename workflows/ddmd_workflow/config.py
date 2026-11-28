@@ -6,23 +6,17 @@ from pathlib import Path
 from typing import Optional, TypeVar
 
 import yaml
-from pydantic import validator
-
-try:
-    from pydantic_settings import BaseSettings as _BaseSettings
-except ImportError:
-    from pydantic import BaseSettings as _BaseSettings
-
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from workflows.ddmd_workflow.utils import PathLike
 
 _T = TypeVar("_T")
 
 
-class BaseSettings(_BaseSettings):
+class BaseSettings(BaseModel):
     def dump_yaml(self, cfg_path: PathLike) -> None:
         with open(cfg_path, mode="w") as fp:
-            yaml.dump(json.loads(self.json()), fp, indent=4, sort_keys=False)
+            yaml.dump(json.loads(self.model_dump_json()), fp, indent=4, sort_keys=False)
 
     @classmethod
     def from_yaml(cls: type[_T], filename: PathLike) -> _T:
@@ -43,14 +37,16 @@ class CPUReqs(BaseSettings):
     threads_per_process: int = 1
     thread_type: Optional[str] = None
 
-    @validator("process_type")
+    @field_validator("process_type")
+    @classmethod
     def process_type_check(cls, v: Optional[str]) -> Optional[str]:
         valid_process_types = {None, "MPI"}
         if v not in valid_process_types:
             raise ValueError(f"process_type must be one of {valid_process_types}")
         return v
 
-    @validator("thread_type")
+    @field_validator("thread_type")
+    @classmethod
     def thread_type_check(cls, v: Optional[str]) -> Optional[str]:
         thread_process_types = {None, "OpenMP"}
         if v not in thread_process_types:
@@ -66,14 +62,16 @@ class GPUReqs(BaseSettings):
     threads_per_process: int = 0
     thread_type: Optional[str] = None
 
-    @validator("process_type")
+    @field_validator("process_type")
+    @classmethod
     def process_type_check(cls, v: Optional[str]) -> Optional[str]:
         valid_process_types = {None, "MPI"}
         if v not in valid_process_types:
             raise ValueError(f"process_type must be one of {valid_process_types}")
         return v
 
-    @validator("thread_type")
+    @field_validator("thread_type")
+    @classmethod
     def thread_type_check(cls, v: Optional[str]) -> Optional[str]:
         thread_process_types = {None, "OpenMP", "CUDA"}
         if v not in thread_process_types:
@@ -84,8 +82,7 @@ class GPUReqs(BaseSettings):
 class BaseTaskConfig(BaseSettings):
     """Base configuration for all TaskConfig objects."""
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
     # Path to experiment directory in order to access data API (set by DeepDriveMD)
     experiment_directory: Path = Path("set_by_deepdrivemd")
@@ -212,7 +209,8 @@ class ExperimentConfig(BaseSettings):
     model_selection_stage: ModelSelectionStageConfig
     agent_stage: AgentStageConfig
 
-    @validator("experiment_directory")
+    @field_validator("experiment_directory")
+    @classmethod
     def experiment_directory_cannot_exist(cls, v: Path) -> Path:
         if v.exists():
             raise FileNotFoundError(f"experiment_directory already exists! {v}")
