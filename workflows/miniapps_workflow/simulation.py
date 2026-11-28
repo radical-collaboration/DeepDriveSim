@@ -99,7 +99,8 @@ def main():
     if device == "gpu":
         wf.dataCopyD2H(msz)
     wf.writeNonMPI(args.write_size, root_path, args.instance_index)
-    print(f"Checkpoint written at step {checkpoint_step}/{num_step}: {time.time() - start_time:.1f}s")
+    elapsed = time.time() - start_time
+    print(f"Checkpoint written at step {checkpoint_step}/{num_step}: {elapsed:.1f}s")
 
     # Phase 2: continue main computation (prediction/cancel may fire during this phase)
     for _ in range(num_step - checkpoint_step):

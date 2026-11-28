@@ -276,104 +276,63 @@ class TestSimulationQueueEdgeCases:
 
 
 # ---------------------------
-# Group 7: failed_sims exit-condition helpers
-# ---------------------------
-class TestFailedSimsExitCondition:
-    """
-    Verify that failed_sims count toward the exit condition in the same way
-    as completed_sims.  These tests use a small inline subclass that mirrors
-    the check_train_status logic used in ddmd_workflow and the finalize_results
-    logic used in miniapps_workflow / dummy_workflow.
-    """
-
-    def _make_manager_with_counts(self, completed, failed, total):
-        """Return a MockLearner pre-seeded with the given sim counts."""
-        manager = make_manager()
-        manager.completed_sims = set(range(completed))
-        manager.failed_sims = set(range(completed, completed + failed))
-        manager._total = total  # used by the inline check below
-        return manager
-
-    def test_all_completed_meets_target(self):
-        m = self._make_manager_with_counts(completed=4, failed=0, total=4)
-        assert len(m.completed_sims) + len(m.failed_sims) >= m._total
-
-    def test_all_failed_meets_target(self):
-        m = self._make_manager_with_counts(completed=0, failed=4, total=4)
-        assert len(m.completed_sims) + len(m.failed_sims) >= m._total
-
-    def test_mixed_meets_target(self):
-        m = self._make_manager_with_counts(completed=2, failed=2, total=4)
-        assert len(m.completed_sims) + len(m.failed_sims) >= m._total
-
-    def test_incomplete_does_not_meet_target(self):
-        m = self._make_manager_with_counts(completed=1, failed=1, total=4)
-        assert len(m.completed_sims) + len(m.failed_sims) < m._total
-
-
-# ---------------------------
-# Group 8: Issue-20 — completed_sims double-count race
+# Group 7: Issue-20 — confirmed-cancel race
 # ---------------------------
 class TestCompletedSimsNoDuplicates:
     """
-    Regression tests for the list→set fix (issue_20).
+    Regression tests for the confirmed-cancel fix (issue_20).
 
-    Race: cancel_sims() checks `sim_idx in registered_sims` and pre-adds the
-    sim to completed_sims, but the task was already done (not cancelled) — so
-    _on_sim_done fires with task.cancelled()==False and hits completed_sims.add
-    a second time.  With a list this inflated len(completed_sims) above
-    total_num_sim and caused finalize_results to shut the workflow down before
-    all sims had run.  With a set, .add() is idempotent.
+    The race: AsyncFlow's cancel() can return True but the task finishes
+    normally anyway, so _on_sim_done fires with task.cancelled()==False.
+    completed_sims must be updated only once the cancel is confirmed in
+    _on_sim_done, never pre-added in cancel_sims().
     """
 
     @pytest.mark.asyncio
-    async def test_set_prevents_double_count_on_cancel_race(self):
+    async def test_cancel_counts_sim_once_on_confirmed_cancel(self):
         """
-        Simulate the exact race: cancel_sims pre-adds sim 0, then
-        _on_sim_done also adds sim 0 (task already done, not cancelled).
-        len(completed_sims) must stay 1, not grow to 2.
+        cancel_sims marks _perm_cancelled; _on_sim_done counts it in
+        completed_sims only when task.cancelled() is True.
         """
         manager = make_manager()
         manager.sim_predictions = {0: 0.0}
 
-        # Create a task that is already done (not cancelled).
-        done_task = make_done_task()
-        await asyncio.sleep(0)  # let it finish
-        assert done_task.done() and not done_task.cancelled()
+        async def _cancellable():
+            await asyncio.sleep(10)
 
-        # Register it so cancel_sims() sees it.
-        done_task.add_done_callback(
-            lambda t: manager._on_sim_done(t, 0)
-        )
-        manager.registered_sims[0] = done_task
+        loop = asyncio.get_event_loop()
+        task = loop.create_task(_cancellable())
+        task.add_done_callback(lambda t: manager._on_sim_done(t, 0))
+        manager.registered_sims[0] = task
 
-        # cancel_sims() pre-adds sim 0 and calls task.cancel() (which is a
-        # no-op because the task is already done).
         await manager.cancel_sims()
+        await asyncio.sleep(0)
 
-        # _on_sim_done fires: task is not cancelled → goes to completed_sims.add
-        await asyncio.sleep(0)  # callback scheduled
-        await asyncio.sleep(0)  # callback fires
-
-        # Must be exactly 1 unique entry, not 2.
-        assert len(manager.completed_sims) == 1
         assert 0 in manager.completed_sims
+        assert len(manager.completed_sims) == 1
+        assert 0 not in manager._perm_cancelled
 
     @pytest.mark.asyncio
-    async def test_list_would_double_count(self):
+    async def test_finish_before_cancel_still_counts_once(self):
         """
-        Demonstrate that the old list implementation WOULD have produced a
-        double-count under the same race.  This is the failing-on-old-code
-        counterpart to test_set_prevents_double_count_on_cancel_race.
+        If a task finishes before cancel() takes effect, _on_sim_done fires
+        with task.cancelled()==False.  The sim must still be counted exactly
+        once in completed_sims and _perm_cancelled must be cleaned up.
         """
-        # Replicate the race with an explicit list to show the bug.
-        completed = []
-        completed.append(0)   # cancel_sims pre-add
-        completed.append(0)   # _on_sim_done duplicate
-        assert len(completed) == 2  # list inflates the count — this was the bug
+        manager = make_manager()
+        manager.sim_predictions = {0: 0.0}
 
-        # With a set the duplicate is silently ignored.
-        completed_set = set()
-        completed_set.add(0)  # cancel_sims pre-add
-        completed_set.add(0)  # _on_sim_done duplicate
-        assert len(completed_set) == 1  # fixed
+        done_task = make_done_task()
+        await asyncio.sleep(0)
+        assert done_task.done() and not done_task.cancelled()
+
+        done_task.add_done_callback(lambda t: manager._on_sim_done(t, 0))
+        manager.registered_sims[0] = done_task
+
+        await manager.cancel_sims()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert 0 in manager.completed_sims
+        assert len(manager.completed_sims) == 1
+        assert 0 not in manager._perm_cancelled

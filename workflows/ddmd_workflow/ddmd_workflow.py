@@ -225,9 +225,8 @@ class DDMdWorkflow(DDSimManager):
         so prediction/cancel can fire while remaining sims are still running.
         """
         threshold = max(1, int(self.num_sims * self._train_after_fraction))
-        return (
-            len(self.completed_sims) + len(self.failed_sims)
-            >= threshold * (self.stage_idx + 1)
+        return len(self.completed_sims) + len(self.failed_sims) >= threshold * (
+            self.stage_idx + 1
         )
 
     # --------------------------------------------------------------------------

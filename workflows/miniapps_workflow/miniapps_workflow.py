@@ -209,7 +209,14 @@ class MiniAppsWorkflow(DDSimManager):
         self.prediction = prediction
 
         # ── Selection ─────────────────────────────────────────────────────────
-        _sel_desc = {"process_templates": [[1]], "cores_per_rank": 1, "gpus_per_rank": 0} if self.engine == "dragon" else {"cpus": 1}
+        if self.engine == "dragon":
+            _sel_desc = {
+                "process_templates": [[1]],
+                "cores_per_rank": 1,
+                "gpus_per_rank": 0,
+            }
+        else:
+            _sel_desc = {"cpus": 1}
 
         @self.flow.executable_task(capture_stdio=True)
         async def selection(task_description=_sel_desc):
@@ -219,7 +226,6 @@ class MiniAppsWorkflow(DDSimManager):
 
     # --------------------------------------------------------------------------
     async def evaluate_simulations(self):
-        t = time.time()
         await self.prediction()
         try:
             with open(self.prediction_file) as f:
