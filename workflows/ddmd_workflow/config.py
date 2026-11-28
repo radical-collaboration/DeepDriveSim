@@ -13,6 +13,9 @@ from workflows.ddmd_workflow.utils import PathLike
 _T = TypeVar("_T")
 
 
+# BaseSettings inherits from pydantic.BaseModel (not pydantic_settings.BaseSettings).
+# No config field in this module is loaded from environment variables, so the
+# env-var injection feature of pydantic_settings is not needed here.
 class BaseSettings(BaseModel):
     def dump_yaml(self, cfg_path: PathLike) -> None:
         with open(cfg_path, mode="w") as fp:
