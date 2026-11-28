@@ -279,3 +279,71 @@ class TestFinalizeResults:
         workflow.run_workflow = True
         await workflow.finalize_results()
         assert workflow.run_workflow is True
+
+
+# ---------------------------------------------------------------------------
+# Group 8: Dragon descriptor — register_tasks() with engine: dragon
+# ---------------------------------------------------------------------------
+
+
+class TestDragonDescriptors:
+    """
+    Verify that register_tasks() builds correct process_template descriptors
+    for the Dragon backend without requiring a real Dragon installation.
+    """
+
+    def _make_dragon_workflow(self, tmp_home, gpus_per_node=4, gpu_id=0):
+        from workflows.miniapps_workflow.miniapps_workflow import MiniAppsWorkflow
+
+        mock_policy_cls = MagicMock()
+        mock_policy_cls.side_effect = lambda **kw: {
+            "gpu_affinity": kw.get("gpu_affinity")
+        }
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "dragon": MagicMock(),
+                "dragon.infrastructure": MagicMock(),
+                "dragon.infrastructure.policy": MagicMock(Policy=mock_policy_cls),
+            },
+        ):
+            wf = MiniAppsWorkflow(
+                config={
+                    "engine": "dragon",
+                    "gpus_per_node": gpus_per_node,
+                    "gpu_id": gpu_id,
+                },
+                asyncflow=MagicMock(),
+                home_dir=str(tmp_home),
+            )
+        return wf, mock_policy_cls
+
+    def test_training_uses_gpu_id(self, tmp_home):
+        wf, policy_cls = self._make_dragon_workflow(tmp_home, gpus_per_node=4, gpu_id=1)
+        affinities = [
+            c.kwargs["gpu_affinity"]
+            for c in policy_cls.call_args_list
+            if c.kwargs.get("gpu_affinity")
+        ]
+        assert any(1 in a for a in affinities), "training/inference pinned to gpu_id=1"
+
+    def test_sim_excludes_gpu_id(self, tmp_home):
+        wf, policy_cls = self._make_dragon_workflow(tmp_home, gpus_per_node=4, gpu_id=0)
+        sim_affinity_calls = [
+            c.kwargs["gpu_affinity"]
+            for c in policy_cls.call_args_list
+            if c.kwargs.get("gpu_affinity") and 0 not in c.kwargs["gpu_affinity"]
+        ]
+        assert sim_affinity_calls, "simulations should use GPUs other than gpu_id"
+        assert 0 not in sim_affinity_calls[0]
+
+    def test_single_gpu_node_sim_gets_no_affinity(self, tmp_home):
+        """gpus_per_node=1 leaves no GPU for sims; Policy() called with no args."""
+        wf, policy_cls = self._make_dragon_workflow(tmp_home, gpus_per_node=1, gpu_id=0)
+        no_affinity_calls = [
+            c for c in policy_cls.call_args_list if not c.kwargs.get("gpu_affinity")
+        ]
+        assert no_affinity_calls, (
+            "sim descriptor should use Policy() with no gpu_affinity"
+        )
